@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 88" fill="none">
+  <defs>
+    <linearGradient id="markGradW" x1="4" y1="4" x2="84" y2="84" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00D68F"/>
+      <stop offset="1" stop-color="#3D9EFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="80" height="80" rx="22" fill="url(#markGradW)"/>
+  <text x="44" y="60" font-family="Rubik, Arial, sans-serif" font-weight="800" font-size="46" fill="#0F1757" text-anchor="middle">S</text>
+  <text x="98" y="52" font-family="Rubik, Arial, sans-serif" font-weight="800" font-size="38" letter-spacing="-0.5" fill="#ffffff">SGP</text>
+  <text x="99" y="70" font-family="Rubik, Arial, sans-serif" font-weight="500" font-size="11" letter-spacing="1.5" fill="rgba(255,255,255,0.6)">SINCE 1987</text>
+</svg>

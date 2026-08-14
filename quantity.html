@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>כתבי כמויות | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">כתבי כמויות</h1>
+
+  <div class="card" id="sheetsCard">
+    <div class="card-header">
+      <h2>גיליונות כמויות</h2>
+      <button class="btn btn-primary" id="addSheetBtn">+ גיליון חדש</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>פרויקט</th><th>כתובת</th><th>מס' תוכנית</th><th>קומה</th><th>גרסה</th><th>תאריך תוכנית</th><th>לקוח</th><th></th></tr></thead>
+        <tbody id="sheetsBody">
+          <tr class="empty-row"><td colspan="8"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" id="itemsCard" style="display:none;">
+    <div class="card-header">
+      <h2 id="itemsTitle">שורות כמויות</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" id="addItemBtn">+ הוספת שורה</button>
+        <button class="btn btn-outline" id="backToSheets">חזרה לגיליונות</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>מס'</th><th>תיאור</th><th>מכפיל</th><th>גובה</th><th>רוחב</th><th>אורך</th><th>סה"כ</th><th></th></tr></thead>
+        <tbody id="itemsBody"></tbody>
+        <tfoot><tr><td colspan="6" style="text-align:left;font-weight:800;">סה"כ כללי</td><td id="itemsGrandTotal" style="font-weight:800;"></td><td></td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Sheet modal -->
+<div class="modal-backdrop" id="sheetModalBackdrop">
+  <div class="modal">
+    <h3>גיליון כמויות חדש</h3>
+    <div id="sheetFormMsg" class="msg"></div>
+    <form id="sheetForm">
+      <div class="form-grid">
+        <div class="field"><label>שם פרויקט</label><input type="text" name="project_name"></div>
+        <div class="field"><label>כתובת</label><input type="text" name="address"></div>
+        <div class="field"><label>מס' תוכנית</label><input type="text" name="plan_number"></div>
+        <div class="field"><label>קומה</label><input type="text" name="floor"></div>
+        <div class="field"><label>גרסת תוכנית</label><input type="text" name="plan_version"></div>
+        <div class="field"><label>תאריך תוכנית</label><input type="date" name="plan_date"></div>
+        <div class="field full"><label>לקוח</label><input type="text" name="client_name"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">יצירה</button>
+        <button type="button" class="btn btn-outline" id="cancelSheetBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Item modal -->
+<div class="modal-backdrop" id="itemModalBackdrop">
+  <div class="modal">
+    <h3>הוספת שורת כמות</h3>
+    <div id="itemFormMsg" class="msg"></div>
+    <form id="itemForm">
+      <div class="form-grid">
+        <div class="field"><label>מס' פריט</label><input type="text" name="item_no"></div>
+        <div class="field full"><label>תיאור *</label><input type="text" name="description" required></div>
+        <div class="field"><label>מכפיל</label><input type="number" step="0.01" name="multiplier" value="1"></div>
+        <div class="field"><label>גובה</label><input type="number" step="0.01" name="height"></div>
+        <div class="field"><label>רוחב</label><input type="number" step="0.01" name="width"></div>
+        <div class="field"><label>אורך</label><input type="number" step="0.01" name="length"></div>
+      </div>
+      <div style="margin-top:10px;font-size:14px;color:var(--steel);">סה"כ משוער: <strong id="itemLivePreview">—</strong></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">הוספה</button>
+        <button type="button" class="btn btn-outline" id="cancelItemBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('quantity.html');
+  if (!auth) return;
+  const { user, site } = auth;
+
+  let currentSheet = null;
+
+  // ===== Sheets =====
+  async function loadSheets() {
+    const { data, error } = await sb.from('quantity_sheets').select('*').eq('site_id', site.id).order('created_at', { ascending: false });
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    const body = document.getElementById('sheetsBody');
+    if (!data.length) {
+      body.innerHTML = `<tr class="empty-row"><td colspan="8">אין גיליונות עדיין</td></tr>`;
+      return;
+    }
+    body.innerHTML = data.map(s => `
+      <tr>
+        <td>${s.project_name || '—'}</td>
+        <td>${s.address || '—'}</td>
+        <td>${s.plan_number || '—'}</td>
+        <td>${s.floor || '—'}</td>
+        <td>${s.plan_version || '—'}</td>
+        <td>${fmtDate(s.plan_date)}</td>
+        <td>${s.client_name || '—'}</td>
+        <td class="row-actions">
+          <button class="btn btn-sm btn-outline" data-open="${s.id}">פתיחה</button>
+          <button class="icon-btn danger" data-del-sheet="${s.id}" title="מחיקה">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+    body.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openSheet(data.find(s => s.id === b.dataset.open))));
+    body.querySelectorAll('[data-del-sheet]').forEach(b => b.addEventListener('click', () => deleteSheet(b.dataset.delSheet)));
+  }
+
+  async function deleteSheet(id) {
+    if (!confirm('למחוק את הגיליון וכל שורותיו? הפעולה אינה הפיכה.')) return;
+    await sb.from('quantity_items').delete().eq('sheet_id', id);
+    const { error } = await sb.from('quantity_sheets').delete().eq('id', id);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    toast('הגיליון נמחק', 'success');
+    loadSheets();
+  }
+
+  document.getElementById('addSheetBtn').addEventListener('click', () => {
+    document.getElementById('sheetForm').reset();
+    hideMsg(document.getElementById('sheetFormMsg'));
+    document.getElementById('sheetModalBackdrop').classList.add('open');
+  });
+  document.getElementById('cancelSheetBtn').addEventListener('click', () => document.getElementById('sheetModalBackdrop').classList.remove('open'));
+  document.getElementById('sheetModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'sheetModalBackdrop') e.target.classList.remove('open');
+  });
+
+  document.getElementById('sheetForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = Object.fromEntries(fd.entries());
+    Object.keys(payload).forEach(k => { if (payload[k] === '') payload[k] = null; });
+    payload.site_id = site.id;
+    payload.created_by = user.id;
+    const { error } = await sb.from('quantity_sheets').insert(payload);
+    if (error) { showMsg(document.getElementById('sheetFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }
+    toast('הגיליון נוצר', 'success');
+    document.getElementById('sheetModalBackdrop').classList.remove('open');
+    loadSheets();
+  });
+
+  // ===== Items =====
+  async function openSheet(sheet) {
+    currentSheet = sheet;
+    document.getElementById('sheetsCard').style.display = 'none';
+    document.getElementById('itemsCard').style.display = 'block';
+    document.getElementById('itemsTitle').textContent = 'שורות כמויות — ' + (sheet.project_name || sheet.plan_number || '');
+    await loadItems();
+  }
+
+  document.getElementById('backToSheets').addEventListener('click', () => {
+    document.getElementById('itemsCard').style.display = 'none';
+    document.getElementById('sheetsCard').style.display = 'block';
+  });
+
+  async function loadItems() {
+    const { data, error } = await sb.from('quantity_items').select('*').eq('sheet_id', currentSheet.id).order('sort_order', { ascending: true });
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    const body = document.getElementById('itemsBody');
+    if (!data.length) {
+      body.innerHTML = `<tr class="empty-row"><td colspan="8">אין שורות עדיין</td></tr>`;
+      document.getElementById('itemsGrandTotal').textContent = '0';
+      return;
+    }
+    let grand = 0;
+    body.innerHTML = data.map(it => {
+      grand += Number(it.total) || 0;
+      return `
+      <tr>
+        <td>${it.item_no || '—'}</td>
+        <td>${it.description}</td>
+        <td>${fmtNum(it.multiplier)}</td>
+        <td>${it.height !== null ? fmtNum(it.height) : '—'}</td>
+        <td>${it.width !== null ? fmtNum(it.width) : '—'}</td>
+        <td>${it.length !== null ? fmtNum(it.length) : '—'}</td>
+        <td style="font-weight:700;">${fmtNum(it.total)}</td>
+        <td><button class="icon-btn danger" data-del-item="${it.id}" title="מחיקה">🗑️</button></td>
+      </tr>`;
+    }).join('');
+    document.getElementById('itemsGrandTotal').textContent = fmtNum(grand);
+    body.querySelectorAll('[data-del-item]').forEach(b => b.addEventListener('click', () => deleteItem(b.dataset.delItem)));
+  }
+
+  async function deleteItem(id) {
+    if (!confirm('למחוק את השורה?')) return;
+    const { error } = await sb.from('quantity_items').delete().eq('id', id);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    loadItems();
+  }
+
+  document.getElementById('addItemBtn').addEventListener('click', () => {
+    document.getElementById('itemForm').reset();
+    document.getElementById('itemForm').querySelector('[name=multiplier]').value = 1;
+    hideMsg(document.getElementById('itemFormMsg'));
+    updateLivePreview();
+    document.getElementById('itemModalBackdrop').classList.add('open');
+  });
+  document.getElementById('cancelItemBtn').addEventListener('click', () => document.getElementById('itemModalBackdrop').classList.remove('open'));
+  document.getElementById('itemModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'itemModalBackdrop') e.target.classList.remove('open');
+  });
+
+  function updateLivePreview() {
+    const f = document.getElementById('itemForm');
+    const m = parseFloat(f.multiplier.value) || 1;
+    const h = f.height.value !== '' ? parseFloat(f.height.value) : 1;
+    const w = f.width.value !== '' ? parseFloat(f.width.value) : 1;
+    const l = f.length.value !== '' ? parseFloat(f.length.value) : 1;
+    document.getElementById('itemLivePreview').textContent = fmtNum(m * h * w * l);
+  }
+  ['multiplier', 'height', 'width', 'length'].forEach(name => {
+    document.getElementById('itemForm')[name].addEventListener('input', updateLivePreview);
+  });
+
+  document.getElementById('itemForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = Object.fromEntries(fd.entries());
+    ['multiplier', 'height', 'width', 'length'].forEach(k => {
+      payload[k] = payload[k] === '' ? null : Number(payload[k]);
+    });
+    payload.sheet_id = currentSheet.id;
+    payload.site_id = site.id;
+    const { error } = await sb.from('quantity_items').insert(payload);
+    if (error) { showMsg(document.getElementById('itemFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }
+    toast('השורה נוספה', 'success');
+    document.getElementById('itemModalBackdrop').classList.remove('open');
+    loadItems();
+  });
+
+  await loadSheets();
+})();
+</script>
+</body>
+</html>

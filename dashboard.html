@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>לוח בקרה | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">לוח בקרה — <span id="siteName"></span></h1>
+
+  <div class="stats-row" id="statsRow">
+    <div class="loading-overlay"><div class="spinner"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>גישה מהירה</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+      <a href="concrete.html" class="btn btn-outline" style="justify-content:center;">יומני יציקות בטון</a>
+      <a href="rebar.html" class="btn btn-outline" style="justify-content:center;">משלוחי ברזל</a>
+      <a href="slabs.html" class="btn btn-outline" style="justify-content:center;">פלטות טרום</a>
+      <a href="quantity.html" class="btn btn-outline" style="justify-content:center;">כתבי כמויות</a>
+      <a href="prices.html" class="btn btn-outline" style="justify-content:center;">השוואת מחירים</a>
+      <a href="reports.html" class="btn btn-outline" style="justify-content:center;">דוחות</a>
+    </div>
+  </div>
+</main>
+
+<footer class="app-footer">SGP ניהול אתרי בנייה © <span id="year"></span></footer>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script>
+document.getElementById('year').textContent = new Date().getFullYear();
+
+(async function () {
+  const auth = await requireAuth('dashboard.html');
+  if (!auth) return;
+  const { site } = auth;
+  document.getElementById('siteName').textContent = site?.name || '';
+
+  const tables = [
+    { key: 'concrete_pours', label: 'יציקות בטון' },
+    { key: 'rebar_deliveries', label: 'משלוחי ברזל' },
+    { key: 'prestressed_slabs', label: 'פלטות טרום' },
+    { key: 'quantity_takeoffs', label: 'שורות כמויות' },
+    { key: 'price_quotes', label: 'הצעות מחיר' },
+    { key: 'documents', label: 'מסמכים מצורפים' },
+  ];
+
+  const results = await Promise.all(tables.map(t =>
+    sb.from(t.key).select('id', { count: 'exact', head: true }).eq('site_id', site.id)
+  ));
+
+  const host = document.getElementById('statsRow');
+  host.innerHTML = tables.map((t, i) => `
+    <div class="stat-card">
+      <div class="label">${t.label}</div>
+      <div class="value">${results[i].count ?? 0}</div>
+    </div>
+  `).join('');
+})();
+</script>
+</body>
+</html>

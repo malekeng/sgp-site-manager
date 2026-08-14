@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>השוואת מחירים | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<style>
+.ocr-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center; cursor: pointer; margin-bottom: 16px; }
+.ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(26,225,132,0.06); }
+.ocr-progress { display: none; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 13px; color: var(--steel); }
+.ocr-progress.show { display: flex; }
+.ocr-raw { max-height: 160px; overflow-y: auto; background: #f8f9fd; border-radius: 8px; padding: 10px; font-size: 12px; white-space: pre-wrap; margin-top: 10px; direction: ltr; text-align: left; }
+</style>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title" id="pageTitle">השוואת מחירים</h1>
+
+  <div class="stats-row" id="statsRow"></div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>הצעות מחיר מספקים</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" id="addBtn">+ הוספת רשומה</button>
+        <button class="btn btn-outline" id="filterToggle">סינון</button>
+      </div>
+    </div>
+
+    <div class="filter-panel" id="filterPanel">
+      <div class="filter-field"><label>מתאריך</label><input type="date" id="filterFrom"></div>
+      <div class="filter-field"><label>עד תאריך</label><input type="date" id="filterTo"></div>
+      <button class="btn btn-primary btn-sm" id="filterApply">החל סינון</button>
+      <button class="btn btn-ghost btn-sm" id="filterClear">איפוס</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody">
+          <tr class="empty-row"><td><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 id="modalTitle">הוספת רשומה</h3>
+
+    <div class="ocr-zone" id="ocrZone">
+      <div>📄 גררו כאן הצעת מחיר (תמונה או PDF) למילוי אוטומטי</div>
+      <div style="font-size:11px;color:var(--steel);margin-top:4px;">זיהוי טקסט אוטומטי — בדקו את התוצאה לפני שמירה</div>
+      <input type="file" id="ocrInput" accept="image/*,.pdf" style="display:none;">
+    </div>
+    <div class="ocr-progress" id="ocrProgress"><div class="spinner"></div><span id="ocrProgressText">מעבד...</span></div>
+
+    <div id="formMsg" class="msg"></div>
+    <form id="recordForm">
+      <div class="form-grid" id="formGrid"></div>
+      <div id="attachHost"></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">שמירה</button>
+        <button type="button" class="btn btn-outline" id="cancelBtn">ביטול</button>
+      </div>
+    </form>
+    <button class="icon-btn" id="closeModalBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script src="js/documents.js"></script>
+<script src="js/crud.js"></script>
+<script>
+initCrudPage({
+  table: 'price_quotes',
+  activePage: 'prices.html',
+  title: 'השוואת מחירים',
+  dateField: 'quote_date',
+  orderBy: { column: 'quote_date', ascending: false },
+  columns: [
+    { key: 'material', label: 'חומר', type: 'text' },
+    { key: 'supplier', label: 'ספק', type: 'text' },
+    { key: 'unit_price', label: 'מחיר יחידה', type: 'number', digits: 2 },
+    { key: 'unit', label: 'יחידה', type: 'text' },
+    { key: 'quote_date', label: 'תאריך הצעה', type: 'date' },
+    { key: 'notes', label: 'הערות', type: 'text' },
+  ],
+  formFields: [
+    { key: 'material', label: 'חומר', type: 'text', required: true },
+    { key: 'supplier', label: 'ספק', type: 'text', required: true },
+    { key: 'unit_price', label: 'מחיר יחידה', type: 'number', step: '0.01', required: true },
+    { key: 'unit', label: 'יחידה', type: 'text', required: true },
+    { key: 'quote_date', label: 'תאריך הצעה', type: 'date' },
+    { key: 'notes', label: 'הערות', type: 'textarea', full: true },
+  ],
+});
+
+// ===== OCR: extract material / price / unit / supplier from an uploaded quote =====
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+const ocrZone = document.getElementById('ocrZone');
+const ocrInput = document.getElementById('ocrInput');
+const ocrProgress = document.getElementById('ocrProgress');
+const ocrProgressText = document.getElementById('ocrProgressText');
+
+ocrZone.addEventListener('click', () => ocrInput.click());
+ocrZone.addEventListener('dragover', e => { e.preventDefault(); ocrZone.classList.add('dragover'); });
+ocrZone.addEventListener('dragleave', () => ocrZone.classList.remove('dragover'));
+ocrZone.addEventListener('drop', e => {
+  e.preventDefault();
+  ocrZone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) handleOcrFile(e.dataTransfer.files[0]);
+});
+ocrInput.addEventListener('change', () => {
+  if (ocrInput.files[0]) handleOcrFile(ocrInput.files[0]);
+  ocrInput.value = '';
+});
+
+async function pdfToImageDataUrl(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2.2 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/png');
+}
+
+function parseQuoteText(text) {
+  const result = { material: null, supplier: null, unit_price: null, unit: null };
+
+  // price: number followed by ₪ or "שח"/"ש"ח", or preceded by מחיר
+  const priceMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:₪|ש["']?ח)/) ||
+                      text.match(/מחיר[:\s]*[^\d]{0,10}(\d+(?:[.,]\d+)?)/);
+  if (priceMatch) result.unit_price = parseFloat(priceMatch[1].replace(',', '.'));
+
+  // unit: common construction units
+  const unitMatch = text.match(/\b(טון|מ["']?ק|מ["']?ר|יחידה|יח['"]?|ק["']?ג|מטר)\b/);
+  if (unitMatch) result.unit = unitMatch[1];
+
+  // supplier: look for common legal-entity suffixes
+  const supplierMatch = text.match(/([א-ת][א-ת\s]{2,30}(?:בע["']?מ|בעמ))/);
+  if (supplierMatch) result.supplier = supplierMatch[1].trim();
+
+  // material: common material keywords
+  const materialMatch = text.match(/\b(ברזל|פלדה|בטון|טרום|חול|חצץ|בלוקים|מלט|רשת)\b[^\n]{0,20}/);
+  if (materialMatch) result.material = materialMatch[0].trim();
+
+  return result;
+}
+
+async function handleOcrFile(file) {
+  ocrProgress.classList.add('show');
+  ocrProgressText.textContent = 'טוען קובץ...';
+  try {
+    let imageSource = file;
+    if (file.type === 'application/pdf') {
+      ocrProgressText.textContent = 'ממיר PDF לתמונה...';
+      imageSource = await pdfToImageDataUrl(file);
+    }
+
+    ocrProgressText.textContent = 'מזהה טקסט (OCR)...';
+    const { data } = await Tesseract.recognize(imageSource, 'heb+eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          ocrProgressText.textContent = `מזהה טקסט... ${Math.round(m.progress * 100)}%`;
+        }
+      },
+    });
+
+    const parsed = parseQuoteText(data.text);
+    const form = document.getElementById('recordForm');
+    if (parsed.material) form.querySelector('[name=material]').value = parsed.material;
+    if (parsed.supplier) form.querySelector('[name=supplier]').value = parsed.supplier;
+    if (parsed.unit_price) form.querySelector('[name=unit_price]').value = parsed.unit_price;
+    if (parsed.unit) form.querySelector('[name=unit]').value = parsed.unit;
+
+    toast('הזיהוי הושלם — בדקו את השדות לפני שמירה', 'success');
+  } catch (err) {
+    console.error(err);
+    toast('שגיאה בזיהוי הטקסט: ' + err.message, 'error');
+  } finally {
+    ocrProgress.classList.remove('show');
+  }
+}
+</script>
+</body>
+</html>

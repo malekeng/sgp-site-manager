@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>משתמשים | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">משתמשים</h1>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>משתמשי המערכת</h2>
+      <button class="btn btn-primary" id="inviteBtn">+ הזמנת משתמש</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>שם מלא</th><th>שם משתמש</th><th>אימייל</th><th>תפקיד</th><th>אתר</th><th></th></tr></thead>
+        <tbody id="usersBody">
+          <tr class="empty-row"><td colspan="6"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>ניהול אתרים</h2>
+      <button class="btn btn-primary btn-sm" id="addSiteBtn">+ אתר חדש</button>
+    </div>
+    <div id="sitesMsg" class="msg"></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>שם האתר</th></tr></thead>
+        <tbody id="sitesBody">
+          <tr class="empty-row"><td><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Invite modal -->
+<div class="modal-backdrop" id="inviteModalBackdrop">
+  <div class="modal">
+    <h3>הזמנת משתמש חדש</h3>
+    <div id="inviteMsg" class="msg"></div>
+    <form id="inviteForm">
+      <div class="form-grid">
+        <div class="field full"><label>אימייל *</label><input type="email" name="email" required></div>
+        <div class="field"><label>שם משתמש *</label><input type="text" name="username" required></div>
+        <div class="field"><label>שם מלא</label><input type="text" name="full_name"></div>
+        <div class="field">
+          <label>תפקיד *</label>
+          <select name="role" required id="roleSelect">
+            <option value="site_user">משתמש אתר</option>
+            <option value="admin">מנהל</option>
+            <option value="owner">בעלים</option>
+          </select>
+        </div>
+        <div class="field" id="siteField">
+          <label>אתר</label>
+          <select name="site_id" id="siteSelect"></select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="inviteSubmitBtn">שליחת הזמנה</button>
+        <button type="button" class="btn btn-outline" id="cancelInviteBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit user modal -->
+<div class="modal-backdrop" id="editModalBackdrop">
+  <div class="modal">
+    <h3>עריכת משתמש</h3>
+    <div id="editMsg" class="msg"></div>
+    <form id="editForm">
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <div class="field full"><label>אימייל</label><input type="email" name="email" disabled style="opacity:0.6;"></div>
+        <div class="field"><label>שם משתמש *</label><input type="text" name="username" required></div>
+        <div class="field"><label>שם מלא</label><input type="text" name="full_name"></div>
+        <div class="field">
+          <label>תפקיד *</label>
+          <select name="role" required id="editRoleSelect">
+            <option value="site_user">משתמש אתר</option>
+            <option value="admin">מנהל</option>
+            <option value="owner">בעלים</option>
+          </select>
+        </div>
+        <div class="field" id="editSiteField">
+          <label>אתר</label>
+          <select name="site_id" id="editSiteSelect"></select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="editSubmitBtn">שמירה</button>
+        <button type="button" class="btn btn-outline" id="cancelEditBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add site modal -->
+<div class="modal-backdrop" id="siteModalBackdrop">
+  <div class="modal">
+    <h3>אתר חדש</h3>
+    <div id="siteFormMsg" class="msg"></div>
+    <form id="siteForm">
+      <div class="field full"><label>שם האתר *</label><input type="text" name="name" required></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">יצירה</button>
+        <button type="button" class="btn btn-outline" id="cancelSiteBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('users.html');
+  if (!auth) return;
+  const { user, profile } = auth;
+
+  if (profile.role !== 'owner' && profile.role !== 'admin') {
+    document.querySelector('main.page').innerHTML = '<p>אין לך הרשאה לצפות בעמוד זה.</p>';
+    return;
+  }
+
+  const isOwner = profile.role === 'owner';
+  const roleLabels = { owner: 'בעלים', admin: 'מנהל', site_user: 'משתמש אתר' };
+  let usersCache = [];
+  let sitesCache = [];
+
+  // ===== Users =====
+  async function loadUsers() {
+    const { data, error } = await sb.from('profiles').select('*, sites(name)').order('created_at', { ascending: true });
+    const body = document.getElementById('usersBody');
+    if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="6">שגיאה: ${error.message}</td></tr>`; return; }
+    usersCache = data || [];
+    body.innerHTML = usersCache.map(u => `
+      <tr>
+        <td>${u.full_name || '—'}</td>
+        <td>${u.username}</td>
+        <td>${u.email}</td>
+        <td>${roleLabels[u.role] || u.role}</td>
+        <td>${u.sites?.name || '—'}</td>
+        <td class="row-actions">
+          ${isOwner ? `
+            <button class="icon-btn" data-edit-user="${u.id}" title="עריכה">✏️</button>
+            <button class="icon-btn" data-resend="${u.id}" title="שליחת הזמנה מחדש">📧</button>
+            ${u.id !== user.id ? `<button class="icon-btn danger" data-del-user="${u.id}" title="מחיקה">🗑️</button>` : ''}
+          ` : ''}
+        </td>
+      </tr>
+    `).join('');
+
+    body.querySelectorAll('[data-edit-user]').forEach(b => b.addEventListener('click', () => openEdit(b.dataset.editUser)));
+    body.querySelectorAll('[data-resend]').forEach(b => b.addEventListener('click', () => resendInvite(b.dataset.resend)));
+    body.querySelectorAll('[data-del-user]').forEach(b => b.addEventListener('click', () => deleteUser(b.dataset.delUser)));
+  }
+
+  function populateSiteSelect(selectEl, selectedId) {
+    selectEl.innerHTML = sitesCache.map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${s.name}</option>`).join('');
+  }
+
+  // ===== Invite =====
+  document.getElementById('roleSelect').addEventListener('change', e => {
+    document.getElementById('siteField').style.display = e.target.value === 'owner' ? 'none' : 'flex';
+  });
+
+  document.getElementById('inviteBtn').addEventListener('click', () => {
+    document.getElementById('inviteForm').reset();
+    hideMsg(document.getElementById('inviteMsg'));
+    populateSiteSelect(document.getElementById('siteSelect'), null);
+    document.getElementById('inviteModalBackdrop').classList.add('open');
+  });
+  document.getElementById('cancelInviteBtn').addEventListener('click', () => document.getElementById('inviteModalBackdrop').classList.remove('open'));
+  document.getElementById('inviteModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'inviteModalBackdrop') e.target.classList.remove('open');
+  });
+
+  document.getElementById('inviteForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('inviteMsg');
+    hideMsg(msgEl);
+    const btn = document.getElementById('inviteSubmitBtn');
+    btn.disabled = true;
+
+    const fd = new FormData(e.target);
+    const payload = Object.fromEntries(fd.entries());
+
+    const { data: { session } } = await sb.auth.getSession();
+    try {
+      const res = await fetch('https://odsxjatgebpwphzbevpu.supabase.co/functions/v1/invite-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'שגיאה לא ידועה');
+
+      toast('ההזמנה נשלחה בהצלחה', 'success');
+      document.getElementById('inviteModalBackdrop').classList.remove('open');
+      loadUsers();
+    } catch (err) {
+      showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ===== Edit user =====
+  document.getElementById('editRoleSelect').addEventListener('change', e => {
+    document.getElementById('editSiteField').style.display = e.target.value === 'owner' ? 'none' : 'flex';
+  });
+
+  function openEdit(id) {
+    const u = usersCache.find(x => x.id === id);
+    if (!u) return;
+    const form = document.getElementById('editForm');
+    form.reset();
+    hideMsg(document.getElementById('editMsg'));
+    form.id.value = u.id;
+    form.email.value = u.email;
+    form.username.value = u.username || '';
+    form.full_name.value = u.full_name || '';
+    form.role.value = u.role;
+    populateSiteSelect(document.getElementById('editSiteSelect'), u.site_id);
+    document.getElementById('editSiteField').style.display = u.role === 'owner' ? 'none' : 'flex';
+    document.getElementById('editModalBackdrop').classList.add('open');
+  }
+
+  document.getElementById('cancelEditBtn').addEventListener('click', () => document.getElementById('editModalBackdrop').classList.remove('open'));
+  document.getElementById('editModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'editModalBackdrop') e.target.classList.remove('open');
+  });
+
+  document.getElementById('editForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('editMsg');
+    hideMsg(msgEl);
+    const btn = document.getElementById('editSubmitBtn');
+    btn.disabled = true;
+
+    const fd = new FormData(e.target);
+    const id = fd.get('id');
+    const role = fd.get('role');
+    const payload = {
+      username: fd.get('username'),
+      full_name: fd.get('full_name') || fd.get('username'),
+      role,
+      site_id: role === 'owner' ? null : (fd.get('site_id') || null),
+    };
+
+    const { error } = await sb.from('profiles').update(payload).eq('id', id);
+    btn.disabled = false;
+    if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); return; }
+
+    toast('המשתמש עודכן', 'success');
+    document.getElementById('editModalBackdrop').classList.remove('open');
+    loadUsers();
+  });
+
+  // ===== Resend invite =====
+  async function resendInvite(id) {
+    const u = usersCache.find(x => x.id === id);
+    if (!u) return;
+    if (!confirm(`לשלוח למשתמש ${u.email} קישור חדש לקביעת סיסמה?`)) return;
+    const { error } = await sb.auth.resetPasswordForEmail(u.email, {
+      redirectTo: 'https://sgp-site-manager.vercel.app/index.html',
+    });
+    if (error) { toast('שגיאה בשליחה: ' + error.message, 'error'); return; }
+    toast('נשלח קישור למשתמש', 'success');
+  }
+
+  // ===== Delete user =====
+  async function deleteUser(id) {
+    const u = usersCache.find(x => x.id === id);
+    if (!u) return;
+    if (!confirm(`למחוק לצמיתות את המשתמש ${u.full_name || u.username} (${u.email})? הפעולה אינה הפיכה.`)) return;
+
+    const { data: { session } } = await sb.auth.getSession();
+    try {
+      const res = await fetch('https://odsxjatgebpwphzbevpu.supabase.co/functions/v1/delete-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ user_id: id }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'שגיאה לא ידועה');
+      toast('המשתמש נמחק', 'success');
+      loadUsers();
+    } catch (err) {
+      toast('שגיאה במחיקה: ' + err.message, 'error');
+    }
+  }
+
+  // ===== Sites =====
+  async function loadSites() {
+    const { data, error } = await sb.from('sites').select('*').order('name');
+    if (error) { document.getElementById('sitesBody').innerHTML = `<tr class="empty-row"><td>שגיאה: ${error.message}</td></tr>`; return; }
+    sitesCache = data || [];
+    const siteSelectEl = document.getElementById('siteSelect');
+    if (siteSelectEl) populateSiteSelect(siteSelectEl, null);
+    const body = document.getElementById('sitesBody');
+    if (!sitesCache.length) {
+      body.innerHTML = `<tr class="empty-row"><td>אין אתרים עדיין</td></tr>`;
+      return;
+    }
+    body.innerHTML = sitesCache.map(s => `<tr><td>${s.name}</td></tr>`).join('');
+  }
+
+  document.getElementById('addSiteBtn').addEventListener('click', () => {
+    document.getElementById('siteForm').reset();
+    hideMsg(document.getElementById('siteFormMsg'));
+    document.getElementById('siteModalBackdrop').classList.add('open');
+  });
+  document.getElementById('cancelSiteBtn').addEventListener('click', () => document.getElementById('siteModalBackdrop').classList.remove('open'));
+  document.getElementById('siteModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'siteModalBackdrop') e.target.classList.remove('open');
+  });
+
+  document.getElementById('siteForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('siteFormMsg');
+    hideMsg(msgEl);
+    const fd = new FormData(e.target);
+    const { error } = await sb.from('sites').insert({ name: fd.get('name') });
+    if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); return; }
+    toast('האתר נוצר', 'success');
+    document.getElementById('siteModalBackdrop').classList.remove('open');
+    await loadSites();
+  });
+
+  await loadSites();
+  await loadUsers();
+})();
+</script>
+</body>
+</html>

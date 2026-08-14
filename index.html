@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SGP | ניהול אתרי בנייה</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.otp-input {
+  font-size: 26px; letter-spacing: 10px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.switch-link {
+  display: block; text-align: center; font-size: 13px; color: var(--steel);
+  margin-top: 14px; cursor: pointer; font-weight: 600;
+}
+.switch-link:hover { color: var(--navy); }
+</style>
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <img src="icons/logo.svg" alt="SGP">
+    <div class="tagline">מערכת ניהול אתרי בנייה</div>
+
+    <div id="msg" class="msg"></div>
+
+    <!-- ===== Screen 1: Login ===== -->
+    <form id="loginForm">
+      <div class="field">
+        <label>אימייל</label>
+        <input type="email" name="email" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label>סיסמה</label>
+        <input type="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary" id="loginBtn">
+        <span id="loginBtnText">כניסה</span>
+      </button>
+      <span class="switch-link" id="toRequestCode">שכחת סיסמה, או קיבלת קוד הזמנה? לחצו כאן</span>
+    </form>
+
+    <!-- ===== Screen 2: Request a code (recovery) ===== -->
+    <form id="requestCodeForm" style="display:none;">
+      <p style="font-size:13px;color:var(--steel);margin-bottom:16px;">
+        הזינו את כתובת המייל שלכם ונשלח קוד אימות לאיפוס הסיסמה.
+      </p>
+      <div class="field">
+        <label>אימייל</label>
+        <input type="email" name="email" required autocomplete="email">
+      </div>
+      <button type="submit" class="btn btn-primary" id="requestCodeBtn">
+        <span id="requestCodeBtnText">שליחת קוד</span>
+      </button>
+      <span class="switch-link" id="toLoginFromRequest">כבר יש לכם קוד? לחצו כאן להזנתו</span>
+      <span class="switch-link" id="backToLoginFromRequest">חזרה לכניסה</span>
+    </form>
+
+    <!-- ===== Screen 3: Enter code + set password (covers both invite & recovery) ===== -->
+    <form id="verifyCodeForm" style="display:none;">
+      <p style="font-size:13px;color:var(--steel);margin-bottom:16px;">
+        הזינו את הקוד שקיבלתם במייל, וקבעו סיסמה.
+      </p>
+      <div class="field">
+        <label>אימייל</label>
+        <input type="email" name="email" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label>קוד אימות</label>
+        <input type="text" name="code" class="otp-input" inputmode="numeric" pattern="[0-9]{4,10}" maxlength="10" required autocomplete="one-time-code">
+      </div>
+      <div class="field">
+        <label>סיסמה חדשה</label>
+        <input type="password" name="password" minlength="6" required autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label>אימות סיסמה</label>
+        <input type="password" name="confirm" minlength="6" required autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn btn-primary" id="verifyCodeBtn">
+        <span id="verifyCodeBtnText">אישור וכניסה</span>
+      </button>
+      <span class="switch-link" id="backToLoginFromVerify">חזרה לכניסה</span>
+    </form>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+const msgEl = document.getElementById('msg');
+const loginForm = document.getElementById('loginForm');
+const requestCodeForm = document.getElementById('requestCodeForm');
+const verifyCodeForm = document.getElementById('verifyCodeForm');
+
+function showScreen(el) {
+  [loginForm, requestCodeForm, verifyCodeForm].forEach(f => f.style.display = 'none');
+  el.style.display = 'block';
+  hideMsg();
+}
+function hideMsg() { msgEl.className = 'msg'; }
+function showErr(text) { msgEl.textContent = text; msgEl.className = 'msg show error'; }
+function showOk(text) { msgEl.textContent = text; msgEl.className = 'msg show success'; }
+
+function setBusy(btn, textEl, busy, busyLabel, normalLabel) {
+  btn.disabled = busy;
+  textEl.textContent = busy ? busyLabel : normalLabel;
+}
+
+async function goToDashboardIfSignedIn() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) window.location.href = 'dashboard.html';
+}
+
+// ===== Navigation between the 3 screens =====
+document.getElementById('toRequestCode').addEventListener('click', () => showScreen(requestCodeForm));
+document.getElementById('backToLoginFromRequest').addEventListener('click', () => showScreen(loginForm));
+document.getElementById('backToLoginFromVerify').addEventListener('click', () => showScreen(loginForm));
+document.getElementById('toLoginFromRequest').addEventListener('click', () => {
+  const email = requestCodeForm.email.value;
+  showScreen(verifyCodeForm);
+  if (email) verifyCodeForm.email.value = email;
+});
+
+// ===== Screen 1: Login =====
+loginForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  hideMsg();
+  const btn = document.getElementById('loginBtn');
+  const btnText = document.getElementById('loginBtnText');
+  setBusy(btn, btnText, true, 'מתחבר...', 'כניסה');
+
+  const fd = new FormData(loginForm);
+  const { error } = await sb.auth.signInWithPassword({
+    email: fd.get('email'),
+    password: fd.get('password'),
+  });
+
+  if (error) {
+    showErr('שגיאה בהתחברות: אימייל או סיסמה שגויים');
+    setBusy(btn, btnText, false, '', 'כניסה');
+    return;
+  }
+  window.location.href = 'dashboard.html';
+});
+
+// ===== Screen 2: Request recovery code =====
+requestCodeForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  hideMsg();
+  const btn = document.getElementById('requestCodeBtn');
+  const btnText = document.getElementById('requestCodeBtnText');
+  setBusy(btn, btnText, true, 'שולח...', 'שליחת קוד');
+
+  const fd = new FormData(requestCodeForm);
+  const email = fd.get('email');
+  const { error } = await sb.auth.resetPasswordForEmail(email);
+
+  setBusy(btn, btnText, false, '', 'שליחת קוד');
+  if (error) {
+    showErr('שגיאה בשליחה: ' + error.message);
+    return;
+  }
+  showScreen(verifyCodeForm);
+  verifyCodeForm.email.value = email;
+  showOk('קוד נשלח למייל. הזינו אותו כאן תוך 60 דקות.');
+});
+
+// ===== Screen 3: Verify code (tries recovery, then invite) + set password =====
+verifyCodeForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  hideMsg();
+
+  const fd = new FormData(verifyCodeForm);
+  const email = fd.get('email');
+  const code = fd.get('code').trim();
+  const pass = fd.get('password');
+  const confirm = fd.get('confirm');
+
+  if (pass !== confirm) {
+    showErr('הסיסמאות אינן תואמות');
+    return;
+  }
+
+  const btn = document.getElementById('verifyCodeBtn');
+  const btnText = document.getElementById('verifyCodeBtnText');
+  setBusy(btn, btnText, true, 'מאמת...', 'אישור וכניסה');
+
+  let verifyError = null;
+  for (const type of ['recovery', 'invite']) {
+    const { error } = await sb.auth.verifyOtp({ email, token: code, type });
+    if (!error) { verifyError = null; break; }
+    verifyError = error;
+  }
+
+  if (verifyError) {
+    showErr('הקוד שגוי או שפג תוקפו. בקשו קוד חדש.');
+    setBusy(btn, btnText, false, '', 'אישור וכניסה');
+    return;
+  }
+
+  const { error: updateErr } = await sb.auth.updateUser({ password: pass });
+  if (updateErr) {
+    showErr('שגיאה בשמירת הסיסמה: ' + updateErr.message);
+    setBusy(btn, btnText, false, '', 'אישור וכניסה');
+    return;
+  }
+
+  window.location.href = 'dashboard.html';
+});
+
+goToDashboardIfSignedIn();
+</script>
+</body>
+</html>

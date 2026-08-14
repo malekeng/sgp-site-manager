@@ -1,0 +1,14 @@
+{
+  "name": "SGP ניהול אתרי בנייה",
+  "short_name": "SGP",
+  "description": "מערכת ניהול אתרי בנייה - שי גיל פרויקטים",
+  "start_url": "/dashboard.html",
+  "display": "standalone",
+  "background_color": "#f2f4f9",
+  "theme_color": "#011a6e",
+  "dir": "rtl",
+  "lang": "he",
+  "icons": [
+    { "src": "icons/icon.png", "sizes": "256x256", "type": "image/png" }
+  ]
+}
