@@ -20,9 +20,9 @@ function toast(message, type = '') {
   }
   const el = document.createElement('div');
   el.className = 'toast' + (type ? ' ' + type : '');
-  el.textContent = message;
+  el.innerHTML = type === 'success' ? `<span class="toast-check">✓</span> ${message}` : message;
   host.appendChild(el);
-  setTimeout(() => el.remove(), 3500);
+  setTimeout(() => el.remove(), type === 'success' ? 4500 : 3500);
 }
 
 function showMsg(el, text, type) {
