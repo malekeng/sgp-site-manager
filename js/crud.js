@@ -55,9 +55,10 @@ async function initCrudPage(config) {
     const lastUpdated = state.rows.length
       ? fmtDate(state.rows.map(r => r.created_at).sort().slice(-1)[0])
       : '—';
+    const icon = config.icon || '📋';
     host.innerHTML = `
-      <div class="stat-card"><div class="label">סה"כ רשומות</div><div class="value">${state.rows.length}</div></div>
-      <div class="stat-card"><div class="label">עודכן לאחרונה</div><div class="value" style="font-size:20px;">${lastUpdated}</div></div>
+      <div class="stat-card"><div class="label">${icon} סה"כ רשומות</div><div class="value">${state.rows.length}</div></div>
+      <div class="stat-card"><div class="label">🕒 עודכן לאחרונה</div><div class="value" style="font-size:20px;">${lastUpdated}</div></div>
     `;
   }
 

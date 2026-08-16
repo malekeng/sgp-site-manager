@@ -1,15 +1,15 @@
 // ===== Shared app shell: auth guard, header, nav, toast, helpers =====
 
 const NAV_ITEMS = [
-  { href: 'dashboard.html', label: 'לוח בקרה' },
-  { href: 'concrete.html',  label: 'יומני יציקות בטון' },
-  { href: 'rebar.html',     label: 'משלוחי ברזל' },
-  { href: 'slabs.html',     label: 'פלטות טרום' },
-  { href: 'quantity.html',  label: 'כתבי כמויות' },
-  { href: 'prices.html',    label: 'השוואת מחירים' },
-  { href: 'reports.html',   label: 'דוחות' },
+  { href: 'dashboard.html', label: 'לוח בקרה', icon: '🏠' },
+  { href: 'concrete.html',  label: 'יומני יציקות בטון', icon: '🧱' },
+  { href: 'rebar.html',     label: 'משלוחי ברזל', icon: '🔩' },
+  { href: 'slabs.html',     label: 'פלטות טרום', icon: '🏗️' },
+  { href: 'quantity.html',  label: 'כתבי כמויות', icon: '📐' },
+  { href: 'prices.html',    label: 'השוואת מחירים', icon: '💰' },
+  { href: 'reports.html',   label: 'דוחות', icon: '📊' },
 ];
-const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים' };
+const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים', icon: '👥' };
 
 function toast(message, type = '') {
   let host = document.querySelector('.toast-host');
@@ -48,7 +48,7 @@ function fmtNum(n, digits = 2) {
   return num.toLocaleString('he-IL', { maximumFractionDigits: digits });
 }
 
-// Renders the shared header + nav into #app-header, wires up mobile toggle & logout.
+// Renders the shared sidebar + nav into #app-header, wires up mobile drawer & logout.
 async function renderHeader(activePage, profile, site) {
   const host = document.getElementById('app-header');
   if (!host) return;
@@ -59,7 +59,7 @@ async function renderHeader(activePage, profile, site) {
   }
 
   const navHtml = items.map(item =>
-    `<a href="${item.href}" class="${item.href === activePage ? 'active' : ''}">${item.label}</a>`
+    `<a href="${item.href}" class="${item.href === activePage ? 'active' : ''}"><span class="nav-icon">${item.icon}</span>${item.label}</a>`
   ).join('');
 
   const allSites = site?.__allSites;
@@ -74,16 +74,42 @@ async function renderHeader(activePage, profile, site) {
       <img src="icons/logo.svg" alt="SGP">
     </div>
     <nav id="mainNav">${navHtml}</nav>
-    <div style="display:flex;align-items:center;gap:10px;">
+    <div class="sidebar-footer">
       ${siteControl}
       <button class="logout-btn" id="logoutBtn">יציאה</button>
-      <button class="header-menu-btn" id="menuToggle">☰</button>
     </div>
   `;
 
-  document.getElementById('menuToggle')?.addEventListener('click', () => {
-    document.getElementById('mainNav')?.classList.toggle('open');
-  });
+  // Mobile drawer toggle + backdrop must live outside #app-header: CSS transform on
+  // the sidebar creates a new containing block, which breaks position:fixed children.
+  let toggle = document.getElementById('menuToggle');
+  if (!toggle) {
+    toggle = document.createElement('button');
+    toggle.id = 'menuToggle';
+    toggle.className = 'header-menu-btn';
+    toggle.textContent = '☰';
+    document.body.appendChild(toggle);
+  }
+  let backdrop = document.getElementById('sidebarBackdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'sidebarBackdrop';
+    backdrop.className = 'sidebar-backdrop';
+    document.body.appendChild(backdrop);
+  }
+
+  toggle.onclick = () => {
+    host.classList.toggle('open');
+    backdrop.classList.toggle('open');
+  };
+  backdrop.onclick = () => {
+    host.classList.remove('open');
+    backdrop.classList.remove('open');
+  };
+  host.querySelectorAll('nav a').forEach(a => a.addEventListener('click', () => {
+    host.classList.remove('open');
+    backdrop.classList.remove('open');
+  }));
 
   document.getElementById('siteSwitcher')?.addEventListener('change', e => {
     sessionStorage.setItem('sgp_active_site_id', e.target.value);

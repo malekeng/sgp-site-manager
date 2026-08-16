@@ -27,6 +27,11 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2>📷 תמונות אחרונות</h2></div>
+    <div id="photoGallery"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2>גישה מהירה</h2></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
       <a href="concrete.html" class="btn btn-outline" style="justify-content:center;">יומני יציקות בטון</a>
@@ -129,12 +134,12 @@ document.getElementById('year').textContent = new Date().getFullYear();
   // ===== Raw counts, kept but secondary =====
   async function loadStats() {
     const tables = [
-      { key: 'concrete_pours', label: 'יציקות בטון' },
-      { key: 'rebar_deliveries', label: 'משלוחי ברזל' },
-      { key: 'prestressed_slabs', label: 'פלטות טרום' },
-      { key: 'quantity_sheets', label: 'גיליונות כמויות' },
-      { key: 'price_quotes', label: 'הצעות מחיר' },
-      { key: 'documents', label: 'מסמכים מצורפים' },
+      { key: 'concrete_pours', label: 'יציקות בטון', icon: '🧱' },
+      { key: 'rebar_deliveries', label: 'משלוחי ברזל', icon: '🔩' },
+      { key: 'prestressed_slabs', label: 'פלטות טרום', icon: '🏗️' },
+      { key: 'quantity_sheets', label: 'גיליונות כמויות', icon: '📐' },
+      { key: 'price_quotes', label: 'הצעות מחיר', icon: '💰' },
+      { key: 'documents', label: 'מסמכים מצורפים', icon: '📎' },
     ];
     const results = await Promise.all(tables.map(t =>
       sb.from(t.key).select('id', { count: 'exact', head: true }).eq('site_id', site.id)
@@ -142,13 +147,52 @@ document.getElementById('year').textContent = new Date().getFullYear();
     const host = document.getElementById('statsRow');
     host.innerHTML = tables.map((t, i) => `
       <div class="stat-card">
-        <div class="label">${t.label}</div>
+        <div class="label">${t.icon} ${t.label}</div>
         <div class="value">${results[i].count ?? 0}</div>
       </div>
     `).join('');
   }
 
-  await Promise.all([loadAttention(), loadRecent(), loadStats()]);
+  function isImageFile(name) {
+    return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
+  }
+  function openLightbox(url) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(6,15,53,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
+    overlay.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
+
+  async function loadPhotoGallery() {
+    const host = document.getElementById('photoGallery');
+    const { data, error } = await sb.from('documents')
+      .select('file_path, file_name, created_at')
+      .eq('site_id', site.id)
+      .order('created_at', { ascending: false })
+      .limit(24);
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; return; }
+    const images = (data || []).filter(d => isImageFile(d.file_name)).slice(0, 8);
+    if (!images.length) { host.innerHTML = '<p style="color:var(--steel);">אין תמונות מצורפות עדיין באתר זה</p>'; return; }
+
+    const resolved = await Promise.all(images.map(async d => {
+      const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
+      return { ...d, url: signed?.signedUrl || null };
+    }));
+
+    host.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;">
+      ${resolved.filter(d => d.url).map((d, i) => `
+        <div data-photo="${i}" style="cursor:pointer;aspect-ratio:1;border-radius:12px;overflow:hidden;box-shadow:var(--shadow);">
+          <img src="${d.url}" style="width:100%;height:100%;object-fit:cover;">
+        </div>
+      `).join('')}
+    </div>`;
+    host.querySelectorAll('[data-photo]').forEach(el => {
+      el.addEventListener('click', () => openLightbox(resolved.filter(d => d.url)[Number(el.dataset.photo)].url));
+    });
+  }
+
+  await Promise.all([loadAttention(), loadRecent(), loadStats(), loadPhotoGallery()]);
 })();
 </script>
 </body>
