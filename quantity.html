@@ -196,11 +196,11 @@
       <tr>
         <td>${it.item_no || '—'}</td>
         <td>${it.description}</td>
-        <td>${fmtNum(it.multiplier)}</td>
-        <td>${it.height !== null ? fmtNum(it.height) : '—'}</td>
-        <td>${it.width !== null ? fmtNum(it.width) : '—'}</td>
-        <td>${it.length !== null ? fmtNum(it.length) : '—'}</td>
-        <td style="font-weight:700;">${fmtNum(it.total)}</td>
+        <td class="num-cell">${fmtNum(it.multiplier)}</td>
+        <td class="num-cell">${it.height !== null ? fmtNum(it.height) : '—'}</td>
+        <td class="num-cell">${it.width !== null ? fmtNum(it.width) : '—'}</td>
+        <td class="num-cell">${it.length !== null ? fmtNum(it.length) : '—'}</td>
+        <td class="num-cell" style="font-weight:700;">${fmtNum(it.total)}</td>
         <td><button class="icon-btn danger" data-del-item="${it.id}" title="מחיקה">🗑️</button></td>
       </tr>`;
     }).join('');

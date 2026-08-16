@@ -270,8 +270,8 @@ thead th {
   border-bottom: none;
   white-space: nowrap;
 }
-tbody td { padding: 13px 16px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 13.5px; }
-tbody td:first-child { font-family: 'Rubik', sans-serif; font-size: 14px; }
+tbody td { padding: 13px 16px; border-bottom: 1px solid var(--border); font-family: 'Rubik', sans-serif; font-size: 14px; }
+tbody td.num-cell { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 13.5px; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: linear-gradient(90deg, rgba(0,214,143,0.04) 0%, transparent 100%); }
 .empty-row td { text-align: center; color: var(--steel); padding: 40px 14px; }

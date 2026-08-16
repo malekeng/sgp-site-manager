@@ -81,7 +81,7 @@ async function initCrudPage(config) {
           else if (c.type === 'number') out = fmtNum(v, c.digits ?? 2);
           else out = String(v);
         }
-        return `<td>${out}</td>`;
+        return `<td class="${c.type === 'number' ? 'num-cell' : ''}">${out}</td>`;
       }).join('');
       const docCount = state.docCounts[row.id] || 0;
       const docCell = docCount
