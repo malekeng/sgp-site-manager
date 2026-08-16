@@ -166,6 +166,11 @@ async function initCrudPage(config) {
             ${f.options.map(o => `<option value="${o}">${o}</option>`).join('')}
           </select></div>`;
       }
+      if (f.type === 'datalist') {
+        return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
+          <input type="text" name="${f.key}" list="${f.key}_list" autocomplete="off" ${f.required ? 'required' : ''}>
+          <datalist id="${f.key}_list">${f.options.map(o => `<option value="${o}">`).join('')}</datalist></div>`;
+      }
       if (f.type === 'textarea') {
         return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
           <textarea name="${f.key}" rows="2" ${f.required ? 'required' : ''}></textarea></div>`;
@@ -206,7 +211,7 @@ async function initCrudPage(config) {
     config.formFields.forEach(f => {
       let v = fd.get(f.key);
       if (v === '') v = null;
-      if (v !== null && f.type === 'number') v = Number(v);
+      if (v !== null && (f.type === 'number' || f.numeric)) v = Number(v);
       payload[f.key] = v;
     });
 
