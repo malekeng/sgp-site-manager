@@ -52,6 +52,11 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2>מסמכים מצורפים</h2></div>
+    <div id="docsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+
+  <div class="card">
     <div class="card-header">
       <h2>סיכום נפחי יציקות בטון לפי חודש</h2>
       <button class="btn btn-outline btn-sm" id="exportConcreteSummary">📄 PDF</button>
@@ -183,7 +188,7 @@
           el.classList.remove('checked');
         }
         updateFilterSummary();
-        refreshSummaries();
+        refreshSummaries(); loadDocuments();
       });
     });
   }
@@ -200,12 +205,12 @@
   document.getElementById('filterFrom').addEventListener('change', e => {
     filterState.from = e.target.value;
     updateFilterSummary();
-    refreshSummaries();
+    refreshSummaries(); loadDocuments();
   });
   document.getElementById('filterTo').addEventListener('change', e => {
     filterState.to = e.target.value;
     updateFilterSummary();
-    refreshSummaries();
+    refreshSummaries(); loadDocuments();
   });
 
   function siteNameById(id) {
@@ -398,8 +403,75 @@
     };
   }
 
+  // ===== Documents browser: view (lightbox for images) / open+download (same-tab, PWA-safe) =====
+  const LINKED_TABLE_LABELS = {
+    concrete_pours: 'יציקת בטון',
+    rebar_deliveries: 'משלוח ברזל',
+    prestressed_slabs: 'פלטת טרום',
+    price_quotes: 'הצעת מחיר',
+  };
+
+  function isImageFile(name) {
+    return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
+  }
+
+  function openLightbox(url) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(6,15,53,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
+    overlay.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
+
+  async function loadDocuments() {
+    const host = document.getElementById('docsList');
+    if (!filterState.siteIds.length) {
+      host.innerHTML = '<p style="color:var(--steel);">בחרו לפחות אתר אחד</p>';
+      return;
+    }
+    let q = sb.from('documents').select('*').in('site_id', filterState.siteIds).order('created_at', { ascending: false }).limit(50);
+    if (filterState.from) q = q.gte('created_at', filterState.from);
+    if (filterState.to) q = q.lte('created_at', filterState.to + 'T23:59:59');
+    const { data, error } = await q;
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; return; }
+    if (!data || !data.length) { host.innerHTML = '<p style="color:var(--steel);">אין מסמכים מצורפים בטווח שנבחר</p>'; return; }
+
+    const resolved = await Promise.all(data.map(async d => {
+      const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
+      return { ...d, url: signed?.signedUrl || null };
+    }));
+
+    host.innerHTML = `<div class="attach-list">${resolved.map((d, i) => {
+      const typeLabel = LINKED_TABLE_LABELS[d.linked_table] || d.linked_table || '';
+      if (!d.url) {
+        return `<div class="attach-item"><span>${d.file_name} · ${typeLabel}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
+      }
+      if (isImageFile(d.file_name)) {
+        return `<div class="attach-item">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <img src="${d.url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
+            <span>${d.file_name} <span style="color:var(--steel);font-size:12px;">· ${typeLabel} · ${fmtDate(d.created_at)}</span></span>
+          </span>
+          <span style="display:flex;gap:6px;">
+            <button type="button" class="btn btn-sm btn-outline" data-view="${i}">צפייה</button>
+            <a href="${d.url}" class="btn btn-sm btn-outline">הורדה</a>
+          </span>
+        </div>`;
+      }
+      return `<div class="attach-item">
+        <span>${d.file_name} <span style="color:var(--steel);font-size:12px;">· ${typeLabel} · ${fmtDate(d.created_at)}</span></span>
+        <a href="${d.url}" class="btn btn-sm btn-outline">פתיחה / הורדה</a>
+      </div>`;
+    }).join('')}</div>`;
+
+    host.querySelectorAll('[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => openLightbox(resolved[Number(btn.dataset.view)].url));
+    });
+  }
+
   await loadSitesForFilter();
   await refreshSummaries();
+  await loadDocuments();
 })();
 </script>
 </body>

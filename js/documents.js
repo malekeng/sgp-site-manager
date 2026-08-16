@@ -12,7 +12,7 @@ function createAttachWidget(container) {
     <div class="field full">
       <label>מסמכים / תמונות (אופציונלי)</label>
       <div class="attach-zone" tabindex="0">
-        <div>📎 גררו קבצים לכאן או לחצו לבחירה</div>
+        <div id="attachZoneLabel">📎 גררו קבצים לכאן או לחצו לבחירה — ניתן לבחור כמה קבצים ביחד</div>
         <div style="font-size:11px;margin-top:4px;">תמונות, PDF, Word — עד 10MB לקובץ</div>
       </div>
       <input type="file" multiple accept="image/*,.pdf,.doc,.docx" style="display:none;">
@@ -21,10 +21,14 @@ function createAttachWidget(container) {
   `;
 
   const zone = container.querySelector('.attach-zone');
+  const zoneLabel = container.querySelector('#attachZoneLabel');
   const input = container.querySelector('input[type=file]');
   const list = container.querySelector('.attach-list');
 
   function render() {
+    zoneLabel.textContent = files.length
+      ? `📎 ${files.length} קבצים נבחרו — לחצו כאן להוספת עוד`
+      : '📎 גררו קבצים לכאן או לחצו לבחירה — ניתן לבחור כמה קבצים ביחד';
     list.innerHTML = files.map((f, i) => `
       <div class="attach-item">
         <span>${f.name.length > 34 ? f.name.slice(0, 31) + '…' : f.name} (${(f.size / 1024).toFixed(0)}KB)</span>
