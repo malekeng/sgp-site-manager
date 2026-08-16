@@ -132,6 +132,10 @@
   };
 
   function fmtCell(v, col) {
+    if (col.type === 'docs') {
+      if (!v || !v.length) return '—';
+      return v.map(d => `<img src="${d.url}" style="width:34px;height:34px;object-fit:cover;border-radius:4px;border:1px solid #e1e5f0;margin-left:4px;">`).join('');
+    }
     if (v === null || v === undefined || v === '') return '—';
     if (col.type === 'date') return fmtDate(v);
     if (col.type === 'number') return fmtNum(v, col.digits ?? 2);
@@ -255,6 +259,12 @@
     `;
     document.body.appendChild(root);
 
+    const imgs = Array.from(root.querySelectorAll('img'));
+    await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(res => {
+      img.addEventListener('load', res);
+      img.addEventListener('error', res);
+    })));
+
     try {
       const canvas = await html2canvas(root, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
       const { jsPDF } = window.jspdf;
@@ -298,8 +308,7 @@
       if (filterState.to) q = q.lte(cfg.dateField, filterState.to);
       q = q.order(cfg.dateField, { ascending: false });
       const { data, error } = await q;
-      btn.disabled = false;
-      if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+      if (error) { btn.disabled = false; toast('שגיאה: ' + error.message, 'error'); return; }
 
       let rows = data || [];
       let columns = cfg.columns;
@@ -307,6 +316,27 @@
         rows = rows.map(r => ({ ...r, _site_name: siteNameById(r.site_id) }));
         columns = [{ key: '_site_name', label: 'אתר', type: 'text' }, ...cfg.columns];
       }
+
+      // Attach thumbnail images of any documents linked to each row
+      if (rows.length) {
+        const ids = rows.map(r => r.id);
+        const { data: docs } = await sb.from('documents')
+          .select('linked_record_id, file_path, file_name')
+          .eq('linked_table', key)
+          .in('linked_record_id', ids);
+        if (docs && docs.length) {
+          const byRecord = {};
+          await Promise.all(docs.map(async d => {
+            const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
+            if (!signed) return;
+            (byRecord[d.linked_record_id] ||= []).push({ url: signed.signedUrl, name: d.file_name });
+          }));
+          rows = rows.map(r => ({ ...r, _docs: byRecord[r.id] || [] }));
+          columns = [...columns, { key: '_docs', label: 'תיעוד', type: 'docs' }];
+        }
+      }
+
+      btn.disabled = false;
       await exportPdf(cfg.title, columns, rows);
     });
   });

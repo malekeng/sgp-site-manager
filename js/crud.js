@@ -106,18 +106,44 @@ async function initCrudPage(config) {
       btn.addEventListener('click', () => showDocsPopup(btn.dataset.docs)));
   }
 
+  function isImageFile(name) {
+    return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
+  }
+
+  function openLightbox(url) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(6,15,53,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
+    overlay.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
+
   async function showDocsPopup(recordId) {
     const docs = await loadRecordDocuments(config.table, recordId);
     if (!docs.length) return;
-    const lines = await Promise.all(docs.map(async d => {
-      const url = await getDocumentUrl(d.file_path);
-      return `<div class="attach-item"><span>${d.file_name}</span>${url ? `<a href="${url}" target="_blank" class="btn btn-sm btn-outline">פתח</a>` : ''}</div>`;
-    }));
+    const resolved = await Promise.all(docs.map(async d => ({ ...d, url: await getDocumentUrl(d.file_path) })));
+    const lines = resolved.map((d, i) => {
+      if (!d.url) return `<div class="attach-item"><span>${d.file_name}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
+      if (isImageFile(d.file_name)) {
+        return `<div class="attach-item" data-lightbox="${i}" style="cursor:pointer;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <img src="${d.url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
+            ${d.file_name}
+          </span>
+          <span class="btn btn-sm btn-outline">הצגה</span>
+        </div>`;
+      }
+      // Non-image: same-tab navigation (target="_blank" is silently swallowed in installed iOS PWA)
+      return `<div class="attach-item"><span>${d.file_name}</span><a href="${d.url}" class="btn btn-sm btn-outline">פתיחה / הורדה</a></div>`;
+    });
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop open';
     backdrop.innerHTML = `<div class="modal"><h3>מסמכים מצורפים</h3><div class="attach-list">${lines.join('')}</div>
       <div class="modal-actions"><button class="btn btn-outline" id="closeDocsPopup">סגירה</button></div></div>`;
     document.body.appendChild(backdrop);
+    backdrop.querySelectorAll('[data-lightbox]').forEach(el => {
+      el.addEventListener('click', () => openLightbox(resolved[Number(el.dataset.lightbox)].url));
+    });
     backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
     backdrop.querySelector('#closeDocsPopup').addEventListener('click', () => backdrop.remove());
   }
