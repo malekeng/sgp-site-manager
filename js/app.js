@@ -126,17 +126,29 @@ async function renderHeader(activePage, profile, site) {
 // Regular users: fixed to profile.site_id.
 // Owner/admin with no fixed site_id: pick a remembered site, or default to the first one,
 // and expose the full list so the header can offer a switcher.
+// Resolves which site is "active" for this session.
+// owner/admin: full access regardless of assignment — switcher across ALL sites (unchanged).
+// site_user: restricted to their assigned sites via profile_sites — fixed if 1, switcher if >1.
 async function resolveActiveSite(profile) {
-  if (profile.site_id) {
-    const { data: siteData, error } = await sb
-      .from('sites')
-      .select('*')
-      .eq('id', profile.site_id)
-      .single();
+  if (profile.role === 'site_user') {
+    const { data: assigned, error } = await sb
+      .from('profile_sites')
+      .select('site_id, sites(*)')
+      .eq('profile_id', profile.id);
     if (error) { console.error(error); return null; }
-    return siteData;
+    const mySites = (assigned || []).map(r => r.sites).filter(Boolean);
+    if (!mySites.length) return null;
+
+    if (mySites.length === 1) return mySites[0];
+
+    const savedId = sessionStorage.getItem('sgp_active_site_id');
+    let site = savedId ? mySites.find(s => s.id === savedId) : null;
+    if (!site) site = mySites[0];
+    sessionStorage.setItem('sgp_active_site_id', site.id);
+    return { ...site, __allSites: mySites };
   }
 
+  // owner / admin: unrestricted, see everything
   const { data: allSites, error } = await sb.from('sites').select('*').order('name', { ascending: true });
   if (error) { console.error(error); return null; }
   if (!allSites || !allSites.length) return null;

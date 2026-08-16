@@ -66,9 +66,9 @@
             <option value="owner">בעלים</option>
           </select>
         </div>
-        <div class="field" id="siteField">
-          <label>אתר</label>
-          <select name="site_id" id="siteSelect"></select>
+        <div class="field full" id="siteField">
+          <label>אתרים (ניתן לבחור כמה)</label>
+          <div class="site-check-list" id="siteCheckList"></div>
         </div>
       </div>
       <div class="modal-actions">
@@ -98,9 +98,9 @@
             <option value="owner">בעלים</option>
           </select>
         </div>
-        <div class="field" id="editSiteField">
-          <label>אתר</label>
-          <select name="site_id" id="editSiteSelect"></select>
+        <div class="field full" id="editSiteField">
+          <label>אתרים (ניתן לבחור כמה)</label>
+          <div class="site-check-list" id="editSiteCheckList"></div>
         </div>
       </div>
       <div class="modal-actions">
@@ -146,17 +146,23 @@
 
   // ===== Users =====
   async function loadUsers() {
-    const { data, error } = await sb.from('profiles').select('*, sites(name)').order('created_at', { ascending: true });
+    const { data, error } = await sb.from('profiles')
+      .select('*, sites(name), profile_sites(site_id, sites(name))')
+      .order('created_at', { ascending: true });
     const body = document.getElementById('usersBody');
     if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="6">שגיאה: ${error.message}</td></tr>`; return; }
     usersCache = data || [];
-    body.innerHTML = usersCache.map(u => `
+    body.innerHTML = usersCache.map(u => {
+      const siteNames = u.role === 'owner'
+        ? 'כל האתרים'
+        : ((u.profile_sites || []).map(ps => ps.sites?.name).filter(Boolean).join(', ') || '—');
+      return `
       <tr>
         <td>${u.full_name || '—'}</td>
         <td>${u.username}</td>
         <td>${u.email}</td>
         <td>${roleLabels[u.role] || u.role}</td>
-        <td>${u.sites?.name || '—'}</td>
+        <td>${siteNames}</td>
         <td class="row-actions">
           ${isOwner ? `
             <button class="icon-btn" data-edit-user="${u.id}" title="עריכה">✏️</button>
@@ -165,15 +171,26 @@
           ` : ''}
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
     body.querySelectorAll('[data-edit-user]').forEach(b => b.addEventListener('click', () => openEdit(b.dataset.editUser)));
     body.querySelectorAll('[data-resend]').forEach(b => b.addEventListener('click', () => resendInvite(b.dataset.resend)));
     body.querySelectorAll('[data-del-user]').forEach(b => b.addEventListener('click', () => deleteUser(b.dataset.delUser)));
   }
 
-  function populateSiteSelect(selectEl, selectedId) {
-    selectEl.innerHTML = sitesCache.map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${s.name}</option>`).join('');
+  function renderSiteChecks(containerId, selectedIds) {
+    const host = document.getElementById(containerId);
+    host.innerHTML = sitesCache.map(s => `
+      <label class="site-check ${selectedIds.includes(s.id) ? 'checked' : ''}">
+        <input type="checkbox" name="site_ids" value="${s.id}" ${selectedIds.includes(s.id) ? 'checked' : ''}>
+        ${s.name}
+      </label>
+    `).join('');
+    host.querySelectorAll('.site-check').forEach(label => {
+      const cb = label.querySelector('input');
+      cb.addEventListener('change', () => label.classList.toggle('checked', cb.checked));
+    });
   }
 
   // ===== Invite =====
@@ -184,7 +201,8 @@
   document.getElementById('inviteBtn').addEventListener('click', () => {
     document.getElementById('inviteForm').reset();
     hideMsg(document.getElementById('inviteMsg'));
-    populateSiteSelect(document.getElementById('siteSelect'), null);
+    renderSiteChecks('siteCheckList', []);
+    document.getElementById('siteField').style.display = 'flex';
     document.getElementById('inviteModalBackdrop').classList.add('open');
   });
   document.getElementById('cancelInviteBtn').addEventListener('click', () => document.getElementById('inviteModalBackdrop').classList.remove('open'));
@@ -200,7 +218,20 @@
     btn.disabled = true;
 
     const fd = new FormData(e.target);
-    const payload = Object.fromEntries(fd.entries());
+    const role = fd.get('role');
+    const siteIds = fd.getAll('site_ids');
+    if (role === 'site_user' && !siteIds.length) {
+      showMsg(msgEl, 'יש לבחור לפחות אתר אחד עבור משתמש אתר', 'error');
+      btn.disabled = false;
+      return;
+    }
+    const payload = {
+      email: fd.get('email'),
+      username: fd.get('username'),
+      full_name: fd.get('full_name'),
+      role,
+      site_ids: siteIds,
+    };
 
     const { data: { session } } = await sb.auth.getSession();
     try {
@@ -241,7 +272,8 @@
     form.username.value = u.username || '';
     form.full_name.value = u.full_name || '';
     form.role.value = u.role;
-    populateSiteSelect(document.getElementById('editSiteSelect'), u.site_id);
+    const selectedIds = (u.profile_sites || []).map(ps => ps.site_id);
+    renderSiteChecks('editSiteCheckList', selectedIds);
     document.getElementById('editSiteField').style.display = u.role === 'owner' ? 'none' : 'flex';
     document.getElementById('editModalBackdrop').classList.add('open');
   }
@@ -261,17 +293,30 @@
     const fd = new FormData(e.target);
     const id = fd.get('id');
     const role = fd.get('role');
+    const siteIds = fd.getAll('site_ids');
+    if (role !== 'owner' && !siteIds.length) {
+      showMsg(msgEl, 'יש לבחור לפחות אתר אחד', 'error');
+      btn.disabled = false;
+      return;
+    }
     const payload = {
       username: fd.get('username'),
       full_name: fd.get('full_name') || fd.get('username'),
       role,
-      site_id: role === 'owner' ? null : (fd.get('site_id') || null),
+      site_id: role === 'owner' ? null : (siteIds[0] || null), // primary/display site
     };
 
     const { error } = await sb.from('profiles').update(payload).eq('id', id);
-    btn.disabled = false;
-    if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); return; }
+    if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); btn.disabled = false; return; }
 
+    // Replace full multi-site membership
+    await sb.from('profile_sites').delete().eq('profile_id', id);
+    if (role !== 'owner' && siteIds.length) {
+      const { error: sitesErr } = await sb.from('profile_sites').insert(siteIds.map(site_id => ({ profile_id: id, site_id })));
+      if (sitesErr) { showMsg(msgEl, 'שגיאה בשמירת אתרים: ' + sitesErr.message, 'error'); btn.disabled = false; return; }
+    }
+
+    btn.disabled = false;
     toast('המשתמש עודכן', 'success');
     document.getElementById('editModalBackdrop').classList.remove('open');
     loadUsers();
@@ -319,8 +364,6 @@
     const { data, error } = await sb.from('sites').select('*').order('name');
     if (error) { document.getElementById('sitesBody').innerHTML = `<tr class="empty-row"><td>שגיאה: ${error.message}</td></tr>`; return; }
     sitesCache = data || [];
-    const siteSelectEl = document.getElementById('siteSelect');
-    if (siteSelectEl) populateSiteSelect(siteSelectEl, null);
     const body = document.getElementById('sitesBody');
     if (!sitesCache.length) {
       body.innerHTML = `<tr class="empty-row"><td>אין אתרים עדיין</td></tr>`;
