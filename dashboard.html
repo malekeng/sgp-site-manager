@@ -16,8 +16,14 @@
 <main class="page">
   <h1 class="page-title">לוח בקרה — <span id="siteName"></span></h1>
 
-  <div class="stats-row" id="statsRow">
-    <div class="loading-overlay"><div class="spinner"></div></div>
+  <div class="card">
+    <div class="card-header"><h2>דורש תשומת לב</h2></div>
+    <div id="attentionList"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>פעילות אחרונה</h2></div>
+    <div id="recentList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
 
   <div class="card">
@@ -30,6 +36,10 @@
       <a href="prices.html" class="btn btn-outline" style="justify-content:center;">השוואת מחירים</a>
       <a href="reports.html" class="btn btn-outline" style="justify-content:center;">דוחות</a>
     </div>
+  </div>
+
+  <div class="stats-row" id="statsRow">
+    <div class="loading-overlay"><div class="spinner"></div></div>
   </div>
 </main>
 
@@ -46,26 +56,99 @@ document.getElementById('year').textContent = new Date().getFullYear();
   const { site } = auth;
   document.getElementById('siteName').textContent = site?.name || '';
 
-  const tables = [
-    { key: 'concrete_pours', label: 'יציקות בטון' },
-    { key: 'rebar_deliveries', label: 'משלוחי ברזל' },
-    { key: 'prestressed_slabs', label: 'פלטות טרום' },
-    { key: 'quantity_takeoffs', label: 'שורות כמויות' },
-    { key: 'price_quotes', label: 'הצעות מחיר' },
-    { key: 'documents', label: 'מסמכים מצורפים' },
-  ];
+  // ===== "דורש תשומת לב" — actionable follow-ups, not raw counts =====
+  async function loadAttention() {
+    const items = [];
 
-  const results = await Promise.all(tables.map(t =>
-    sb.from(t.key).select('id', { count: 'exact', head: true }).eq('site_id', site.id)
-  ));
+    const { data: pours } = await sb.from('concrete_pours')
+      .select('id, pour_date, element, cube_test_date')
+      .eq('site_id', site.id).is('cube_test_date', null)
+      .order('pour_date', { ascending: false });
+    (pours || []).forEach(p => items.push({
+      icon: '🧪', text: `יציקה "${p.element}" מ-${fmtDate(p.pour_date)} — ללא תאריך בדיקת קוביות`,
+      href: 'concrete.html',
+    }));
 
-  const host = document.getElementById('statsRow');
-  host.innerHTML = tables.map((t, i) => `
-    <div class="stat-card">
-      <div class="label">${t.label}</div>
-      <div class="value">${results[i].count ?? 0}</div>
-    </div>
-  `).join('');
+    const { data: slabs } = await sb.from('prestressed_slabs')
+      .select('id, delivery_date, supplier, slab_id, installed_date')
+      .eq('site_id', site.id).is('installed_date', null)
+      .order('delivery_date', { ascending: false });
+    (slabs || []).forEach(s => items.push({
+      icon: '🏗️', text: `פלטה ${s.slab_id || ''} מ-${s.supplier} (סופקה ${fmtDate(s.delivery_date)}) — טרם הותקנה`,
+      href: 'slabs.html',
+    }));
+
+    const host = document.getElementById('attentionList');
+    if (!items.length) {
+      host.innerHTML = '<p style="color:var(--steel);font-size:14px;">אין פריטים שדורשים תשומת לב כרגע 👍</p>';
+      return;
+    }
+    host.innerHTML = `<div class="attach-list">${items.slice(0, 8).map(it => `
+      <a href="${it.href}" class="attach-item" style="text-decoration:none;color:inherit;">
+        <span>${it.icon} ${it.text}</span>
+        <span style="color:var(--green-deep);font-weight:700;">←</span>
+      </a>
+    `).join('')}</div>`;
+  }
+
+  // ===== "פעילות אחרונה" — merged recent records across all logs =====
+  async function loadRecent() {
+    const sources = [
+      { table: 'concrete_pours', label: 'יציקת בטון', href: 'concrete.html', fmt: r => r.element, dateField: 'pour_date' },
+      { table: 'rebar_deliveries', label: 'משלוח ברזל', href: 'rebar.html', fmt: r => r.supplier, dateField: 'delivery_date' },
+      { table: 'prestressed_slabs', label: 'פלטת טרום', href: 'slabs.html', fmt: r => r.slab_id || r.supplier, dateField: 'delivery_date' },
+      { table: 'price_quotes', label: 'הצעת מחיר', href: 'prices.html', fmt: r => r.material, dateField: 'quote_date' },
+    ];
+
+    const results = await Promise.all(sources.map(s =>
+      sb.from(s.table).select('*').eq('site_id', site.id).order('created_at', { ascending: false }).limit(5)
+    ));
+
+    let merged = [];
+    results.forEach((res, i) => {
+      (res.data || []).forEach(row => merged.push({ ...sources[i], row }));
+    });
+    merged.sort((a, b) => new Date(b.row.created_at) - new Date(a.row.created_at));
+    merged = merged.slice(0, 8);
+
+    const host = document.getElementById('recentList');
+    if (!merged.length) {
+      host.innerHTML = '<p style="color:var(--steel);font-size:14px;">אין פעילות עדיין באתר הזה</p>';
+      return;
+    }
+    host.innerHTML = `<div class="table-wrap"><table><tbody>${merged.map(m => `
+      <tr>
+        <td style="white-space:nowrap;color:var(--steel);font-size:12px;">${m.label}</td>
+        <td>${m.fmt(m.row) || '—'}</td>
+        <td style="white-space:nowrap;">${fmtDate(m.row[m.dateField])}</td>
+        <td><a href="${m.href}" class="btn btn-sm btn-outline">פתח</a></td>
+      </tr>
+    `).join('')}</tbody></table></div>`;
+  }
+
+  // ===== Raw counts, kept but secondary =====
+  async function loadStats() {
+    const tables = [
+      { key: 'concrete_pours', label: 'יציקות בטון' },
+      { key: 'rebar_deliveries', label: 'משלוחי ברזל' },
+      { key: 'prestressed_slabs', label: 'פלטות טרום' },
+      { key: 'quantity_sheets', label: 'גיליונות כמויות' },
+      { key: 'price_quotes', label: 'הצעות מחיר' },
+      { key: 'documents', label: 'מסמכים מצורפים' },
+    ];
+    const results = await Promise.all(tables.map(t =>
+      sb.from(t.key).select('id', { count: 'exact', head: true }).eq('site_id', site.id)
+    ));
+    const host = document.getElementById('statsRow');
+    host.innerHTML = tables.map((t, i) => `
+      <div class="stat-card">
+        <div class="label">${t.label}</div>
+        <div class="value">${results[i].count ?? 0}</div>
+      </div>
+    `).join('');
+  }
+
+  await Promise.all([loadAttention(), loadRecent(), loadStats()]);
 })();
 </script>
 </body>
