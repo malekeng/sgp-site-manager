@@ -42,7 +42,10 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>מסמכים מצורפים</h2></div>
+    <div class="card-header">
+      <h2>מסמכים מצורפים</h2>
+      <button class="btn btn-primary btn-sm" id="downloadAllDocs" style="display:none;">⬇️ הורד הכל</button>
+    </div>
     <div id="docsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
 
@@ -74,8 +77,9 @@
   const isRestricted = profile.role === 'site_user';
   let sitesCache = [];
   const filterState = { siteIds: [], from: '', to: '' };
+  let currentDocs = []; // resolved docs for download-all
 
-  // ===== Report table definitions (mirrors the CRUD page columns) =====
+  // ===== Report table definitions =====
   const REPORTS = {
     concrete_pours: {
       title: 'יומני יציקות בטון',
@@ -84,7 +88,7 @@
         { key: 'pour_date', label: 'תאריך יציקה', type: 'date' },
         { key: 'element', label: 'אלמנט', type: 'text' },
         { key: 'concrete_grade', label: 'סוג בטון', type: 'text' },
-        { key: 'volume_m3', label: 'נפח (מ"ק)', type: 'number', digits: 2 },
+        { key: 'volume_m3', label: 'נפח (מ\"ק)', type: 'number', digits: 2 },
         { key: 'lab_tested', label: 'נבדק במעבדה', type: 'boolean' },
         { key: 'cube_test_date', label: 'בדיקת קוביות', type: 'date' },
         { key: 'notes', label: 'הערות', type: 'text' },
@@ -96,8 +100,8 @@
       columns: [
         { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
         { key: 'supplier', label: 'ספק', type: 'text' },
-        { key: 'diameter_mm', label: 'קוטר (מ"מ)', type: 'number', digits: 0 },
-        { key: 'weight_kg', label: 'משקל (ק"ג)', type: 'number', digits: 0 },
+        { key: 'diameter_mm', label: 'קוטר (מ\"מ)', type: 'number', digits: 0 },
+        { key: 'weight_kg', label: 'משקל (ק\"ג)', type: 'number', digits: 0 },
         { key: 'delivery_note_number', label: 'מס\' תעודה', type: 'text' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
@@ -107,8 +111,10 @@
       dateField: 'delivery_date',
       columns: [
         { key: 'supplier', label: 'ספק', type: 'text' },
-        { key: 'slab_id', label: 'מספר לוח"ד', type: 'text' },
+        { key: 'quantity_m2', label: 'כמות (מ\"ר)', type: 'number', digits: 2 },
+        { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
         { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
+        { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'text' },
         { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
@@ -130,7 +136,7 @@
   function fmtCell(v, col) {
     if (col.type === 'docs') {
       if (!v || !v.length) return '—';
-      return v.map(d => `<img src="${d.url}" style="width:34px;height:34px;object-fit:cover;border-radius:4px;border:1px solid #e1e5f0;margin-left:4px;">`).join('');
+      return v.map(d => d.name || 'קובץ').join(', ');
     }
     if (v === null || v === undefined || v === '') return '—';
     if (col.type === 'boolean') return v ? 'כן' : 'לא';
@@ -148,7 +154,7 @@
       const { data, error } = await sb.from('sites').select('*').order('name');
       if (error) { toast('שגיאה בטעינת אתרים: ' + error.message, 'error'); return; }
       sitesCache = data || [];
-      filterState.siteIds = sitesCache.map(s => s.id); // default: all sites selected
+      filterState.siteIds = sitesCache.map(s => s.id);
     }
     renderSiteChecks();
     updateFilterSummary();
@@ -164,14 +170,11 @@
     `).join('');
 
     host.querySelectorAll('.site-check').forEach(el => {
-      el.addEventListener('click', e => {
+      const cb = el.querySelector('input');
+      // Use change event only — avoids double-toggle when clicking the label
+      cb.addEventListener('change', () => {
         if (isRestricted) return;
-        if (e.target.tagName !== 'INPUT') {
-          const cb = el.querySelector('input');
-          cb.checked = !cb.checked;
-        }
         const id = el.dataset.siteId;
-        const cb = el.querySelector('input');
         if (cb.checked) {
           if (!filterState.siteIds.includes(id)) filterState.siteIds.push(id);
           el.classList.add('checked');
@@ -180,7 +183,8 @@
           el.classList.remove('checked');
         }
         updateFilterSummary();
-        refreshSummaries(); loadDocuments();
+        refreshSummaries();
+        loadDocuments();
       });
     });
   }
@@ -209,7 +213,7 @@
     return sitesCache.find(s => s.id === id)?.name || '—';
   }
 
-  // ===== Core: render a styled HTML report off-screen, rasterize, save as multi-page PDF =====
+  // ===== PDF export =====
   async function exportPdf(title, columns, rows, subtitleOverride) {
     if (!rows.length) { toast('אין נתונים תואמים לסינון שנבחר', 'error'); return; }
 
@@ -219,7 +223,7 @@
     const periodText = (filterState.from || filterState.to)
       ? `${filterState.from ? fmtDate(filterState.from) : 'תחילת הפעילות'} — ${filterState.to ? fmtDate(filterState.to) : 'היום'}`
       : 'כל התקופה';
-    const subtitle = subtitleOverride || `${names.join(', ')} · ${periodText} · סה"כ ${rows.length} רשומות`;
+    const subtitle = subtitleOverride || `${names.join(', ')} · ${periodText} · סה\"כ ${rows.length} רשומות`;
 
     const root = document.createElement('div');
     root.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;background:#fff;direction:rtl;font-family:"Assistant","Segoe UI",sans-serif;';
@@ -293,7 +297,7 @@
     }
   }
 
-  // ===== Data-table export buttons (respect site + date filter) =====
+  // ===== Data-table export buttons =====
   document.querySelectorAll('[data-export]').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!filterState.siteIds.length) { toast('בחרו לפחות אתר אחד', 'error'); return; }
@@ -314,7 +318,7 @@
         columns = [{ key: '_site_name', label: 'אתר', type: 'text' }, ...cfg.columns];
       }
 
-      // Attach thumbnail images of any documents linked to each row
+      // Attach file names of documents linked to each row (shown as text in PDF)
       if (rows.length) {
         const ids = rows.map(r => r.id);
         const { data: docs } = await sb.from('documents')
@@ -323,13 +327,11 @@
           .in('linked_record_id', ids);
         if (docs && docs.length) {
           const byRecord = {};
-          await Promise.all(docs.map(async d => {
-            const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
-            if (!signed) return;
-            (byRecord[d.linked_record_id] ||= []).push({ url: signed.signedUrl, name: d.file_name });
-          }));
+          docs.forEach(d => {
+            (byRecord[d.linked_record_id] ||= []).push({ name: d.file_name });
+          });
           rows = rows.map(r => ({ ...r, _docs: byRecord[r.id] || [] }));
-          columns = [...columns, { key: '_docs', label: 'תיעוד', type: 'docs' }];
+          columns = [...columns, { key: '_docs', label: 'מסמכים מצורפים', type: 'docs' }];
         }
       }
 
@@ -338,7 +340,7 @@
     });
   });
 
-  // ===== Concrete volume by month + Rebar weight by supplier (respect filter, re-render on filter change) =====
+  // ===== Summaries =====
   async function refreshSummaries() {
     if (!filterState.siteIds.length) {
       document.getElementById('concreteSummary').innerHTML = '<p style="color:var(--steel);">בחרו לפחות אתר אחד</p>';
@@ -358,7 +360,7 @@
     });
     const months = Object.keys(byMonth).sort();
     document.getElementById('concreteSummary').innerHTML = months.length
-      ? `<div class="table-wrap"><table><thead><tr><th>חודש</th><th>נפח כולל (מ"ק)</th></tr></thead><tbody>${
+      ? `<div class="table-wrap"><table><thead><tr><th>חודש</th><th>נפח כולל (מ\"ק)</th></tr></thead><tbody>${
           months.map(m => `<tr><td>${m}</td><td>${fmtNum(byMonth[m])}</td></tr>`).join('')
         }</tbody></table></div>`
       : '<p style="color:var(--steel);">אין נתונים תואמים לסינון</p>';
@@ -366,7 +368,7 @@
     document.getElementById('exportConcreteSummary').onclick = () => {
       exportPdf(
         'סיכום נפחי יציקות בטון לפי חודש',
-        [{ key: 'month', label: 'חודש', type: 'text' }, { key: 'total', label: 'נפח כולל (מ"ק)', type: 'number', digits: 2 }],
+        [{ key: 'month', label: 'חודש', type: 'text' }, { key: 'total', label: 'נפח כולל (מ\"ק)', type: 'number', digits: 2 }],
         months.map(m => ({ month: m, total: byMonth[m] })),
       );
     };
@@ -381,7 +383,7 @@
     });
     const suppliers = Object.keys(bySupplier).sort();
     document.getElementById('rebarSummary').innerHTML = suppliers.length
-      ? `<div class="table-wrap"><table><thead><tr><th>ספק</th><th>משקל כולל (ק"ג)</th></tr></thead><tbody>${
+      ? `<div class="table-wrap"><table><thead><tr><th>ספק</th><th>משקל כולל (ק\"ג)</th></tr></thead><tbody>${
           suppliers.map(s => `<tr><td>${s}</td><td>${fmtNum(bySupplier[s], 0)}</td></tr>`).join('')
         }</tbody></table></div>`
       : '<p style="color:var(--steel);">אין נתונים תואמים לסינון</p>';
@@ -389,13 +391,13 @@
     document.getElementById('exportRebarSummary').onclick = () => {
       exportPdf(
         'סיכום משקל ברזל לפי ספק',
-        [{ key: 'supplier', label: 'ספק', type: 'text' }, { key: 'total', label: 'משקל כולל (ק"ג)', type: 'number', digits: 0 }],
+        [{ key: 'supplier', label: 'ספק', type: 'text' }, { key: 'total', label: 'משקל כולל (ק\"ג)', type: 'number', digits: 0 }],
         suppliers.map(s => ({ supplier: s, total: bySupplier[s] })),
       );
     };
   }
 
-  // ===== Documents browser: view (lightbox for images) / open+download (same-tab, PWA-safe) =====
+  // ===== Documents browser =====
   const LINKED_TABLE_LABELS = {
     concrete_pours: 'יציקת בטון',
     rebar_deliveries: 'משלוח ברזל',
@@ -404,7 +406,7 @@
   };
 
   function isImageFile(name) {
-    return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
+    return /\\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
   }
 
   function openLightbox(url) {
@@ -415,23 +417,52 @@
     document.body.appendChild(overlay);
   }
 
+  async function downloadFile(url, fileName) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName || 'file';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (err) {
+      // fallback: open in same tab
+      window.location.href = url;
+    }
+  }
+
   async function loadDocuments() {
     const host = document.getElementById('docsList');
+    const downloadAllBtn = document.getElementById('downloadAllDocs');
+    currentDocs = [];
+
     if (!filterState.siteIds.length) {
       host.innerHTML = '<p style="color:var(--steel);">בחרו לפחות אתר אחד</p>';
+      downloadAllBtn.style.display = 'none';
       return;
     }
-    let q = sb.from('documents').select('*').in('site_id', filterState.siteIds).order('created_at', { ascending: false }).limit(50);
+    let q = sb.from('documents').select('*').in('site_id', filterState.siteIds).order('created_at', { ascending: false }).limit(80);
     if (filterState.from) q = q.gte('created_at', filterState.from);
     if (filterState.to) q = q.lte('created_at', filterState.to + 'T23:59:59');
     const { data, error } = await q;
-    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; return; }
-    if (!data || !data.length) { host.innerHTML = '<p style="color:var(--steel);">אין מסמכים מצורפים בטווח שנבחר</p>'; return; }
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; downloadAllBtn.style.display = 'none'; return; }
+    if (!data || !data.length) {
+      host.innerHTML = '<p style="color:var(--steel);">אין מסמכים מצורפים בטווח שנבחר</p>';
+      downloadAllBtn.style.display = 'none';
+      return;
+    }
 
     const resolved = await Promise.all(data.map(async d => {
       const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
       return { ...d, url: signed?.signedUrl || null };
     }));
+    currentDocs = resolved.filter(d => d.url);
+
+    downloadAllBtn.style.display = currentDocs.length ? 'inline-flex' : 'none';
+    downloadAllBtn.textContent = `⬇️ הורד הכל (${currentDocs.length})`;
 
     host.innerHTML = `<div class="attach-list">${resolved.map((d, i) => {
       const typeLabel = LINKED_TABLE_LABELS[d.linked_table] || d.linked_table || '';
@@ -440,26 +471,52 @@
       }
       if (isImageFile(d.file_name)) {
         return `<div class="attach-item">
-          <span style="display:flex;align-items:center;gap:8px;">
-            <img src="${d.url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
-            <span>${d.file_name} <span style="color:var(--steel);font-size:12px;">· ${typeLabel} · ${fmtDate(d.created_at)}</span></span>
+          <span style="display:flex;align-items:center;gap:8px;min-width:0;">
+            <img src="${d.url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+            <span style="overflow:hidden;text-overflow:ellipsis;">${d.file_name}<br><span style="color:var(--steel);font-size:12px;">${typeLabel} · ${fmtDate(d.created_at)}</span></span>
           </span>
-          <span style="display:flex;gap:6px;">
+          <span style="display:flex;gap:6px;flex-shrink:0;">
             <button type="button" class="btn btn-sm btn-outline" data-view="${i}">צפייה</button>
-            <a href="${d.url}" class="btn btn-sm btn-outline">הורדה</a>
+            <button type="button" class="btn btn-sm btn-outline" data-dl="${i}">הורדה</button>
           </span>
         </div>`;
       }
       return `<div class="attach-item">
-        <span>${d.file_name} <span style="color:var(--steel);font-size:12px;">· ${typeLabel} · ${fmtDate(d.created_at)}</span></span>
-        <a href="${d.url}" class="btn btn-sm btn-outline">פתיחה / הורדה</a>
+        <span style="overflow:hidden;text-overflow:ellipsis;">${d.file_name}<br><span style="color:var(--steel);font-size:12px;">${typeLabel} · ${fmtDate(d.created_at)}</span></span>
+        <span style="display:flex;gap:6px;flex-shrink:0;">
+          <a href="${d.url}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">פתיחה</a>
+          <button type="button" class="btn btn-sm btn-outline" data-dl="${i}">הורדה</button>
+        </span>
       </div>`;
     }).join('')}</div>`;
 
     host.querySelectorAll('[data-view]').forEach(btn => {
       btn.addEventListener('click', () => openLightbox(resolved[Number(btn.dataset.view)].url));
     });
+    host.querySelectorAll('[data-dl]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const d = resolved[Number(btn.dataset.dl)];
+        if (d?.url) downloadFile(d.url, d.file_name);
+      });
+    });
   }
+
+  // Download all attachments one by one with a short delay
+  document.getElementById('downloadAllDocs').addEventListener('click', async () => {
+    if (!currentDocs.length) return;
+    const btn = document.getElementById('downloadAllDocs');
+    btn.disabled = true;
+    btn.textContent = 'מוריד...';
+    for (let i = 0; i < currentDocs.length; i++) {
+      const d = currentDocs[i];
+      await downloadFile(d.url, d.file_name);
+      // small delay so the browser doesn't block multiple downloads
+      await new Promise(r => setTimeout(r, 400));
+    }
+    btn.disabled = false;
+    btn.textContent = `⬇️ הורד הכל (${currentDocs.length})`;
+    toast(`הורדו ${currentDocs.length} קבצים`, 'success');
+  });
 
   await loadSitesForFilter();
   await refreshSummaries();
