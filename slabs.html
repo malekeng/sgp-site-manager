@@ -20,7 +20,7 @@
 
   <div class="card">
     <div class="card-header">
-      <h2>מעקב לוח״דים</h2>
+      <h2>מעקב הזמנות והספקה — לוח״דים</h2>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-primary" id="addBtn">+ הוספת רשומה</button>
         <button class="btn btn-outline" id="filterToggle">סינון</button>
@@ -71,23 +71,31 @@ initCrudPage({
   activePage: 'slabs.html',
   title: 'לוח״דים',
   dateField: 'delivery_date',
-  orderBy: { column: 'delivery_date', ascending: false },
+  orderBy: { column: 'order_date', ascending: false },
   columns: [
-    { key: 'supplier', label: 'ספק', type: 'text' },
-    { key: 'quantity_m2', label: 'כמות (מ\"ר)', type: 'number', digits: 2 },
+    { key: 'order_number', label: 'מס\' הזמנה', type: 'text' },
     { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
     { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
-    { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'text' },
-    { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
+    { key: 'installed_date', label: 'תאריך הנחה', type: 'date' },
+    { key: 'supplier', label: 'ספק', type: 'text' },
+    { key: 'location', label: 'קומה / מיקום', type: 'text' },
+    { key: 'plan_ref', label: 'מס\' תכנית', type: 'text' },
+    { key: 'quantity_m2', label: 'סה\"כ מ\"ר', type: 'number', digits: 2 },
+    { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'text' },
     { key: 'notes', label: 'הערות', type: 'text' },
   ],
   formFields: [
-    { key: 'supplier', label: 'ספק', type: 'datalist', required: true, options: ['רמט טרום בע\"מ'] },
-    { key: 'quantity_m2', label: 'כמות לוח\"דים (מ\"ר)', type: 'number', step: '0.01', required: true },
+    { key: 'order_number', label: 'מס\' הזמנה', type: 'text' },
     { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
     { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
+    { key: 'installed_date', label: 'תאריך הנחה / התקנה', type: 'date' },
+    { key: 'supplier', label: 'ספק / יצרן', type: 'datalist', required: true,
+      options: ['רמט טרום בע\"מ'] },
+    { key: 'location', label: 'קומה / מיקום', type: 'datalist',
+      options: ['מרתף -1', 'מרתף -2', 'קומה 0', 'קומה 1'] },
+    { key: 'plan_ref', label: 'מס\' תכנית / מהדורה', type: 'text' },
+    { key: 'quantity_m2', label: 'סה\"כ מ\"ר', type: 'number', step: '0.01' },
     { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'text' },
-    { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
     { key: 'notes', label: 'הערות / עדכונים', type: 'textarea', full: true },
   ],
 });
