@@ -8,6 +8,16 @@
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<style>
+.ocr-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center; cursor: pointer; margin-bottom: 16px; }
+.ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(0,214,143,0.06); }
+.ocr-progress { display: none; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 13px; color: var(--steel); }
+.ocr-progress.show { display: flex; }
+.ocr-preview-row { display: grid; grid-template-columns: 1fr 100px 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
+.ocr-preview-row input { padding: 8px 10px; border: 2px solid var(--border); border-radius: var(--radius-sm); }
+</style>
 </head>
 <body>
 
@@ -20,6 +30,7 @@
     <div class="card-header">
       <h2>גיליונות כמויות</h2>
       <button class="btn btn-primary" id="addSheetBtn">+ גיליון חדש</button>
+      <button class="btn btn-outline" id="importOcrBtn">📄 ייבוא כתב כמויות מוכן (OCR)</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -65,6 +76,42 @@
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary">יצירה</button>
         <button type="button" class="btn btn-outline" id="cancelSheetBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- OCR import modal -->
+<div class="modal-backdrop" id="ocrModalBackdrop">
+  <div class="modal">
+    <h3>ייבוא כתב כמויות מוכן</h3>
+    <div id="ocrFormMsg" class="msg"></div>
+
+    <form id="ocrSheetForm">
+      <div class="form-grid">
+        <div class="field full"><label>שם תכנית *</label><input type="text" name="plan_name" required></div>
+        <div class="field"><label>מס' תוכנית</label><input type="text" name="plan_number"></div>
+        <div class="field"><label>קומה</label><input type="text" name="floor"></div>
+        <div class="field"><label>גרסת תוכנית</label><input type="text" name="plan_version"></div>
+        <div class="field"><label>תאריך תוכנית</label><input type="date" name="plan_date"></div>
+      </div>
+
+      <div class="ocr-zone" id="ocrZone" style="margin-top:14px;">
+        <div>📄 גררו לכאן קובץ (תמונה או PDF) של כתב הכמויות, או לחצו לבחירה</div>
+        <div style="font-size:11px;color:var(--steel);margin-top:4px;">זיהוי טקסט אוטומטי — בדקו את התוצאה לפני ייבוא</div>
+        <input type="file" id="ocrInput" accept="image/*,.pdf" style="display:none;">
+      </div>
+      <div class="ocr-progress" id="ocrProgress"><div class="spinner"></div><span id="ocrProgressText">מעבד...</span></div>
+
+      <div id="ocrPreviewWrap" style="display:none;">
+        <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">שורות שזוהו — ניתן לערוך או למחוק לפני ייבוא</div>
+        <div id="ocrPreviewList"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="ocrAddRowBtn" style="margin-top:6px;">+ הוספת שורה ידנית</button>
+      </div>
+
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="ocrImportBtn" disabled>ייבוא לגיליון</button>
+        <button type="button" class="btn btn-outline" id="cancelOcrBtn">ביטול</button>
       </div>
     </form>
   </div>
@@ -160,6 +207,176 @@
     toast('הגיליון נוצר — ממשיכים למילוי השורות', 'success');
     document.getElementById('sheetModalBackdrop').classList.remove('open');
     await openSheet(data);
+  });
+
+  // ===== OCR import: upload a ready BOQ file, extract text, parse candidate rows =====
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  let ocrRows = []; // { description, qty }
+
+  document.getElementById('importOcrBtn').addEventListener('click', () => {
+    document.getElementById('ocrSheetForm').reset();
+    hideMsg(document.getElementById('ocrFormMsg'));
+    ocrRows = [];
+    document.getElementById('ocrPreviewWrap').style.display = 'none';
+    document.getElementById('ocrImportBtn').disabled = true;
+    document.getElementById('ocrModalBackdrop').classList.add('open');
+  });
+  document.getElementById('cancelOcrBtn').addEventListener('click', () => document.getElementById('ocrModalBackdrop').classList.remove('open'));
+  document.getElementById('ocrModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'ocrModalBackdrop') e.target.classList.remove('open');
+  });
+
+  const ocrZone = document.getElementById('ocrZone');
+  const ocrInput = document.getElementById('ocrInput');
+  const ocrProgress = document.getElementById('ocrProgress');
+  const ocrProgressText = document.getElementById('ocrProgressText');
+
+  ocrZone.addEventListener('click', () => ocrInput.click());
+  ocrZone.addEventListener('dragover', e => { e.preventDefault(); ocrZone.classList.add('dragover'); });
+  ocrZone.addEventListener('dragleave', () => ocrZone.classList.remove('dragover'));
+  ocrZone.addEventListener('drop', e => {
+    e.preventDefault();
+    ocrZone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) handleOcrFile(e.dataTransfer.files[0]);
+  });
+  ocrInput.addEventListener('change', () => {
+    if (ocrInput.files[0]) handleOcrFile(ocrInput.files[0]);
+    ocrInput.value = '';
+  });
+
+  async function pdfToImageDataUrl(file) {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2.2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas.toDataURL('image/png');
+  }
+
+  // Heuristic: a BOQ line typically ends with a quantity number (with optional decimal).
+  // Everything before that number is treated as the item description.
+  function parseBoqLines(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const rows = [];
+    for (const line of lines) {
+      const match = line.match(/^(.{3,}?)[\s.:\-]*(\d+(?:[.,]\d+)?)\s*(?:מ["']?ק|מ["']?ר|יח['"]?|ק["']?ג|מטר|טון)?$/);
+      if (match) {
+        const desc = match[1].trim();
+        const qty = parseFloat(match[2].replace(',', '.'));
+        if (desc.length >= 3 && !isNaN(qty) && qty > 0) rows.push({ description: desc, qty });
+      }
+    }
+    return rows;
+  }
+
+  function renderOcrPreview() {
+    const wrap = document.getElementById('ocrPreviewWrap');
+    const list = document.getElementById('ocrPreviewList');
+    wrap.style.display = ocrRows.length ? 'block' : 'none';
+    document.getElementById('ocrImportBtn').disabled = ocrRows.length === 0;
+    list.innerHTML = ocrRows.map((r, i) => `
+      <div class="ocr-preview-row">
+        <input type="text" value="${r.description.replace(/"/g, '&quot;')}" data-field="description" data-i="${i}">
+        <input type="number" step="0.01" value="${r.qty}" data-field="qty" data-i="${i}">
+        <button type="button" class="icon-btn danger" data-remove-row="${i}" title="הסרה">✕</button>
+      </div>
+    `).join('');
+    list.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const i = Number(inp.dataset.i);
+        const field = inp.dataset.field;
+        ocrRows[i][field] = field === 'qty' ? Number(inp.value) : inp.value;
+      });
+    });
+    list.querySelectorAll('[data-remove-row]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        ocrRows.splice(Number(btn.dataset.removeRow), 1);
+        renderOcrPreview();
+      });
+    });
+  }
+
+  document.getElementById('ocrAddRowBtn').addEventListener('click', () => {
+    ocrRows.push({ description: '', qty: 1 });
+    renderOcrPreview();
+  });
+
+  async function handleOcrFile(file) {
+    ocrProgress.classList.add('show');
+    ocrProgressText.textContent = 'טוען קובץ...';
+    try {
+      let imageSource = file;
+      if (file.type === 'application/pdf') {
+        ocrProgressText.textContent = 'ממיר PDF לתמונה...';
+        imageSource = await pdfToImageDataUrl(file);
+      }
+
+      ocrProgressText.textContent = 'מזהה טקסט (OCR)...';
+      const { data } = await Tesseract.recognize(imageSource, 'heb+eng', {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            ocrProgressText.textContent = `מזהה טקסט... ${Math.round(m.progress * 100)}%`;
+          }
+        },
+      });
+
+      const parsed = parseBoqLines(data.text);
+      if (!parsed.length) {
+        toast('לא זוהו שורות אוטומטית — ניתן להוסיף שורות ידנית', 'error');
+        ocrRows = [];
+      } else {
+        ocrRows = parsed;
+        toast(`זוהו ${parsed.length} שורות — בדקו ותקנו לפני ייבוא`, 'success');
+      }
+      renderOcrPreview();
+    } catch (err) {
+      console.error(err);
+      toast('שגיאה בזיהוי הטקסט: ' + err.message, 'error');
+    } finally {
+      ocrProgress.classList.remove('show');
+    }
+  }
+
+  document.getElementById('ocrSheetForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('ocrFormMsg');
+    hideMsg(msgEl);
+    if (!ocrRows.length) { showMsg(msgEl, 'אין שורות לייבוא', 'error'); return; }
+
+    const btn = document.getElementById('ocrImportBtn');
+    btn.disabled = true;
+
+    const fd = new FormData(e.target);
+    const sheetPayload = Object.fromEntries(fd.entries());
+    Object.keys(sheetPayload).forEach(k => { if (sheetPayload[k] === '') sheetPayload[k] = null; });
+    sheetPayload.site_id = site.id;
+    sheetPayload.created_by = user.id;
+
+    const { data: newSheet, error: sheetErr } = await sb.from('quantity_sheets').insert(sheetPayload).select().single();
+    if (sheetErr) { showMsg(msgEl, 'שגיאה ביצירת הגיליון: ' + sheetErr.message, 'error'); btn.disabled = false; return; }
+
+    const itemsPayload = ocrRows
+      .filter(r => r.description && r.qty > 0)
+      .map((r, i) => ({
+        sheet_id: newSheet.id,
+        site_id: site.id,
+        item_no: String(i + 1),
+        description: r.description,
+        multiplier: r.qty,
+        sort_order: i,
+      }));
+
+    const { error: itemsErr } = await sb.from('quantity_items').insert(itemsPayload);
+    if (itemsErr) { showMsg(msgEl, 'הגיליון נוצר אך שגיאה בייבוא השורות: ' + itemsErr.message, 'error'); btn.disabled = false; return; }
+
+    btn.disabled = false;
+    toast(`יובאו ${itemsPayload.length} שורות בהצלחה`, 'success');
+    document.getElementById('ocrModalBackdrop').classList.remove('open');
+    await openSheet(newSheet);
   });
 
   // ===== Items =====
