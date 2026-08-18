@@ -20,7 +20,7 @@
 
   <div class="card">
     <div class="card-header">
-      <h2>יומני יציקות בטון</h2>
+      <h2>טבלת ריכוז יציקות בטון</h2>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-primary" id="addBtn">+ הוספת רשומה</button>
         <button class="btn btn-outline" id="filterToggle">סינון</button>
@@ -73,23 +73,40 @@ initCrudPage({
   dateField: 'pour_date',
   orderBy: { column: 'pour_date', ascending: false },
   columns: [
-    { key: 'pour_date', label: 'תאריך יציקה', type: 'date' },
+    { key: 'pour_date', label: 'תאריך', type: 'date' },
+    { key: 'location', label: 'קומה / מיקום', type: 'text' },
     { key: 'element', label: 'אלמנט', type: 'text' },
     { key: 'concrete_grade', label: 'סוג בטון', type: 'text' },
-    { key: 'volume_m3', label: 'נפח (מ\"ק)', type: 'number', digits: 2 },
-    { key: 'lab_tested', label: 'נבדק במעבדה', type: 'boolean' },
-    { key: 'cube_test_date', label: 'תאריך בדיקת קוביות', type: 'date' },
+    { key: 'volume_planned_m3', label: 'מתוכנן (מ\"ק)', type: 'number', digits: 1 },
+    { key: 'volume_m3', label: 'בפועל (מ\"ק)', type: 'number', digits: 1 },
+    { key: 'pour_method', label: 'אופן יציקה', type: 'text' },
+    { key: 'supplier', label: 'ספק', type: 'text' },
+    { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'text' },
+    { key: 'lab_test_number', label: 'מס\' בדיקה', type: 'text' },
+    { key: 'strength_7d', label: 'חוזק 7י', type: 'number', digits: 1 },
+    { key: 'strength_28d', label: 'חוזק 28י', type: 'number', digits: 1 },
     { key: 'notes', label: 'הערות', type: 'text' },
   ],
   formFields: [
     { key: 'pour_date', label: 'תאריך יציקה', type: 'date', required: true },
+    { key: 'location', label: 'קומה / מיקום', type: 'datalist',
+      options: ['מרתף -1', 'מרתף -2', 'גרעין 5', 'בין הלוח\"דים', 'תקרת לוח\"דים'] },
     { key: 'element', label: 'אלמנט', type: 'select', required: true,
-      options: ['יסודות', 'רצפה', 'קיר', 'קיר תומך', 'עמוד', 'קורה', 'תקרה', 'מדרגות', 'ממ\"ד'] },
-    { key: 'concrete_grade', label: 'סוג בטון', type: 'select',
+      options: ['יסודות', 'רצפה', 'קיר', 'קיר דיפון', 'עמודים', 'קורות', 'תקרה', 'מדרגות', 'ממ\"ד', 'השלמה', 'טופינג/החלקה'] },
+    { key: 'concrete_grade', label: 'סוג בטון מתוכנן', type: 'select',
       options: ['ב-20', 'ב-25', 'ב-30', 'ב-40', 'ב-50'] },
-    { key: 'volume_m3', label: 'נפח (מ\"ק)', type: 'number', step: '0.01' },
+    { key: 'volume_planned_m3', label: 'כמות מתוכננת (מ\"ק)', type: 'number', step: '0.1' },
+    { key: 'volume_m3', label: 'כמות בפועל (מ\"ק)', type: 'number', step: '0.1' },
+    { key: 'pour_method', label: 'אופן יציקה', type: 'select',
+      options: ['דוד', 'משאבה', 'אחר'] },
+    { key: 'supplier', label: 'ספק בטון', type: 'datalist',
+      options: ['א.מואסי', 'רדימיקס', 'הנקל'] },
+    { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'text' },
+    { key: 'lab_test_number', label: 'מס\' בדיקה (מעבדה)', type: 'text' },
     { key: 'lab_tested', label: 'נבדק במעבדה', type: 'boolean' },
     { key: 'cube_test_date', label: 'תאריך בדיקת קוביות', type: 'date' },
+    { key: 'strength_7d', label: 'חוזק בטון 7 יום (מגפ\"ס)', type: 'number', step: '0.1' },
+    { key: 'strength_28d', label: 'חוזק בטון 28 יום (מגפ\"ס)', type: 'number', step: '0.1' },
     { key: 'notes', label: 'הערות', type: 'textarea', full: true },
   ],
 });
