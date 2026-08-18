@@ -61,7 +61,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
   const { site } = auth;
   document.getElementById('siteName').textContent = site?.name || '';
 
-  // ===== "דורש תשומת לב" — actionable follow-ups, not raw counts =====
+  // ===== "דורש תשומת לב" — actionable follow-ups =====
   async function loadAttention() {
     const items = [];
 
@@ -75,13 +75,19 @@ document.getElementById('year').textContent = new Date().getFullYear();
     }));
 
     const { data: slabs } = await sb.from('prestressed_slabs')
-      .select('id, delivery_date, supplier, slab_id, installed_date')
+      .select('id, delivery_date, supplier, quantity_m2, delivery_note_number, installed_date')
       .eq('site_id', site.id).is('installed_date', null)
       .order('delivery_date', { ascending: false });
-    (slabs || []).forEach(s => items.push({
-      icon: '🏗️', text: `לוח"ד ${s.slab_id || ''} מ-${s.supplier} (סופקה ${fmtDate(s.delivery_date)}) — טרם הותקנה`,
-      href: 'slabs.html',
-    }));
+    (slabs || []).forEach(s => {
+      const qty = s.quantity_m2 != null ? `${s.quantity_m2} מ\"ר` : '';
+      const note = s.delivery_note_number ? `תעודה ${s.delivery_note_number}` : '';
+      const detail = [qty, note].filter(Boolean).join(' · ');
+      items.push({
+        icon: '🏗️',
+        text: `לוח\"ד מ-${s.supplier}${detail ? ' (' + detail + ')' : ''} (סופקה ${fmtDate(s.delivery_date)}) — טרם הותקנה`,
+        href: 'slabs.html',
+      });
+    });
 
     const host = document.getElementById('attentionList');
     if (!items.length) {
@@ -96,12 +102,17 @@ document.getElementById('year').textContent = new Date().getFullYear();
     `).join('')}</div>`;
   }
 
-  // ===== "פעילות אחרונה" — merged recent records across all logs =====
+  // ===== "פעילות אחרונה" =====
   async function loadRecent() {
     const sources = [
       { table: 'concrete_pours', label: 'יציקת בטון', href: 'concrete.html', fmt: r => r.element, dateField: 'pour_date' },
       { table: 'rebar_deliveries', label: 'משלוח ברזל', href: 'rebar.html', fmt: r => r.supplier, dateField: 'delivery_date' },
-      { table: 'prestressed_slabs', label: 'לוח״ד', href: 'slabs.html', fmt: r => r.slab_id || r.supplier, dateField: 'delivery_date' },
+      { table: 'prestressed_slabs', label: 'לוח״ד', href: 'slabs.html', fmt: r => {
+          const parts = [r.supplier];
+          if (r.quantity_m2 != null) parts.push(r.quantity_m2 + ' מ\"ר');
+          if (r.delivery_note_number) parts.push('תעודה ' + r.delivery_note_number);
+          return parts.join(' · ');
+        }, dateField: 'delivery_date' },
       { table: 'price_quotes', label: 'הצעת מחיר', href: 'prices.html', fmt: r => r.material, dateField: 'quote_date' },
     ];
 
@@ -131,7 +142,6 @@ document.getElementById('year').textContent = new Date().getFullYear();
     `).join('')}</tbody></table></div>`;
   }
 
-  // ===== Raw counts, kept but secondary =====
   async function loadStats() {
     const tables = [
       { key: 'concrete_pours', label: 'יציקות בטון', icon: '🧱' },
@@ -154,7 +164,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
   }
 
   function isImageFile(name) {
-    return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
+    return /\\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
   }
   function openLightbox(url) {
     const overlay = document.createElement('div');
