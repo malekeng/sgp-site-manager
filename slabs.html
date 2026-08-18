@@ -74,17 +74,21 @@ initCrudPage({
   orderBy: { column: 'delivery_date', ascending: false },
   columns: [
     { key: 'supplier', label: 'ספק', type: 'text' },
-    { key: 'slab_id', label: 'מספר לוח"ד', type: 'text' },
+    { key: 'quantity_m2', label: 'כמות (מ\"ר)', type: 'number', digits: 2 },
+    { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
     { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
+    { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'text' },
     { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
     { key: 'notes', label: 'הערות', type: 'text' },
   ],
   formFields: [
-    { key: 'supplier', label: 'ספק', type: 'datalist', required: true, options: ['רמט טרום בע"מ'] },
-    { key: 'slab_id', label: 'מספר לוח"ד', type: 'text' },
+    { key: 'supplier', label: 'ספק', type: 'datalist', required: true, options: ['רמט טרום בע\"מ'] },
+    { key: 'quantity_m2', label: 'כמות לוח\"דים (מ\"ר)', type: 'number', step: '0.01', required: true },
+    { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
     { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
+    { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'text' },
     { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
-    { key: 'notes', label: 'הערות', type: 'textarea', full: true },
+    { key: 'notes', label: 'הערות / עדכונים', type: 'textarea', full: true },
   ],
 });
 </script>
