@@ -112,6 +112,9 @@ async function initCrudPage(config) {
           if (c.type === 'date') out = fmtDate(v);
           else if (c.type === 'number') out = fmtNum(v, c.digits ?? 2);
           else if (c.type === 'boolean') out = v ? 'כן' : 'לא';
+          else if (c.type === 'multiline') {
+            out = String(v).split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join('<br>');
+          }
           else out = String(v);
         }
         return `<td class="${c.type === 'number' ? 'num-cell' : ''}">${out}</td>`;

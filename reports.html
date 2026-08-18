@@ -102,7 +102,7 @@
         { key: 'supplier', label: 'ספק', type: 'text' },
         { key: 'diameter_mm', label: 'קוטר (מ\"מ)', type: 'number', digits: 0 },
         { key: 'weight_kg', label: 'משקל (ק\"ג)', type: 'number', digits: 0 },
-        { key: 'delivery_note_number', label: 'מס\' תעודה', type: 'text' },
+        { key: 'delivery_note_number', label: 'מס\' תעודה', type: 'multiline' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
@@ -114,7 +114,7 @@
         { key: 'quantity_m2', label: 'כמות (מ\"ר)', type: 'number', digits: 2 },
         { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
         { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
-        { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'text' },
+        { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'multiline' },
         { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
@@ -142,6 +142,7 @@
     if (col.type === 'boolean') return v ? 'כן' : 'לא';
     if (col.type === 'date') return fmtDate(v);
     if (col.type === 'number') return fmtNum(v, col.digits ?? 2);
+    if (col.type === 'multiline') return String(v).split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join('<br>');
     return String(v);
   }
 

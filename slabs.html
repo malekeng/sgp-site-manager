@@ -81,7 +81,7 @@ initCrudPage({
     { key: 'location', label: 'קומה / מיקום', type: 'text' },
     { key: 'plan_ref', label: 'מס\' תכנית', type: 'text' },
     { key: 'quantity_m2', label: 'סה\"כ מ\"ר', type: 'number', digits: 2 },
-    { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'text' },
+    { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
     { key: 'notes', label: 'הערות', type: 'text' },
   ],
   formFields: [
@@ -95,7 +95,7 @@ initCrudPage({
       options: ['מרתף -1', 'מרתף -2', 'קומה 0', 'קומה 1'] },
     { key: 'plan_ref', label: 'מס\' תכנית / מהדורה', type: 'text' },
     { key: 'quantity_m2', label: 'סה\"כ מ\"ר', type: 'number', step: '0.01' },
-    { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'text' },
+    { key: 'delivery_note_number', label: 'מס\' תעודת משלוח (שורה לכל מספר)', type: 'textarea' },
     { key: 'notes', label: 'הערות / עדכונים', type: 'textarea', full: true },
   ],
 });
