@@ -36,7 +36,7 @@
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
       <a href="concrete.html" class="btn btn-outline" style="justify-content:center;">יומני יציקות בטון</a>
       <a href="rebar.html" class="btn btn-outline" style="justify-content:center;">משלוחי ברזל</a>
-      <a href="slabs.html" class="btn btn-outline" style="justify-content:center;">פלטות טרום</a>
+      <a href="slabs.html" class="btn btn-outline" style="justify-content:center;">לוח״דים</a>
       <a href="quantity.html" class="btn btn-outline" style="justify-content:center;">כתבי כמויות</a>
       <a href="prices.html" class="btn btn-outline" style="justify-content:center;">השוואת מחירים</a>
       <a href="reports.html" class="btn btn-outline" style="justify-content:center;">דוחות</a>
@@ -79,7 +79,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
       .eq('site_id', site.id).is('installed_date', null)
       .order('delivery_date', { ascending: false });
     (slabs || []).forEach(s => items.push({
-      icon: '🏗️', text: `פלטה ${s.slab_id || ''} מ-${s.supplier} (סופקה ${fmtDate(s.delivery_date)}) — טרם הותקנה`,
+      icon: '🏗️', text: `לוח"ד ${s.slab_id || ''} מ-${s.supplier} (סופקה ${fmtDate(s.delivery_date)}) — טרם הותקנה`,
       href: 'slabs.html',
     }));
 
@@ -101,7 +101,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
     const sources = [
       { table: 'concrete_pours', label: 'יציקת בטון', href: 'concrete.html', fmt: r => r.element, dateField: 'pour_date' },
       { table: 'rebar_deliveries', label: 'משלוח ברזל', href: 'rebar.html', fmt: r => r.supplier, dateField: 'delivery_date' },
-      { table: 'prestressed_slabs', label: 'פלטת טרום', href: 'slabs.html', fmt: r => r.slab_id || r.supplier, dateField: 'delivery_date' },
+      { table: 'prestressed_slabs', label: 'לוח״ד', href: 'slabs.html', fmt: r => r.slab_id || r.supplier, dateField: 'delivery_date' },
       { table: 'price_quotes', label: 'הצעת מחיר', href: 'prices.html', fmt: r => r.material, dateField: 'quote_date' },
     ];
 
@@ -136,7 +136,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
     const tables = [
       { key: 'concrete_pours', label: 'יציקות בטון', icon: '🧱' },
       { key: 'rebar_deliveries', label: 'משלוחי ברזל', icon: '🔩' },
-      { key: 'prestressed_slabs', label: 'פלטות טרום', icon: '🏗️' },
+      { key: 'prestressed_slabs', label: 'לוח״דים', icon: '🏗️' },
       { key: 'quantity_sheets', label: 'גיליונות כמויות', icon: '📐' },
       { key: 'price_quotes', label: 'הצעות מחיר', icon: '💰' },
       { key: 'documents', label: 'מסמכים מצורפים', icon: '📎' },

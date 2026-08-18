@@ -4,7 +4,7 @@ const NAV_ITEMS = [
   { href: 'dashboard.html', label: 'לוח בקרה', icon: '🏠' },
   { href: 'concrete.html',  label: 'יומני יציקות בטון', icon: '🧱' },
   { href: 'rebar.html',     label: 'משלוחי ברזל', icon: '🔩' },
-  { href: 'slabs.html',     label: 'פלטות טרום', icon: '🏗️' },
+  { href: 'slabs.html',     label: 'לוח״דים', icon: '🏗️' },
   { href: 'quantity.html',  label: 'כתבי כמויות', icon: '📐' },
   { href: 'prices.html',    label: 'השוואת מחירים', icon: '💰' },
   { href: 'reports.html',   label: 'דוחות', icon: '📊' },

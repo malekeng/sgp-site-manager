@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>פלטות טרום | SGP</title>
+<title>לוח״דים | SGP</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
@@ -14,13 +14,13 @@
 <header class="app-header" id="app-header"></header>
 
 <main class="page">
-  <h1 class="page-title" id="pageTitle">פלטות טרום</h1>
+  <h1 class="page-title" id="pageTitle">לוח״דים</h1>
 
   <div class="stats-row" id="statsRow"></div>
 
   <div class="card">
     <div class="card-header">
-      <h2>מעקב פלטות טרום</h2>
+      <h2>מעקב לוח״דים</h2>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-primary" id="addBtn">+ הוספת רשומה</button>
         <button class="btn btn-outline" id="filterToggle">סינון</button>
@@ -69,19 +69,19 @@
 initCrudPage({
   table: 'prestressed_slabs', icon: '🏗️',
   activePage: 'slabs.html',
-  title: 'פלטות טרום',
+  title: 'לוח״דים',
   dateField: 'delivery_date',
   orderBy: { column: 'delivery_date', ascending: false },
   columns: [
     { key: 'supplier', label: 'ספק', type: 'text' },
-    { key: 'slab_id', label: 'מס\' פלטה', type: 'text' },
+    { key: 'slab_id', label: 'מספר לוח"ד', type: 'text' },
     { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
     { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
     { key: 'notes', label: 'הערות', type: 'text' },
   ],
   formFields: [
     { key: 'supplier', label: 'ספק', type: 'datalist', required: true, options: ['רמט טרום בע"מ'] },
-    { key: 'slab_id', label: 'מס\' פלטה', type: 'text' },
+    { key: 'slab_id', label: 'מספר לוח"ד', type: 'text' },
     { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
     { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
     { key: 'notes', label: 'הערות', type: 'textarea', full: true },

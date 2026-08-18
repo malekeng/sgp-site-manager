@@ -36,7 +36,7 @@
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
       <button class="btn btn-outline" data-export="concrete_pours">📄 יומני יציקות בטון</button>
       <button class="btn btn-outline" data-export="rebar_deliveries">📄 משלוחי ברזל</button>
-      <button class="btn btn-outline" data-export="prestressed_slabs">📄 פלטות טרום</button>
+      <button class="btn btn-outline" data-export="prestressed_slabs">📄 לוח״דים</button>
       <button class="btn btn-outline" data-export="price_quotes">📄 השוואת מחירים</button>
     </div>
   </div>
@@ -103,11 +103,11 @@
       ],
     },
     prestressed_slabs: {
-      title: 'פלטות טרום',
+      title: 'לוח״דים',
       dateField: 'delivery_date',
       columns: [
         { key: 'supplier', label: 'ספק', type: 'text' },
-        { key: 'slab_id', label: 'מס\' פלטה', type: 'text' },
+        { key: 'slab_id', label: 'מספר לוח"ד', type: 'text' },
         { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
         { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
         { key: 'notes', label: 'הערות', type: 'text' },
@@ -399,7 +399,7 @@
   const LINKED_TABLE_LABELS = {
     concrete_pours: 'יציקת בטון',
     rebar_deliveries: 'משלוח ברזל',
-    prestressed_slabs: 'פלטת טרום',
+    prestressed_slabs: 'לוח״ד',
     price_quotes: 'הצעת מחיר',
   };
 
