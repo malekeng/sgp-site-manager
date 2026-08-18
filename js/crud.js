@@ -1,9 +1,9 @@
 // ===== Generic CRUD page engine =====
 // config = {
 //   table, activePage, title,
-//   dateField,                          // field used for the date filter panel
-//   columns: [{key,label,type:'text'|'number'|'date',digits}],
-//   formFields: [{key,label,type:'text'|'number'|'date'|'select',required,options,step}],
+//   dateField,
+//   columns: [{key,label,type:'text'|'number'|'date'|'boolean',digits}],
+//   formFields: [{key,label,type,required,options,step,full,numeric}],
 //   orderBy: {column, ascending}
 // }
 async function initCrudPage(config) {
@@ -29,7 +29,6 @@ async function initCrudPage(config) {
     if (error) { toast('שגיאה בטעינת נתונים: ' + error.message, 'error'); return; }
     state.rows = data || [];
 
-    // doc counts
     if (state.rows.length) {
       const ids = state.rows.map(r => r.id);
       const { data: docs } = await sb
@@ -57,7 +56,7 @@ async function initCrudPage(config) {
       : '—';
     const icon = config.icon || '📋';
     host.innerHTML = `
-      <div class="stat-card"><div class="label">${icon} סה"כ רשומות</div><div class="value">${state.rows.length}</div></div>
+      <div class="stat-card"><div class="label">${icon} סה\"כ רשומות</div><div class="value">${state.rows.length}</div></div>
       <div class="stat-card"><div class="label">🕒 עודכן לאחרונה</div><div class="value" style="font-size:20px;">${lastUpdated}</div></div>
     `;
   }
@@ -109,7 +108,7 @@ async function initCrudPage(config) {
   }
 
   function isImageFile(name) {
-    return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
+    return /\\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
   }
 
   function openLightbox(url) {
@@ -135,7 +134,6 @@ async function initCrudPage(config) {
           <span class="btn btn-sm btn-outline">הצגה</span>
         </div>`;
       }
-      // Non-image: same-tab navigation (target="_blank" is silently swallowed in installed iOS PWA)
       return `<div class="attach-item"><span>${d.file_name}</span><a href="${d.url}" class="btn btn-sm btn-outline">פתיחה / הורדה</a></div>`;
     });
     const backdrop = document.createElement('div');
@@ -156,16 +154,26 @@ async function initCrudPage(config) {
   const modalTitle = document.getElementById('modalTitle');
   const formMsg = document.getElementById('formMsg');
 
+  function ensureOtherOption(options) {
+    const list = [...(options || [])];
+    if (!list.some(o => String(o).trim() === 'אחר')) list.push('אחר');
+    return list;
+  }
+
   function buildForm() {
     const grid = document.getElementById('formGrid');
     grid.innerHTML = config.formFields.map(f => {
       const full = f.full ? ' full' : '';
       if (f.type === 'select') {
-        return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
-          <select name="${f.key}" ${f.required ? 'required' : ''}>
+        const opts = ensureOtherOption(f.options);
+        return `<div class="field${full}" data-select-wrap="${f.key}">
+          <label>${f.label}${f.required ? ' *' : ''}</label>
+          <select name="${f.key}" data-has-other="1" ${f.required ? 'required' : ''}>
             <option value="">בחר...</option>
-            ${f.options.map(o => `<option value="${o}">${o}</option>`).join('')}
-          </select></div>`;
+            ${opts.map(o => `<option value="${o}">${o}</option>`).join('')}
+          </select>
+          <input type="text" name="${f.key}__other" class="other-input" placeholder="הזינו ערך ידני..." style="display:none;margin-top:8px;">
+        </div>`;
       }
       if (f.type === 'boolean') {
         return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
@@ -176,8 +184,10 @@ async function initCrudPage(config) {
       }
       if (f.type === 'datalist') {
         return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
-          <input type="text" name="${f.key}" list="${f.key}_list" autocomplete="off" ${f.required ? 'required' : ''}>
-          <datalist id="${f.key}_list">${f.options.map(o => `<option value="${o}">`).join('')}</datalist></div>`;
+          <input type="text" name="${f.key}" list="${f.key}_list" autocomplete="off" placeholder="בחרו או הקלידו ידנית" ${f.required ? 'required' : ''}>
+          <datalist id="${f.key}_list">${(f.options || []).map(o => `<option value="${o}">`).join('')}</datalist>
+          <div style="font-size:11px;color:var(--steel);margin-top:4px;">ניתן לבחור מהרשימה או להקליד ערך חופשי</div>
+        </div>`;
       }
       if (f.type === 'textarea') {
         return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
@@ -186,6 +196,23 @@ async function initCrudPage(config) {
       return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
         <input type="${f.type}" name="${f.key}" ${f.step ? `step="${f.step}"` : ''} ${f.required ? 'required' : ''}></div>`;
     }).join('');
+
+    // Wire "אחר" free-text toggles
+    grid.querySelectorAll('select[data-has-other]').forEach(sel => {
+      const otherInput = sel.parentElement.querySelector('.other-input');
+      const sync = () => {
+        const isOther = sel.value === 'אחר';
+        otherInput.style.display = isOther ? 'block' : 'none';
+        if (isOther) {
+          otherInput.required = sel.required;
+          otherInput.focus();
+        } else {
+          otherInput.required = false;
+          otherInput.value = '';
+        }
+      };
+      sel.addEventListener('change', sync);
+    });
   }
 
   function openModal(id) {
@@ -195,13 +222,42 @@ async function initCrudPage(config) {
     hideMsg(formMsg);
     if (attachWidget) attachWidget.clear();
 
+    // Reset other-inputs visibility
+    formEl.querySelectorAll('.other-input').forEach(inp => {
+      inp.style.display = 'none';
+      inp.required = false;
+      inp.value = '';
+    });
+
     if (id) {
       const row = state.rows.find(r => r.id === id);
       config.formFields.forEach(f => {
         const el = formEl.querySelector(`[name="${f.key}"]`);
         if (!el) return;
         if (f.type === 'boolean') { el.value = row[f.key] ? 'כן' : 'לא'; return; }
-        if (row[f.key] !== null && row[f.key] !== undefined) el.value = row[f.key];
+
+        const val = row[f.key];
+        if (val === null || val === undefined || val === '') return;
+
+        if (f.type === 'select') {
+          const opts = ensureOtherOption(f.options || []);
+          const match = opts.find(o => String(o) === String(val));
+          if (match && match !== 'אחר') {
+            el.value = match;
+          } else {
+            // value is custom → select "אחר" and fill free text
+            el.value = 'אחר';
+            const otherInput = el.parentElement.querySelector('.other-input');
+            if (otherInput) {
+              otherInput.style.display = 'block';
+              otherInput.value = String(val);
+              otherInput.required = el.required;
+            }
+          }
+          return;
+        }
+
+        el.value = val;
       });
     }
     modalBackdrop.classList.add('open');
@@ -218,9 +274,21 @@ async function initCrudPage(config) {
     hideMsg(formMsg);
     const fd = new FormData(formEl);
     const payload = { site_id: site.id };
+
     config.formFields.forEach(f => {
       let v = fd.get(f.key);
-      if (f.type === 'boolean') { v = (v === 'כן'); payload[f.key] = v; return; }
+      if (f.type === 'boolean') { payload[f.key] = (v === 'כן'); return; }
+
+      // Resolve "אחר" free-text
+      if (f.type === 'select' && v === 'אחר') {
+        v = fd.get(f.key + '__other');
+        if (!v || !String(v).trim()) {
+          showMsg(formMsg, 'יש להזין ערך בשדה "' + f.label + '"', 'error');
+          throw new Error('missing other value');
+        }
+        v = String(v).trim();
+      }
+
       if (v === '') v = null;
       if (v !== null && (f.type === 'number' || f.numeric)) v = Number(v);
       payload[f.key] = v;
@@ -249,6 +317,10 @@ async function initCrudPage(config) {
       closeModal();
       await loadData();
     } catch (err) {
+      if (err.message === 'missing other value') {
+        submitBtn.disabled = false;
+        return;
+      }
       console.error(err);
       showMsg(formMsg, 'שגיאה: ' + err.message, 'error');
     } finally {
