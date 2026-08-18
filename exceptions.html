@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>חריגים | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title" id="pageTitle">חריגים</h1>
+
+  <div class="stats-row" id="statsRow"></div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>יומן חריגים</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" id="addBtn">+ הוספת חריג</button>
+        <button class="btn btn-outline" id="filterToggle">סינון</button>
+      </div>
+    </div>
+
+    <div class="filter-panel" id="filterPanel">
+      <div class="filter-field"><label>מתאריך</label><input type="date" id="filterFrom"></div>
+      <div class="filter-field"><label>עד תאריך</label><input type="date" id="filterTo"></div>
+      <button class="btn btn-primary btn-sm" id="filterApply">החל סינון</button>
+      <button class="btn btn-ghost btn-sm" id="filterClear">איפוס</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody">
+          <tr class="empty-row"><td><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 id="modalTitle">הוספת חריג</h3>
+    <div id="formMsg" class="msg"></div>
+    <form id="recordForm">
+      <div class="form-grid" id="formGrid"></div>
+      <div id="attachHost"></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">שמירה</button>
+        <button type="button" class="btn btn-outline" id="cancelBtn">ביטול</button>
+      </div>
+    </form>
+    <button class="icon-btn" id="closeModalBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script src="js/documents.js"></script>
+<script src="js/crud.js"></script>
+<script>
+initCrudPage({
+  table: 'exceptions', icon: '⚠️',
+  activePage: 'exceptions.html',
+  title: 'חריגים',
+  dateField: 'exception_date',
+  orderBy: { column: 'exception_date', ascending: false },
+  columns: [
+    { key: 'exception_date', label: 'תאריך', type: 'date' },
+    { key: 'category', label: 'קטגוריה', type: 'text' },
+    { key: 'location', label: 'מיקום / אלמנט', type: 'text' },
+    { key: 'description', label: 'תיאור החריג', type: 'text' },
+    { key: 'status', label: 'סטטוס', type: 'text' },
+    { key: 'notes', label: 'הערות', type: 'text' },
+  ],
+  formFields: [
+    { key: 'exception_date', label: 'תאריך', type: 'date', required: true },
+    { key: 'category', label: 'קטגוריה', type: 'select', required: true,
+      options: ['יציקת בטון', 'ברזל', 'לוח\"דים', 'כמויות', 'בטיחות', 'תכנון', 'ביצוע', 'ספקים'] },
+    { key: 'location', label: 'מיקום / אלמנט', type: 'text' },
+    { key: 'description', label: 'תיאור החריג', type: 'textarea', full: true, required: true },
+    { key: 'status', label: 'סטטוס', type: 'select', required: true,
+      options: ['פתוח', 'בטיפול', 'נסגר'] },
+    { key: 'notes', label: 'הערות / עדכונים', type: 'textarea', full: true },
+  ],
+});
+</script>
+</body>
+</html>
