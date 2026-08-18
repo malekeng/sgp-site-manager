@@ -95,22 +95,23 @@ initCrudPage({
     { key: 'unit_price', label: 'מחיר יחידה', type: 'number', digits: 2 },
     { key: 'unit', label: 'יחידה', type: 'text' },
     { key: 'quote_date', label: 'תאריך הצעה', type: 'date' },
+    { key: 'exceptions', label: 'חריגים', type: 'text' },
     { key: 'notes', label: 'הערות', type: 'text' },
   ],
   formFields: [
     { key: 'material', label: 'חומר', type: 'datalist', required: true,
       options: ['ברזל', 'בטון', 'בלוקים', 'טיח', 'איטום', 'חול', 'מלט', 'פלדה', 'בידוד', 'רשת ריתוך'] },
     { key: 'supplier', label: 'ספק', type: 'datalist', required: true,
-      options: ['עין עירון בע"מ', 'ERON STEEL', 'רמט טרום בע"מ', 'נוימן תעשיות פלדה'] },
+      options: ['עין עירון בע\"מ', 'ERON STEEL', 'רמט טרום בע\"מ', 'נוימן תעשיות פלדה'] },
     { key: 'unit_price', label: 'מחיר יחידה', type: 'number', step: '0.01', required: true },
     { key: 'unit', label: 'יחידה', type: 'select', required: true,
-      options: ['טון', 'מ"ק', 'מ"ר', 'מטר', 'יח\'', 'ק"ג', 'שק'] },
+      options: ['טון', 'מ\"ק', 'מ\"ר', 'מטר', 'יח\'', 'ק\"ג', 'שק'] },
     { key: 'quote_date', label: 'תאריך הצעה', type: 'date' },
+    { key: 'exceptions', label: 'חריגים', type: 'textarea', full: true },
     { key: 'notes', label: 'הערות', type: 'textarea', full: true },
   ],
 });
 
-// ===== OCR: extract material / price / unit / supplier from an uploaded quote =====
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
 const ocrZone = document.getElementById('ocrZone');
@@ -145,24 +146,15 @@ async function pdfToImageDataUrl(file) {
 
 function parseQuoteText(text) {
   const result = { material: null, supplier: null, unit_price: null, unit: null };
-
-  // price: number followed by ₪ or "שח"/"ש"ח", or preceded by מחיר
-  const priceMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:₪|ש["']?ח)/) ||
+  const priceMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:₪|ש[\"']?ח)/) ||
                       text.match(/מחיר[:\s]*[^\d]{0,10}(\d+(?:[.,]\d+)?)/);
   if (priceMatch) result.unit_price = parseFloat(priceMatch[1].replace(',', '.'));
-
-  // unit: common construction units
-  const unitMatch = text.match(/\b(טון|מ["']?ק|מ["']?ר|יחידה|יח['"]?|ק["']?ג|מטר)\b/);
+  const unitMatch = text.match(/\\b(טון|מ[\"']?ק|מ[\"']?ר|יחידה|יח['\"]?|ק[\"']?ג|מטר)\\b/);
   if (unitMatch) result.unit = unitMatch[1];
-
-  // supplier: look for common legal-entity suffixes
-  const supplierMatch = text.match(/([א-ת][א-ת\s]{2,30}(?:בע["']?מ|בעמ))/);
+  const supplierMatch = text.match(/([א-ת][א-ת\\s]{2,30}(?:בע[\"']?מ|בעמ))/);
   if (supplierMatch) result.supplier = supplierMatch[1].trim();
-
-  // material: common material keywords
-  const materialMatch = text.match(/\b(ברזל|פלדה|בטון|טרום|חול|חצץ|בלוקים|מלט|רשת)\b[^\n]{0,20}/);
+  const materialMatch = text.match(/\\b(ברזל|פלדה|בטון|טרום|חול|חצץ|בלוקים|מלט|רשת)\\b[^\\n]{0,20}/);
   if (materialMatch) result.material = materialMatch[0].trim();
-
   return result;
 }
 
@@ -175,7 +167,6 @@ async function handleOcrFile(file) {
       ocrProgressText.textContent = 'ממיר PDF לתמונה...';
       imageSource = await pdfToImageDataUrl(file);
     }
-
     ocrProgressText.textContent = 'מזהה טקסט (OCR)...';
     const { data } = await Tesseract.recognize(imageSource, 'heb+eng', {
       logger: m => {
@@ -184,14 +175,12 @@ async function handleOcrFile(file) {
         }
       },
     });
-
     const parsed = parseQuoteText(data.text);
     const form = document.getElementById('recordForm');
     if (parsed.material) form.querySelector('[name=material]').value = parsed.material;
     if (parsed.supplier) form.querySelector('[name=supplier]').value = parsed.supplier;
     if (parsed.unit_price) form.querySelector('[name=unit_price]').value = parsed.unit_price;
     if (parsed.unit) form.querySelector('[name=unit]').value = parsed.unit;
-
     toast('הזיהוי הושלם — בדקו את השדות לפני שמירה', 'success');
   } catch (err) {
     console.error(err);
