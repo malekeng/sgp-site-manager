@@ -105,14 +105,14 @@
 
     <!-- ===== Screen 3: Enter code + set password (covers both invite & recovery) ===== -->
     <form id="verifyCodeForm" class="auth-form hidden">
-      <p style="font-size:13px;color:var(--steel);margin-bottom:16px;">
+      <p style="font-size:13px;color:var(--steel);margin-bottom:16px;" id="verifyIntro">
         הזינו את הקוד שקיבלתם במייל, וקבעו סיסמה.
       </p>
-      <div class="field">
+      <div class="field" id="verifyEmailField">
         <label for="verifyEmail">אימייל</label>
         <input id="verifyEmail" type="email" name="email" required autocomplete="email">
       </div>
-      <div class="field">
+      <div class="field" id="verifyCodeField">
         <label for="verifyCode">קוד אימות</label>
         <input id="verifyCode" type="text" name="code" class="otp-input" inputmode="numeric" pattern="[0-9]{4,10}" maxlength="10" required autocomplete="one-time-code">
       </div>
@@ -297,7 +297,7 @@ verifyCodeForm.addEventListener('submit', async e => {
 
   const fd = new FormData(verifyCodeForm);
   const email = fd.get('email');
-  const code = fd.get('code').trim();
+  const code = fd.get('code') ? fd.get('code').trim() : '';
   const pass = fd.get('password');
   const confirm = fd.get('confirm');
 
@@ -311,17 +311,21 @@ verifyCodeForm.addEventListener('submit', async e => {
   const btnText = document.getElementById('verifyCodeBtnText');
   setBusy(btn, btnText, true, 'מאמת...', 'אישור וכניסה');
 
-  let verifyError = null;
-  for (const type of ['recovery', 'invite']) {
-    const { error } = await sb.auth.verifyOtp({ email, token: code, type });
-    if (!error) { verifyError = null; break; }
-    verifyError = error;
-  }
+  // If the link from the email already established a session (linkVerified),
+  // skip re-verifying a code -- there may not even be one to type.
+  if (!linkVerified) {
+    let verifyError = null;
+    for (const type of ['recovery', 'invite']) {
+      const { error } = await sb.auth.verifyOtp({ email, token: code, type });
+      if (!error) { verifyError = null; break; }
+      verifyError = error;
+    }
 
-  if (verifyError) {
-    showErr('הקוד שגוי או שפג תוקפו. בקשו קוד חדש.');
-    setBusy(btn, btnText, false, '', 'אישור וכניסה');
-    return;
+    if (verifyError) {
+      showErr('הקוד שגוי או שפג תוקפו. בקשו קוד חדש.');
+      setBusy(btn, btnText, false, '', 'אישור וכניסה');
+      return;
+    }
   }
 
   const { error: updateErr } = await sb.auth.updateUser({ password: pass });
@@ -366,7 +370,65 @@ signupForm.addEventListener('submit', async e => {
   showOk('הבקשה נשלחה בהצלחה. תקבלו מייל הזמנה לאחר אישור.');
 });
 
-goToDashboardIfSignedIn();
+// ===== Handle a click-through link from the invite/recovery email =====
+// Supabase can send either a plain code (typed manually, handled above) or a
+// clickable link. The link lands back here with either:
+//   ?token_hash=...&type=recovery   (PKCE-style verify link)
+//   #access_token=...&refresh_token=...&type=recovery   (older implicit-flow link)
+// Previously this app ignored both, so the link appeared to "do nothing."
+let linkVerified = false;
+
+async function handleAuthLinkIfPresent() {
+  const params = new URLSearchParams(window.location.search);
+  const tokenHash = params.get('token_hash');
+  const typeFromQuery = params.get('type');
+
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const accessToken = hashParams.get('access_token');
+  const refreshToken = hashParams.get('refresh_token');
+  const typeFromHash = hashParams.get('type');
+
+  let email = '';
+
+  if (tokenHash) {
+    const { data, error } = await sb.auth.verifyOtp({ token_hash: tokenHash, type: typeFromQuery || 'recovery' });
+    if (!error) {
+      linkVerified = true;
+      email = data?.user?.email || '';
+    }
+  } else if (accessToken && refreshToken) {
+    const { data, error } = await sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    if (!error) {
+      linkVerified = true;
+      email = data?.user?.email || '';
+    }
+  } else {
+    return false;
+  }
+
+  // Clear tokens from the visible URL so they aren't left in browser history.
+  window.history.replaceState({}, document.title, window.location.pathname);
+
+  if (!linkVerified) {
+    showScreen(loginForm);
+    showErr('הקישור פג תוקף או שכבר נעשה בו שימוש. בקשו קוד חדש.');
+    return true;
+  }
+
+  // Session is already established -- just need a new password, no code to type.
+  showScreen(verifyCodeForm);
+  document.getElementById('verifyEmailField').style.display = 'none';
+  document.getElementById('verifyCodeField').style.display = 'none';
+  verifyCodeForm.email.value = email;
+  verifyCodeForm.code.required = false;
+  document.getElementById('verifyIntro').textContent = 'האימות הצליח — קבעו סיסמה חדשה כדי להשלים את הכניסה.';
+  return true;
+}
+
+(async function init() {
+  const handledLink = await handleAuthLinkIfPresent();
+  if (!handledLink) await goToDashboardIfSignedIn();
+})();
 </script>
 </body>
 </html>
