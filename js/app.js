@@ -11,6 +11,18 @@ const NAV_ITEMS = [
   { href: 'reports.html',   label: 'דוחות', icon: '📊' },
 ];
 const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים', icon: '👥' };
+const PROFILE_NAV_ITEM = { href: 'profile.html', label: 'הפרופיל שלי', icon: '👤' };
+
+const JOB_TITLE_OPTIONS = [
+  'מנהל עבודה',
+  'מנהל פרויקט',
+  'מהנדס ביצוע',
+  'מהנדס קונסטרוקציה',
+  'מפקח',
+  'מודד',
+  'קבלן',
+  'מהנדס בטיחות',
+];
 
 function toast(message, type = '') {
   let host = document.querySelector('.toast-host');
@@ -49,6 +61,35 @@ function fmtNum(n, digits = 2) {
   return num.toLocaleString('he-IL', { maximumFractionDigits: digits });
 }
 
+function systemRoleLabel(role) {
+  if (role === 'owner') return 'בעלים';
+  if (role === 'admin') return 'מנהל מערכת';
+  if (role === 'site_user') return 'משתמש אתר';
+  return role || '';
+}
+
+function profileDisplayName(profile) {
+  return profile?.full_name || profile?.username || profile?.email || 'משתמש';
+}
+
+function profileInitials(profile) {
+  const n = profileDisplayName(profile).trim();
+  const parts = n.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return n.slice(0, 2).toUpperCase();
+}
+
+async function getStorageUrl(path) {
+  if (!path) return null;
+  try {
+    const { data, error } = await sb.storage.from('documents').createSignedUrl(path, 3600);
+    if (error) return null;
+    return data?.signedUrl || null;
+  } catch {
+    return null;
+  }
+}
+
 // Renders the shared sidebar + nav into #app-header, wires up mobile drawer & logout.
 async function renderHeader(activePage, profile, site) {
   const host = document.getElementById('app-header');
@@ -58,6 +99,7 @@ async function renderHeader(activePage, profile, site) {
   if (profile && (profile.role === 'owner' || profile.role === 'admin')) {
     items.push(ADMIN_NAV_ITEM);
   }
+  items.push(PROFILE_NAV_ITEM);
 
   const navHtml = items.map(item =>
     `<a href="${item.href}" class="${item.href === activePage ? 'active' : ''}"><span class="nav-icon">${item.icon}</span>${item.label}</a>`
@@ -70,19 +112,40 @@ async function renderHeader(activePage, profile, site) {
       </select>`
     : `<span class="site-badge">${site?.name || ''}</span>`;
 
+  const name = profileDisplayName(profile);
+  const job = profile?.job_title || systemRoleLabel(profile?.role);
+
   host.innerHTML = `
     <div class="brand">
       <img src="icons/logo.svg" alt="SGP">
     </div>
     <nav id="mainNav">${navHtml}</nav>
     <div class="sidebar-footer">
+      <a href="profile.html" class="user-chip" id="userChip">
+        <div class="avatar-sm" id="sidebarAvatar">
+          <span>${profileInitials(profile)}</span>
+        </div>
+        <div class="user-chip-text">
+          <div class="user-chip-name">${name}</div>
+          <div class="user-chip-role">${job}</div>
+        </div>
+      </a>
       ${siteControl}
       <button class="logout-btn" id="logoutBtn">יציאה</button>
     </div>
   `;
 
-  // Mobile drawer toggle + backdrop must live outside #app-header: CSS transform on
-  // the sidebar creates a new containing block, which breaks position:fixed children.
+  // Load avatar into sidebar chip (non-blocking)
+  if (profile?.avatar_path) {
+    getStorageUrl(profile.avatar_path).then(url => {
+      if (!url) return;
+      const box = document.getElementById('sidebarAvatar');
+      if (!box) return;
+      box.innerHTML = `<img src="${url}" alt="">`;
+    });
+  }
+
+  // Mobile drawer toggle + backdrop must live outside #app-header
   let toggle = document.getElementById('menuToggle');
   if (!toggle) {
     toggle = document.createElement('button');
@@ -123,9 +186,6 @@ async function renderHeader(activePage, profile, site) {
   });
 }
 
-// Resolves which site is "active" for this session.
-// owner/admin: full access regardless of assignment — switcher across ALL sites (unchanged).
-// site_user: restricted to their assigned sites via profile_sites — fixed if 1, switcher if >1.
 async function resolveActiveSite(profile) {
   if (profile.role === 'site_user') {
     const { data: assigned, error } = await sb
@@ -145,7 +205,6 @@ async function resolveActiveSite(profile) {
     return { ...site, __allSites: mySites };
   }
 
-  // owner / admin: unrestricted, see everything
   const { data: allSites, error } = await sb.from('sites').select('*').order('name', { ascending: true });
   if (error) { console.error(error); return null; }
   if (!allSites || !allSites.length) return null;
@@ -158,8 +217,6 @@ async function resolveActiveSite(profile) {
   return { ...site, __allSites: allSites };
 }
 
-// Guards a page: requires a logged-in user with a profile + site.
-// Returns { user, profile, site } or redirects to index.html.
 async function requireAuth(activePage) {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
