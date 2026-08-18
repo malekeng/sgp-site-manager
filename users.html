@@ -17,6 +17,11 @@
   <h1 class="page-title">משתמשים</h1>
 
   <div class="card">
+    <div class="card-header"><h2>בקשות גישה ממתינות</h2></div>
+    <div id="requestsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+
+  <div class="card">
     <div class="card-header">
       <h2>משתמשי המערכת</h2>
       <button class="btn btn-primary" id="inviteBtn">+ הזמנת משתמש</button>
@@ -194,17 +199,27 @@
   }
 
   // ===== Invite =====
+  let approvingRequestId = null;
+
   document.getElementById('roleSelect').addEventListener('change', e => {
     document.getElementById('siteField').style.display = e.target.value === 'owner' ? 'none' : 'flex';
   });
 
-  document.getElementById('inviteBtn').addEventListener('click', () => {
+  function openInviteModal(prefill) {
     document.getElementById('inviteForm').reset();
     hideMsg(document.getElementById('inviteMsg'));
     renderSiteChecks('siteCheckList', []);
     document.getElementById('siteField').style.display = 'flex';
+    approvingRequestId = prefill?.requestId || null;
+    if (prefill) {
+      document.getElementById('inviteForm').email.value = prefill.email || '';
+      document.getElementById('inviteForm').full_name.value = prefill.full_name || '';
+      document.getElementById('inviteForm').username.value = (prefill.email || '').split('@')[0] || '';
+    }
     document.getElementById('inviteModalBackdrop').classList.add('open');
-  });
+  }
+
+  document.getElementById('inviteBtn').addEventListener('click', () => openInviteModal(null));
   document.getElementById('cancelInviteBtn').addEventListener('click', () => document.getElementById('inviteModalBackdrop').classList.remove('open'));
   document.getElementById('inviteModalBackdrop').addEventListener('click', e => {
     if (e.target.id === 'inviteModalBackdrop') e.target.classList.remove('open');
@@ -248,6 +263,15 @@
 
       toast('ההזמנה נשלחה בהצלחה', 'success');
       document.getElementById('inviteModalBackdrop').classList.remove('open');
+
+      if (approvingRequestId) {
+        await sb.from('signup_requests')
+          .update({ status: 'approved', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+          .eq('id', approvingRequestId);
+        approvingRequestId = null;
+        loadRequests();
+      }
+
       loadUsers();
     } catch (err) {
       showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
@@ -394,8 +418,49 @@
     await loadSites();
   });
 
+  // ===== Signup requests (pending owner/admin approval) =====
+  async function loadRequests() {
+    const host = document.getElementById('requestsList');
+    const { data, error } = await sb.from('signup_requests')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; return; }
+    if (!data || !data.length) { host.innerHTML = '<p style="color:var(--steel);">אין בקשות ממתינות</p>'; return; }
+
+    host.innerHTML = `<div class="attach-list">${data.map(r => `
+      <div class="attach-item">
+        <span><strong>${r.first_name} ${r.last_name}</strong> · ${r.email} <span style="color:var(--steel);font-size:12px;">· ${fmtDate(r.created_at)}</span></span>
+        <span style="display:flex;gap:6px;">
+          <button type="button" class="btn btn-sm btn-primary" data-approve="${r.id}" data-email="${r.email}" data-name="${r.first_name} ${r.last_name}">אישור</button>
+          <button type="button" class="btn btn-sm btn-danger" data-reject="${r.id}">דחייה</button>
+        </span>
+      </div>
+    `).join('')}</div>`;
+
+    host.querySelectorAll('[data-approve]').forEach(btn => {
+      btn.addEventListener('click', () => openInviteModal({
+        requestId: btn.dataset.approve,
+        email: btn.dataset.email,
+        full_name: btn.dataset.name,
+      }));
+    });
+    host.querySelectorAll('[data-reject]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('לדחות את הבקשה הזו?')) return;
+        const { error } = await sb.from('signup_requests')
+          .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+          .eq('id', btn.dataset.reject);
+        if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+        toast('הבקשה נדחתה', 'success');
+        loadRequests();
+      });
+    });
+  }
+
   await loadSites();
   await loadUsers();
+  await loadRequests();
 })();
 </script>
 </body>
