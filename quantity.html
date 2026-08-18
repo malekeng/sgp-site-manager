@@ -23,7 +23,7 @@
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>פרויקט</th><th>כתובת</th><th>מס' תוכנית</th><th>קומה</th><th>גרסה</th><th>תאריך תוכנית</th><th>לקוח</th><th></th></tr></thead>
+        <thead><tr><th>שם תכנית</th><th>מס' תוכנית</th><th>קומה</th><th>גרסה</th><th>תאריך תוכנית</th><th></th></tr></thead>
         <tbody id="sheetsBody">
           <tr class="empty-row"><td colspan="8"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
         </tbody>
@@ -56,13 +56,11 @@
     <div id="sheetFormMsg" class="msg"></div>
     <form id="sheetForm">
       <div class="form-grid">
-        <div class="field"><label>שם פרויקט</label><input type="text" name="project_name"></div>
-        <div class="field"><label>כתובת</label><input type="text" name="address"></div>
+        <div class="field full"><label>שם תכנית *</label><input type="text" name="plan_name" required></div>
         <div class="field"><label>מס' תוכנית</label><input type="text" name="plan_number"></div>
         <div class="field"><label>קומה</label><input type="text" name="floor"></div>
         <div class="field"><label>גרסת תוכנית</label><input type="text" name="plan_version"></div>
         <div class="field"><label>תאריך תוכנית</label><input type="date" name="plan_date"></div>
-        <div class="field full"><label>לקוח</label><input type="text" name="client_name"></div>
       </div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary">יצירה</button>
@@ -111,18 +109,16 @@
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
     const body = document.getElementById('sheetsBody');
     if (!data.length) {
-      body.innerHTML = `<tr class="empty-row"><td colspan="8">אין גיליונות עדיין</td></tr>`;
+      body.innerHTML = `<tr class="empty-row"><td colspan="6">אין גיליונות עדיין</td></tr>`;
       return;
     }
     body.innerHTML = data.map(s => `
       <tr>
-        <td>${s.project_name || '—'}</td>
-        <td>${s.address || '—'}</td>
+        <td>${s.plan_name || '—'}</td>
         <td>${s.plan_number || '—'}</td>
         <td>${s.floor || '—'}</td>
         <td>${s.plan_version || '—'}</td>
         <td>${fmtDate(s.plan_date)}</td>
-        <td>${s.client_name || '—'}</td>
         <td class="row-actions">
           <button class="btn btn-sm btn-outline" data-open="${s.id}">פתיחה</button>
           <button class="icon-btn danger" data-del-sheet="${s.id}" title="מחיקה">🗑️</button>
@@ -159,11 +155,11 @@
     Object.keys(payload).forEach(k => { if (payload[k] === '') payload[k] = null; });
     payload.site_id = site.id;
     payload.created_by = user.id;
-    const { error } = await sb.from('quantity_sheets').insert(payload);
+    const { data, error } = await sb.from('quantity_sheets').insert(payload).select().single();
     if (error) { showMsg(document.getElementById('sheetFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }
-    toast('הגיליון נוצר', 'success');
+    toast('הגיליון נוצר — ממשיכים למילוי השורות', 'success');
     document.getElementById('sheetModalBackdrop').classList.remove('open');
-    loadSheets();
+    await openSheet(data);
   });
 
   // ===== Items =====
@@ -171,13 +167,14 @@
     currentSheet = sheet;
     document.getElementById('sheetsCard').style.display = 'none';
     document.getElementById('itemsCard').style.display = 'block';
-    document.getElementById('itemsTitle').textContent = 'שורות כמויות — ' + (sheet.project_name || sheet.plan_number || '');
+    document.getElementById('itemsTitle').textContent = 'שורות כמויות — ' + (sheet.plan_name || sheet.plan_number || '');
     await loadItems();
   }
 
   document.getElementById('backToSheets').addEventListener('click', () => {
     document.getElementById('itemsCard').style.display = 'none';
     document.getElementById('sheetsCard').style.display = 'block';
+    loadSheets();
   });
 
   async function loadItems() {
