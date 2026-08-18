@@ -85,6 +85,7 @@
         { key: 'element', label: 'אלמנט', type: 'text' },
         { key: 'concrete_grade', label: 'סוג בטון', type: 'text' },
         { key: 'volume_m3', label: 'נפח (מ"ק)', type: 'number', digits: 2 },
+        { key: 'lab_required', label: 'מעבדה נדרשת', type: 'boolean' },
         { key: 'lab_name', label: 'מעבדה', type: 'text' },
         { key: 'cube_test_date', label: 'בדיקת קוביות', type: 'date' },
         { key: 'notes', label: 'הערות', type: 'text' },
@@ -133,6 +134,7 @@
       return v.map(d => `<img src="${d.url}" style="width:34px;height:34px;object-fit:cover;border-radius:4px;border:1px solid #e1e5f0;margin-left:4px;">`).join('');
     }
     if (v === null || v === undefined || v === '') return '—';
+    if (col.type === 'boolean') return v ? 'כן' : 'לא';
     if (col.type === 'date') return fmtDate(v);
     if (col.type === 'number') return fmtNum(v, col.digits ?? 2);
     return String(v);

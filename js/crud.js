@@ -79,6 +79,7 @@ async function initCrudPage(config) {
         if (v !== null && v !== undefined && v !== '') {
           if (c.type === 'date') out = fmtDate(v);
           else if (c.type === 'number') out = fmtNum(v, c.digits ?? 2);
+          else if (c.type === 'boolean') out = v ? 'כן' : 'לא';
           else out = String(v);
         }
         return `<td class="${c.type === 'number' ? 'num-cell' : ''}">${out}</td>`;
@@ -166,6 +167,13 @@ async function initCrudPage(config) {
             ${f.options.map(o => `<option value="${o}">${o}</option>`).join('')}
           </select></div>`;
       }
+      if (f.type === 'boolean') {
+        return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
+          <select name="${f.key}" ${f.required ? 'required' : ''}>
+            <option value="כן">כן</option>
+            <option value="לא">לא</option>
+          </select></div>`;
+      }
       if (f.type === 'datalist') {
         return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
           <input type="text" name="${f.key}" list="${f.key}_list" autocomplete="off" ${f.required ? 'required' : ''}>
@@ -191,7 +199,9 @@ async function initCrudPage(config) {
       const row = state.rows.find(r => r.id === id);
       config.formFields.forEach(f => {
         const el = formEl.querySelector(`[name="${f.key}"]`);
-        if (el && row[f.key] !== null && row[f.key] !== undefined) el.value = row[f.key];
+        if (!el) return;
+        if (f.type === 'boolean') { el.value = row[f.key] ? 'כן' : 'לא'; return; }
+        if (row[f.key] !== null && row[f.key] !== undefined) el.value = row[f.key];
       });
     }
     modalBackdrop.classList.add('open');
@@ -210,6 +220,7 @@ async function initCrudPage(config) {
     const payload = { site_id: site.id };
     config.formFields.forEach(f => {
       let v = fd.get(f.key);
+      if (f.type === 'boolean') { v = (v === 'כן'); payload[f.key] = v; return; }
       if (v === '') v = null;
       if (v !== null && (f.type === 'number' || f.numeric)) v = Number(v);
       payload[f.key] = v;

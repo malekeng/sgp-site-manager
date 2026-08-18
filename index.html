@@ -16,28 +16,69 @@
 .switch-link {
   display: block; text-align: center; font-size: 13px; color: var(--steel);
   margin-top: 14px; cursor: pointer; font-weight: 600;
+  padding: 8px; border-radius: 8px;
 }
-.switch-link:hover { color: var(--navy); }
+.switch-link:hover { color: var(--navy); text-decoration: underline; }
+
+.password-wrap { position: relative; }
+.password-wrap input { padding-left: 42px; }
+.password-toggle {
+  position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; font-size: 15px; color: var(--steel); cursor: pointer;
+}
+.password-toggle:hover { background: var(--bg); color: var(--navy); }
+
+.btn:disabled { opacity: 0.6; pointer-events: none; }
+
+.field.field-error input { border-color: var(--danger) !important; }
+.field-error-msg { color: var(--danger); font-size: 12px; font-weight: 600; margin-top: 4px; display: none; }
+.field.field-error .field-error-msg { display: block; }
+
+.step-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 22px; }
+.step-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background 0.2s; }
+.step-dots span.active { background: var(--green); width: 20px; border-radius: 4px; }
+
+.auth-form { transition: opacity 0.2s ease, transform 0.2s ease; }
+.auth-form.hidden { display: none; }
+.auth-form.entering { opacity: 0; transform: translateY(6px); }
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+.auth-card.shake { animation: shake 0.4s; }
 </style>
 </head>
 <body>
 
-<div class="auth-wrap">
-  <div class="auth-card">
+<div class="auth-wrap" style="padding-bottom:max(20px, env(safe-area-inset-bottom));">
+  <div class="auth-card" id="authCard">
     <img src="icons/logo.svg" alt="SGP">
     <div class="tagline">מערכת ניהול אתרי בנייה</div>
 
-    <div id="msg" class="msg"></div>
+    <div class="step-dots" id="stepDots">
+      <span class="active" data-step="1"></span>
+      <span data-step="2"></span>
+      <span data-step="3"></span>
+    </div>
+
+    <div id="msg" class="msg" aria-live="polite" role="status"></div>
 
     <!-- ===== Screen 1: Login ===== -->
-    <form id="loginForm">
+    <form id="loginForm" class="auth-form">
       <div class="field">
-        <label>אימייל</label>
-        <input type="email" name="email" required autocomplete="email">
+        <label for="loginEmail">אימייל</label>
+        <input id="loginEmail" type="email" name="email" required autocomplete="email">
       </div>
       <div class="field">
-        <label>סיסמה</label>
-        <input type="password" name="password" required autocomplete="current-password">
+        <label for="loginPassword">סיסמה</label>
+        <div class="password-wrap">
+          <input id="loginPassword" type="password" name="password" required autocomplete="current-password">
+          <span class="password-toggle" data-toggle-for="loginPassword" role="button" tabindex="0" aria-label="הצג סיסמה">👁</span>
+        </div>
       </div>
       <button type="submit" class="btn btn-primary" id="loginBtn">
         <span id="loginBtnText">כניסה</span>
@@ -46,13 +87,13 @@
     </form>
 
     <!-- ===== Screen 2: Request a code (recovery) ===== -->
-    <form id="requestCodeForm" style="display:none;">
+    <form id="requestCodeForm" class="auth-form hidden">
       <p style="font-size:13px;color:var(--steel);margin-bottom:16px;">
         הזינו את כתובת המייל שלכם ונשלח קוד אימות לאיפוס הסיסמה.
       </p>
       <div class="field">
-        <label>אימייל</label>
-        <input type="email" name="email" required autocomplete="email">
+        <label for="requestEmail">אימייל</label>
+        <input id="requestEmail" type="email" name="email" required autocomplete="email">
       </div>
       <button type="submit" class="btn btn-primary" id="requestCodeBtn">
         <span id="requestCodeBtnText">שליחת קוד</span>
@@ -62,25 +103,32 @@
     </form>
 
     <!-- ===== Screen 3: Enter code + set password (covers both invite & recovery) ===== -->
-    <form id="verifyCodeForm" style="display:none;">
+    <form id="verifyCodeForm" class="auth-form hidden">
       <p style="font-size:13px;color:var(--steel);margin-bottom:16px;">
         הזינו את הקוד שקיבלתם במייל, וקבעו סיסמה.
       </p>
       <div class="field">
-        <label>אימייל</label>
-        <input type="email" name="email" required autocomplete="email">
+        <label for="verifyEmail">אימייל</label>
+        <input id="verifyEmail" type="email" name="email" required autocomplete="email">
       </div>
       <div class="field">
-        <label>קוד אימות</label>
-        <input type="text" name="code" class="otp-input" inputmode="numeric" pattern="[0-9]{4,10}" maxlength="10" required autocomplete="one-time-code">
+        <label for="verifyCode">קוד אימות</label>
+        <input id="verifyCode" type="text" name="code" class="otp-input" inputmode="numeric" pattern="[0-9]{4,10}" maxlength="10" required autocomplete="one-time-code">
       </div>
       <div class="field">
-        <label>סיסמה חדשה</label>
-        <input type="password" name="password" minlength="6" required autocomplete="new-password">
+        <label for="newPassword">סיסמה חדשה</label>
+        <div class="password-wrap">
+          <input id="newPassword" type="password" name="password" minlength="6" required autocomplete="new-password">
+          <span class="password-toggle" data-toggle-for="newPassword" role="button" tabindex="0" aria-label="הצג סיסמה">👁</span>
+        </div>
       </div>
-      <div class="field">
-        <label>אימות סיסמה</label>
-        <input type="password" name="confirm" minlength="6" required autocomplete="new-password">
+      <div class="field" id="confirmField">
+        <label for="confirmPassword">אימות סיסמה</label>
+        <div class="password-wrap">
+          <input id="confirmPassword" type="password" name="confirm" minlength="6" required autocomplete="new-password">
+          <span class="password-toggle" data-toggle-for="confirmPassword" role="button" tabindex="0" aria-label="הצג סיסמה">👁</span>
+        </div>
+        <div class="field-error-msg">הסיסמאות אינן תואמות</div>
       </div>
       <button type="submit" class="btn btn-primary" id="verifyCodeBtn">
         <span id="verifyCodeBtnText">אישור וכניסה</span>
@@ -93,23 +141,62 @@
 <script src="js/supabase-client.js"></script>
 <script>
 const msgEl = document.getElementById('msg');
+const authCard = document.getElementById('authCard');
 const loginForm = document.getElementById('loginForm');
 const requestCodeForm = document.getElementById('requestCodeForm');
 const verifyCodeForm = document.getElementById('verifyCodeForm');
+const ALL_FORMS = [loginForm, requestCodeForm, verifyCodeForm];
+const STEP_OF = { loginForm: 1, requestCodeForm: 2, verifyCodeForm: 3 };
 
 function showScreen(el) {
-  [loginForm, requestCodeForm, verifyCodeForm].forEach(f => f.style.display = 'none');
-  el.style.display = 'block';
+  ALL_FORMS.forEach(f => f.classList.add('hidden'));
+  el.classList.remove('hidden');
+  el.classList.add('entering');
+  requestAnimationFrame(() => el.classList.remove('entering'));
   hideMsg();
+  const step = STEP_OF[el.id];
+  document.querySelectorAll('#stepDots span').forEach(dot => {
+    dot.classList.toggle('active', Number(dot.dataset.step) <= step);
+  });
 }
 function hideMsg() { msgEl.className = 'msg'; }
-function showErr(text) { msgEl.textContent = text; msgEl.className = 'msg show error'; }
+function showErr(text) {
+  msgEl.textContent = text;
+  msgEl.className = 'msg show error';
+  authCard.classList.remove('shake');
+  void authCard.offsetWidth; // restart animation
+  authCard.classList.add('shake');
+}
 function showOk(text) { msgEl.textContent = text; msgEl.className = 'msg show success'; }
 
 function setBusy(btn, textEl, busy, busyLabel, normalLabel) {
   btn.disabled = busy;
   textEl.textContent = busy ? busyLabel : normalLabel;
 }
+
+// ===== Password show/hide toggles =====
+document.querySelectorAll('.password-toggle').forEach(toggle => {
+  function flip() {
+    const input = document.getElementById(toggle.dataset.toggleFor);
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    toggle.textContent = showing ? '👁' : '🙈';
+    toggle.setAttribute('aria-label', showing ? 'הצג סיסמה' : 'הסתר סיסמה');
+  }
+  toggle.addEventListener('click', flip);
+  toggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+});
+
+// ===== Live password-match validation (screen 3) =====
+const newPasswordEl = document.getElementById('newPassword');
+const confirmPasswordEl = document.getElementById('confirmPassword');
+const confirmField = document.getElementById('confirmField');
+function checkPasswordMatch() {
+  if (!confirmPasswordEl.value) { confirmField.classList.remove('field-error'); return; }
+  confirmField.classList.toggle('field-error', newPasswordEl.value !== confirmPasswordEl.value);
+}
+newPasswordEl.addEventListener('input', checkPasswordMatch);
+confirmPasswordEl.addEventListener('input', checkPasswordMatch);
 
 async function goToDashboardIfSignedIn() {
   const { data: { session } } = await sb.auth.getSession();
@@ -182,6 +269,7 @@ verifyCodeForm.addEventListener('submit', async e => {
   const confirm = fd.get('confirm');
 
   if (pass !== confirm) {
+    checkPasswordMatch();
     showErr('הסיסמאות אינן תואמות');
     return;
   }

@@ -67,7 +67,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
 
     const { data: pours } = await sb.from('concrete_pours')
       .select('id, pour_date, element, cube_test_date')
-      .eq('site_id', site.id).is('cube_test_date', null)
+      .eq('site_id', site.id).eq('lab_required', true).is('cube_test_date', null)
       .order('pour_date', { ascending: false });
     (pours || []).forEach(p => items.push({
       icon: '🧪', text: `יציקה "${p.element}" מ-${fmtDate(p.pour_date)} — ללא תאריך בדיקת קוביות`,
