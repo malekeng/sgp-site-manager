@@ -152,7 +152,7 @@
   // ===== Users =====
   async function loadUsers() {
     const { data, error } = await sb.from('profiles')
-      .select('*, sites(name), profile_sites(site_id, sites(name))')
+      .select('*, sites!profiles_site_id_fkey(name), profile_sites(site_id, sites(name))')
       .order('created_at', { ascending: true });
     const body = document.getElementById('usersBody');
     if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="6">שגיאה: ${error.message}</td></tr>`; return; }
