@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { href: 'concrete.html',  label: 'יומני יציקות בטון', icon: '🧱' },
   { href: 'rebar.html',     label: 'משלוחי ברזל', icon: '🔩' },
   { href: 'slabs.html',     label: 'לוח״דים', icon: '🏗️' },
+  { href: 'exceptions.html', label: 'חריגים', icon: '⚠️' },
   { href: 'quantity.html',  label: 'כתבי כמויות', icon: '📐' },
   { href: 'prices.html',    label: 'השוואת מחירים', icon: '💰' },
   { href: 'reports.html',   label: 'דוחות', icon: '📊' },
@@ -122,10 +123,6 @@ async function renderHeader(activePage, profile, site) {
   });
 }
 
-// Resolves which site is "active" for this session.
-// Regular users: fixed to profile.site_id.
-// Owner/admin with no fixed site_id: pick a remembered site, or default to the first one,
-// and expose the full list so the header can offer a switcher.
 // Resolves which site is "active" for this session.
 // owner/admin: full access regardless of assignment — switcher across ALL sites (unchanged).
 // site_user: restricted to their assigned sites via profile_sites — fixed if 1, switcher if >1.
