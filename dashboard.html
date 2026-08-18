@@ -14,12 +14,24 @@
 <header class="app-header" id="app-header"></header>
 
 <main class="page">
-  <div class="welcome-block" id="welcomeBlock">
-    <div class="welcome-text">
-      <h1 class="welcome-greeting" id="welcomeGreeting">שלום</h1>
-      <div class="welcome-meta" id="welcomeMeta"></div>
+  <div class="site-hero" id="siteHero">
+    <div class="site-hero-bg" id="siteHeroBg"></div>
+    <div class="site-hero-overlay"></div>
+    <div class="site-hero-content">
+      <div class="site-hero-title" id="siteHeroTitle"></div>
+      <div class="site-hero-actions" id="siteHeroActions"></div>
     </div>
-    <div class="welcome-site" id="welcomeSite"></div>
+  </div>
+
+  <div class="welcome-block" id="welcomeBlock">
+    <div class="welcome-left">
+      <div class="avatar-md" id="welcomeAvatar"><span id="welcomeInitials">?</span></div>
+      <div class="welcome-text">
+        <h1 class="welcome-greeting" id="welcomeGreeting">שלום</h1>
+        <div class="welcome-meta" id="welcomeMeta"></div>
+      </div>
+    </div>
+    <a href="profile.html" class="btn btn-outline btn-sm">עריכת פרופיל</a>
   </div>
 
   <div class="card">
@@ -70,23 +82,94 @@ function greetingByHour() {
   return 'לילה טוב';
 }
 
-function roleLabel(role) {
-  if (role === 'owner') return 'בעלים';
-  if (role === 'admin') return 'מנהל מערכת';
-  if (role === 'site_user') return 'משתמש אתר';
-  return role || '';
-}
-
 (async function () {
   const auth = await requireAuth('dashboard.html');
   if (!auth) return;
-  const { profile, site } = auth;
+  const { user, profile, site } = auth;
+  const canEditSite = profile.role === 'owner' || profile.role === 'admin';
 
-  const name = profile.full_name || profile.username || profile.email || '';
+  // Welcome
+  const name = profileDisplayName(profile);
   document.getElementById('welcomeGreeting').textContent =
     name ? `${greetingByHour()}, ${name}` : greetingByHour();
-  document.getElementById('welcomeMeta').textContent = roleLabel(profile.role);
-  document.getElementById('welcomeSite').textContent = site?.name ? `אתר: ${site.name}` : '';
+  const metaParts = [];
+  if (profile.job_title) metaParts.push(profile.job_title);
+  metaParts.push(systemRoleLabel(profile.role));
+  document.getElementById('welcomeMeta').textContent = metaParts.join(' · ');
+  document.getElementById('welcomeInitials').textContent = profileInitials(profile);
+
+  if (profile.avatar_path) {
+    const url = await getStorageUrl(profile.avatar_path);
+    if (url) {
+      const box = document.getElementById('welcomeAvatar');
+      box.innerHTML = `<img src="${url}" alt="">`;
+    }
+  }
+
+  // Site hero
+  document.getElementById('siteHeroTitle').textContent = site?.name || 'אתר';
+  const heroBg = document.getElementById('siteHeroBg');
+  const heroActions = document.getElementById('siteHeroActions');
+
+  async function applyCover(path) {
+    if (!path) {
+      heroBg.style.backgroundImage = '';
+      document.getElementById('siteHero').classList.remove('has-cover');
+      return;
+    }
+    const url = await getStorageUrl(path);
+    if (!url) return;
+    heroBg.style.backgroundImage = `url("${url}")`;
+    document.getElementById('siteHero').classList.add('has-cover');
+  }
+  await applyCover(site.cover_path);
+
+  if (canEditSite) {
+    heroActions.innerHTML = `
+      <label class="btn btn-sm site-cover-btn" style="cursor:pointer;">
+        📷 ${site.cover_path ? 'החלפת תמונת אתר' : 'העלאת תמונת אתר'}
+        <input type="file" id="coverInput" accept="image/*" style="display:none;">
+      </label>
+      ${site.cover_path ? '<button type="button" class="btn btn-sm btn-ghost site-cover-btn" id="removeCoverBtn">הסרה</button>' : ''}
+    `;
+
+    document.getElementById('coverInput')?.addEventListener('change', async e => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      if (file.size > 8 * 1024 * 1024) { toast('הקובץ גדול מ-8MB', 'error'); return; }
+      if (!file.type.startsWith('image/')) { toast('יש לבחור קובץ תמונה', 'error'); return; }
+
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `site-covers/${site.id}/cover_${Date.now()}.${ext}`;
+      toast('מעלה תמונת אתר...');
+      const { error: upErr } = await sb.storage.from('documents').upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) { toast('שגיאה בהעלאה: ' + upErr.message, 'error'); return; }
+
+      if (site.cover_path && site.cover_path !== path) {
+        await sb.storage.from('documents').remove([site.cover_path]).catch(() => {});
+      }
+
+      const { error } = await sb.from('sites').update({ cover_path: path }).eq('id', site.id);
+      if (error) { toast('שגיאה בשמירה: ' + error.message, 'error'); return; }
+      site.cover_path = path;
+      await applyCover(path);
+      toast('תמונת האתר עודכנה', 'success');
+      // refresh action buttons
+      location.reload();
+    });
+
+    document.getElementById('removeCoverBtn')?.addEventListener('click', async () => {
+      if (!confirm('להסיר את תמונת האתר?')) return;
+      if (site.cover_path) await sb.storage.from('documents').remove([site.cover_path]).catch(() => {});
+      const { error } = await sb.from('sites').update({ cover_path: null }).eq('id', site.id);
+      if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+      site.cover_path = null;
+      await applyCover(null);
+      toast('התמונה הוסרה', 'success');
+      location.reload();
+    });
+  }
 
   async function loadAttention() {
     const items = [];
