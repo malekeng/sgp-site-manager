@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>הפרופיל שלי | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">הפרופיל שלי</h1>
+
+  <div class="card profile-card">
+    <div class="profile-avatar-block">
+      <div class="avatar-lg" id="avatarPreview">
+        <span id="avatarInitials">?</span>
+        <img id="avatarImg" alt="" hidden>
+      </div>
+      <div>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+          📷 העלאת תמונה
+          <input type="file" id="avatarInput" accept="image/*" style="display:none;">
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm" id="removeAvatarBtn" hidden>הסרת תמונה</button>
+        <div class="profile-hint">JPG / PNG / WEBP — עד 5MB</div>
+      </div>
+    </div>
+
+    <div id="formMsg" class="msg"></div>
+    <form id="profileForm">
+      <div class="form-grid">
+        <div class="field">
+          <label>שם מלא</label>
+          <input type="text" name="full_name" id="fullName">
+        </div>
+        <div class="field">
+          <label>שם משתמש</label>
+          <input type="text" name="username" id="username" disabled style="opacity:0.7;">
+        </div>
+        <div class="field full">
+          <label>אימייל</label>
+          <input type="email" id="email" disabled style="opacity:0.7;">
+        </div>
+        <div class="field full">
+          <label>תפקיד בשטח</label>
+          <select name="job_title" id="jobTitleSelect">
+            <option value="">בחר תפקיד...</option>
+            <option value="מנהל עבודה">מנהל עבודה</option>
+            <option value="מנהל פרויקט">מנהל פרויקט</option>
+            <option value="מהנדס ביצוע">מהנדס ביצוע</option>
+            <option value="מהנדס קונסטרוקציה">מהנדס קונסטרוקציה</option>
+            <option value="מפקח">מפקח</option>
+            <option value="מודד">מודד</option>
+            <option value="קבלן">קבלן</option>
+            <option value="מהנדס בטיחות">מהנדס בטיחות</option>
+            <option value="אחר">אחר</option>
+          </select>
+          <input type="text" id="jobTitleOther" class="other-input" placeholder="הזינו תפקיד ידני..." style="display:none;margin-top:8px;">
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:18px;">
+        <button type="submit" class="btn btn-primary" id="saveBtn">שמירה</button>
+      </div>
+    </form>
+  </div>
+</main>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('profile.html');
+  if (!auth) return;
+  const { user, profile } = auth;
+
+  const avatarImg = document.getElementById('avatarImg');
+  const avatarInitials = document.getElementById('avatarInitials');
+  const removeBtn = document.getElementById('removeAvatarBtn');
+  const jobSelect = document.getElementById('jobTitleSelect');
+  const jobOther = document.getElementById('jobTitleOther');
+  const formMsg = document.getElementById('formMsg');
+
+  const knownJobs = ['מנהל עבודה','מנהל פרויקט','מהנדס ביצוע','מהנדס קונסטרוקציה','מפקח','מודד','קבלן','מהנדס בטיחות'];
+
+  function initials(p) {
+    const n = (p.full_name || p.username || p.email || '?').trim();
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return n.slice(0, 2).toUpperCase();
+  }
+
+  async function showAvatar(path) {
+    if (!path) {
+      avatarImg.hidden = true;
+      avatarInitials.hidden = false;
+      avatarInitials.textContent = initials(profile);
+      removeBtn.hidden = true;
+      return;
+    }
+    const url = await getStorageUrl(path);
+    if (!url) {
+      avatarImg.hidden = true;
+      avatarInitials.hidden = false;
+      return;
+    }
+    avatarImg.src = url;
+    avatarImg.hidden = false;
+    avatarInitials.hidden = true;
+    removeBtn.hidden = false;
+  }
+
+  // Fill form
+  document.getElementById('fullName').value = profile.full_name || '';
+  document.getElementById('username').value = profile.username || '';
+  document.getElementById('email').value = profile.email || '';
+  avatarInitials.textContent = initials(profile);
+
+  const jt = profile.job_title || '';
+  if (jt && knownJobs.includes(jt)) {
+    jobSelect.value = jt;
+  } else if (jt) {
+    jobSelect.value = 'אחר';
+    jobOther.style.display = 'block';
+    jobOther.value = jt;
+  }
+  await showAvatar(profile.avatar_path);
+
+  jobSelect.addEventListener('change', () => {
+    const isOther = jobSelect.value === 'אחר';
+    jobOther.style.display = isOther ? 'block' : 'none';
+    if (!isOther) jobOther.value = '';
+  });
+
+  document.getElementById('avatarInput').addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast('הקובץ גדול מ-5MB', 'error'); return; }
+    if (!file.type.startsWith('image/')) { toast('יש לבחור קובץ תמונה', 'error'); return; }
+
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `avatars/${user.id}/avatar_${Date.now()}.${ext}`;
+
+    toast('מעלה תמונה...');
+    const { error: upErr } = await sb.storage.from('documents').upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) { toast('שגיאה בהעלאה: ' + upErr.message, 'error'); return; }
+
+    // delete old if different
+    if (profile.avatar_path && profile.avatar_path !== path) {
+      await sb.storage.from('documents').remove([profile.avatar_path]).catch(() => {});
+    }
+
+    const { error } = await sb.from('profiles').update({ avatar_path: path }).eq('id', user.id);
+    if (error) { toast('שגיאה בשמירה: ' + error.message, 'error'); return; }
+    profile.avatar_path = path;
+    await showAvatar(path);
+    toast('התמונה עודכנה', 'success');
+  });
+
+  removeBtn.addEventListener('click', async () => {
+    if (!confirm('להסיר את תמונת הפרופיל?')) return;
+    if (profile.avatar_path) {
+      await sb.storage.from('documents').remove([profile.avatar_path]).catch(() => {});
+    }
+    const { error } = await sb.from('profiles').update({ avatar_path: null }).eq('id', user.id);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    profile.avatar_path = null;
+    await showAvatar(null);
+    toast('התמונה הוסרה', 'success');
+  });
+
+  document.getElementById('profileForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    hideMsg(formMsg);
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+
+    let jobTitle = jobSelect.value;
+    if (jobTitle === 'אחר') jobTitle = (jobOther.value || '').trim();
+    if (jobTitle === '') jobTitle = null;
+
+    const payload = {
+      full_name: document.getElementById('fullName').value.trim() || null,
+      job_title: jobTitle,
+    };
+
+    const { error } = await sb.from('profiles').update(payload).eq('id', user.id);
+    btn.disabled = false;
+    if (error) { showMsg(formMsg, 'שגיאה: ' + error.message, 'error'); return; }
+
+    profile.full_name = payload.full_name;
+    profile.job_title = payload.job_title;
+    avatarInitials.textContent = initials(profile);
+    toast('הפרופיל נשמר', 'success');
+  });
+})();
+</script>
+</body>
+</html>
