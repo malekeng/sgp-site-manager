@@ -655,7 +655,6 @@ tbody tr:hover {
   letter-spacing: 0.2px;
 }
 
-/* Password toggle */
 .password-wrap { position: relative; }
 .password-wrap input { padding-left: 44px; }
 .password-toggle {
@@ -679,7 +678,6 @@ tbody tr:hover {
   color: var(--navy);
 }
 
-/* Step dots */
 .step-dots {
   display: flex;
   justify-content: center;
@@ -777,4 +775,88 @@ footer.app-footer {
   font-size: 12px;
   padding: 20px;
   margin-right: 236px;
+}
+
+/* ===== Welcome block (dashboard) ===== */
+.welcome-block {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.welcome-greeting {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -0.5px;
+  line-height: 1.25;
+}
+.welcome-meta {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--steel);
+}
+.welcome-site {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  background: var(--green-soft);
+  border: 1px solid rgba(0, 214, 143, 0.25);
+  border-radius: 999px;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+
+/* ===== Upload progress ===== */
+.upload-progress {
+  margin-top: 12px;
+}
+.upload-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.upload-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--green) 0%, var(--green-deep) 100%);
+  transition: width 0.25s ease;
+}
+.upload-progress-text {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--steel);
+}
+
+/* ===== Audit meta ===== */
+.record-audit {
+  margin: -8px 0 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--steel);
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 6px 12px;
+  display: inline-block;
+}
+.audit-cell {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.audit-who {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.audit-when {
+  font-size: 11px;
+  color: var(--steel);
+  margin-top: 2px;
 }
