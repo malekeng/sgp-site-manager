@@ -1,22 +1,52 @@
 // ===== Generic CRUD page engine =====
-// config = {
-//   table, activePage, title,
-//   dateField,
-//   columns: [{key,label,type:'text'|'number'|'date'|'boolean',digits}],
-//   formFields: [{key,label,type,required,options,step,full,numeric}],
-//   orderBy: {column, ascending}
-// }
 async function initCrudPage(config) {
   const auth = await requireAuth(config.activePage);
   if (!auth) return;
   const { user, profile, site } = auth;
 
-  const state = { rows: [], docCounts: {}, editingId: null, filters: {} };
+  const state = { rows: [], docCounts: {}, editingId: null, filters: {}, profileNames: {} };
 
   document.getElementById('pageTitle').textContent = config.title;
 
   const attachHost = document.getElementById('attachHost');
   const attachWidget = attachHost ? createAttachWidget(attachHost) : null;
+
+  function displayName(p) {
+    if (!p) return 'משתמש';
+    return p.full_name || p.username || p.email || 'משתמש';
+  }
+
+  function fmtDateTime(d) {
+    if (!d) return '—';
+    const dt = new Date(d);
+    if (isNaN(dt)) return d;
+    return dt.toLocaleString('he-IL', {
+      day: 'numeric', month: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  async function resolveProfileNames(rows) {
+    const ids = new Set();
+    rows.forEach(r => {
+      if (r.updated_by) ids.add(r.updated_by);
+      if (r.created_by) ids.add(r.created_by);
+    });
+    const missing = [...ids].filter(id => !state.profileNames[id]);
+    if (!missing.length) return;
+    const { data } = await sb.from('profiles').select('id, full_name, username, email').in('id', missing);
+    (data || []).forEach(p => { state.profileNames[p.id] = displayName(p); });
+  }
+
+  function auditLine(row) {
+    if (!row) return '';
+    const whoId = row.updated_by || row.created_by;
+    const when = row.updated_at || row.created_at;
+    if (!whoId && !when) return '';
+    const who = whoId ? (state.profileNames[whoId] || 'משתמש') : '—';
+    const label = row.updated_by ? 'עודכן ע\"י' : 'נוצר ע\"י';
+    return `${label} ${who} · ${fmtDateTime(when)}`;
+  }
 
   async function loadData() {
     let q = sb.from(config.table).select('*').eq('site_id', site.id);
@@ -28,6 +58,8 @@ async function initCrudPage(config) {
     const { data, error } = await q;
     if (error) { toast('שגיאה בטעינת נתונים: ' + error.message, 'error'); return; }
     state.rows = data || [];
+
+    await resolveProfileNames(state.rows);
 
     if (state.rows.length) {
       const ids = state.rows.map(r => r.id);
@@ -52,7 +84,7 @@ async function initCrudPage(config) {
     const host = document.getElementById('statsRow');
     if (!host) return;
     const lastUpdated = state.rows.length
-      ? fmtDate(state.rows.map(r => r.created_at).sort().slice(-1)[0])
+      ? fmtDate(state.rows.map(r => r.updated_at || r.created_at).sort().slice(-1)[0])
       : '—';
     const icon = config.icon || '📋';
     host.innerHTML = `
@@ -64,10 +96,10 @@ async function initCrudPage(config) {
   function renderTable() {
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
-    thead.innerHTML = '<tr>' + config.columns.map(c => `<th>${c.label}</th>`).join('') + '<th>מסמכים</th><th></th></tr>';
+    thead.innerHTML = '<tr>' + config.columns.map(c => `<th>${c.label}</th>`).join('') + '<th>מסמכים</th><th>עודכן</th><th></th></tr>';
 
     if (!state.rows.length) {
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="${config.columns.length + 2}">אין רשומות עדיין</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="${config.columns.length + 3}">אין רשומות עדיין</td></tr>`;
       return;
     }
 
@@ -86,11 +118,17 @@ async function initCrudPage(config) {
       const docCount = state.docCounts[row.id] || 0;
       const docCell = docCount
         ? `<td><span class="doc-badge" data-docs="${row.id}">📎 ${docCount}</span></td>`
-        : `<td style="color:var(--text-mute);">—</td>`;
+        : `<td style="color:var(--steel-light);">—</td>`;
+      const whoId = row.updated_by || row.created_by;
+      const when = row.updated_at || row.created_at;
+      const auditCell = whoId || when
+        ? `<td class="audit-cell"><div class="audit-who">${whoId ? (state.profileNames[whoId] || 'משתמש') : '—'}</div><div class="audit-when">${fmtDateTime(when)}</div></td>`
+        : `<td style="color:var(--steel-light);">—</td>`;
       return `
         <tr>
           ${cells}
           ${docCell}
+          ${auditCell}
           <td class="row-actions">
             <button class="icon-btn" data-edit="${row.id}" title="עריכה">✏️</button>
             <button class="icon-btn danger" data-del="${row.id}" title="מחיקה">🗑️</button>
@@ -108,7 +146,7 @@ async function initCrudPage(config) {
   }
 
   function isImageFile(name) {
-    return /\\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
+    return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
   }
 
   function openLightbox(url) {
@@ -148,7 +186,6 @@ async function initCrudPage(config) {
     backdrop.querySelector('#closeDocsPopup').addEventListener('click', () => backdrop.remove());
   }
 
-  // ===== Modal / form =====
   const modalBackdrop = document.getElementById('modalBackdrop');
   const formEl = document.getElementById('recordForm');
   const modalTitle = document.getElementById('modalTitle');
@@ -197,7 +234,6 @@ async function initCrudPage(config) {
         <input type="${f.type}" name="${f.key}" ${f.step ? `step="${f.step}"` : ''} ${f.required ? 'required' : ''}></div>`;
     }).join('');
 
-    // Wire "אחר" free-text toggles
     grid.querySelectorAll('select[data-has-other]').forEach(sel => {
       const otherInput = sel.parentElement.querySelector('.other-input');
       const sync = () => {
@@ -215,6 +251,17 @@ async function initCrudPage(config) {
     });
   }
 
+  function ensureAuditEl() {
+    let el = document.getElementById('recordAudit');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'recordAudit';
+      el.className = 'record-audit';
+      modalTitle.insertAdjacentElement('afterend', el);
+    }
+    return el;
+  }
+
   function openModal(id) {
     state.editingId = id || null;
     modalTitle.textContent = id ? 'עריכת רשומה' : 'הוספת רשומה';
@@ -222,15 +269,18 @@ async function initCrudPage(config) {
     hideMsg(formMsg);
     if (attachWidget) attachWidget.clear();
 
-    // Reset other-inputs visibility
     formEl.querySelectorAll('.other-input').forEach(inp => {
       inp.style.display = 'none';
       inp.required = false;
       inp.value = '';
     });
 
+    const auditEl = ensureAuditEl();
     if (id) {
       const row = state.rows.find(r => r.id === id);
+      auditEl.textContent = auditLine(row);
+      auditEl.hidden = !auditEl.textContent;
+
       config.formFields.forEach(f => {
         const el = formEl.querySelector(`[name="${f.key}"]`);
         if (!el) return;
@@ -245,7 +295,6 @@ async function initCrudPage(config) {
           if (match && match !== 'אחר') {
             el.value = match;
           } else {
-            // value is custom → select "אחר" and fill free text
             el.value = 'אחר';
             const otherInput = el.parentElement.querySelector('.other-input');
             if (otherInput) {
@@ -259,6 +308,9 @@ async function initCrudPage(config) {
 
         el.value = val;
       });
+    } else {
+      auditEl.hidden = true;
+      auditEl.textContent = '';
     }
     modalBackdrop.classList.add('open');
   }
@@ -279,7 +331,6 @@ async function initCrudPage(config) {
       let v = fd.get(f.key);
       if (f.type === 'boolean') { payload[f.key] = (v === 'כן'); return; }
 
-      // Resolve "אחר" free-text
       if (f.type === 'select' && v === 'אחר') {
         v = fd.get(f.key + '__other');
         if (!v || !String(v).trim()) {
@@ -293,6 +344,10 @@ async function initCrudPage(config) {
       if (v !== null && (f.type === 'number' || f.numeric)) v = Number(v);
       payload[f.key] = v;
     });
+
+    // Audit fields
+    payload.updated_by = user.id;
+    payload.updated_at = new Date().toISOString();
 
     const submitBtn = formEl.querySelector('[type=submit]');
     submitBtn.disabled = true;
@@ -336,7 +391,6 @@ async function initCrudPage(config) {
     await loadData();
   }
 
-  // ===== Filter panel =====
   const filterToggle = document.getElementById('filterToggle');
   const filterPanel = document.getElementById('filterPanel');
   filterToggle?.addEventListener('click', () => filterPanel.classList.toggle('open'));
