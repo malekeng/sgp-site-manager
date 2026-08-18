@@ -1,5 +1,14 @@
 // ===== Shared app shell: auth guard, header, nav, toast, helpers =====
 
+(function ensureProfileStyles() {
+  if (document.querySelector('link[data-sgp-profile-ui]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'css/profile-ui.css';
+  link.setAttribute('data-sgp-profile-ui', '1');
+  document.head.appendChild(link);
+})();
+
 const NAV_ITEMS = [
   { href: 'dashboard.html', label: 'לוח בקרה', icon: '🏠' },
   { href: 'concrete.html',  label: 'יומני יציקות בטון', icon: '🧱' },
@@ -90,7 +99,6 @@ async function getStorageUrl(path) {
   }
 }
 
-// Renders the shared sidebar + nav into #app-header, wires up mobile drawer & logout.
 async function renderHeader(activePage, profile, site) {
   const host = document.getElementById('app-header');
   if (!host) return;
@@ -135,7 +143,6 @@ async function renderHeader(activePage, profile, site) {
     </div>
   `;
 
-  // Load avatar into sidebar chip (non-blocking)
   if (profile?.avatar_path) {
     getStorageUrl(profile.avatar_path).then(url => {
       if (!url) return;
@@ -145,7 +152,6 @@ async function renderHeader(activePage, profile, site) {
     });
   }
 
-  // Mobile drawer toggle + backdrop must live outside #app-header
   let toggle = document.getElementById('menuToggle');
   if (!toggle) {
     toggle = document.createElement('button');
