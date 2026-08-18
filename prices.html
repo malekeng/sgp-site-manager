@@ -95,7 +95,6 @@ initCrudPage({
     { key: 'unit_price', label: 'מחיר יחידה', type: 'number', digits: 2 },
     { key: 'unit', label: 'יחידה', type: 'text' },
     { key: 'quote_date', label: 'תאריך הצעה', type: 'date' },
-    { key: 'exceptions', label: 'חריגים', type: 'text' },
     { key: 'notes', label: 'הערות', type: 'text' },
   ],
   formFields: [
@@ -107,7 +106,6 @@ initCrudPage({
     { key: 'unit', label: 'יחידה', type: 'select', required: true,
       options: ['טון', 'מ\"ק', 'מ\"ר', 'מטר', 'יח\'', 'ק\"ג', 'שק'] },
     { key: 'quote_date', label: 'תאריך הצעה', type: 'date' },
-    { key: 'exceptions', label: 'חריגים', type: 'textarea', full: true },
     { key: 'notes', label: 'הערות', type: 'textarea', full: true },
   ],
 });
@@ -178,6 +176,7 @@ async function handleOcrFile(file) {
     const parsed = parseQuoteText(data.text);
     const form = document.getElementById('recordForm');
     if (parsed.material) form.querySelector('[name=material]').value = parsed.material;
+    if (parsed.supplier) form.querySelector('[name=unit_price]') && (form.querySelector('[name=unit_price]').value = parsed.unit_price);
     if (parsed.supplier) form.querySelector('[name=supplier]').value = parsed.supplier;
     if (parsed.unit_price) form.querySelector('[name=unit_price]').value = parsed.unit_price;
     if (parsed.unit) form.querySelector('[name=unit]').value = parsed.unit;
