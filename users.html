@@ -28,9 +28,9 @@
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>שם מלא</th><th>שם משתמש</th><th>אימייל</th><th>תפקיד</th><th>אתר</th><th></th></tr></thead>
+        <thead><tr><th>שם מלא</th><th>שם משתמש</th><th>אימייל</th><th>תפקיד מערכת</th><th>תפקיד בשטח</th><th>אתר</th><th></th></tr></thead>
         <tbody id="usersBody">
-          <tr class="empty-row"><td colspan="6"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+          <tr class="empty-row"><td colspan="7"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -96,11 +96,25 @@
         <div class="field"><label>שם משתמש *</label><input type="text" name="username" required></div>
         <div class="field"><label>שם מלא</label><input type="text" name="full_name"></div>
         <div class="field">
-          <label>תפקיד *</label>
+          <label>תפקיד מערכת *</label>
           <select name="role" required id="editRoleSelect">
             <option value="site_user">משתמש אתר</option>
             <option value="admin">מנהל</option>
             <option value="owner">בעלים</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label>תפקיד בשטח</label>
+          <select name="job_title" id="editJobTitle">
+            <option value="">— ללא —</option>
+            <option value="מנהל עבודה">מנהל עבודה</option>
+            <option value="מנהל פרויקט">מנהל פרויקט</option>
+            <option value="מהנדס ביצוע">מהנדס ביצוע</option>
+            <option value="מהנדס קונסטרוקציה">מהנדס קונסטרוקציה</option>
+            <option value="מפקח">מפקח</option>
+            <option value="מודד">מודד</option>
+            <option value="קבלן">קבלן</option>
+            <option value="מהנדס בטיחות">מהנדס בטיחות</option>
           </select>
         </div>
         <div class="field full" id="editSiteField">
@@ -149,13 +163,12 @@
   let usersCache = [];
   let sitesCache = [];
 
-  // ===== Users =====
   async function loadUsers() {
     const { data, error } = await sb.from('profiles')
       .select('*, sites!profiles_site_id_fkey(name), profile_sites(site_id, sites(name))')
       .order('created_at', { ascending: true });
     const body = document.getElementById('usersBody');
-    if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="6">שגיאה: ${error.message}</td></tr>`; return; }
+    if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="7">שגיאה: ${error.message}</td></tr>`; return; }
     usersCache = data || [];
     body.innerHTML = usersCache.map(u => {
       const siteNames = u.role === 'owner'
@@ -167,6 +180,7 @@
         <td>${u.username}</td>
         <td>${u.email}</td>
         <td>${roleLabels[u.role] || u.role}</td>
+        <td>${u.job_title || '—'}</td>
         <td>${siteNames}</td>
         <td class="row-actions">
           ${isOwner ? `
@@ -198,7 +212,6 @@
     });
   }
 
-  // ===== Invite =====
   let approvingRequestId = null;
 
   document.getElementById('roleSelect').addEventListener('change', e => {
@@ -280,7 +293,6 @@
     }
   });
 
-  // ===== Edit user =====
   document.getElementById('editRoleSelect').addEventListener('change', e => {
     document.getElementById('editSiteField').style.display = e.target.value === 'owner' ? 'none' : 'flex';
   });
@@ -296,6 +308,7 @@
     form.username.value = u.username || '';
     form.full_name.value = u.full_name || '';
     form.role.value = u.role;
+    form.job_title.value = u.job_title || '';
     const selectedIds = (u.profile_sites || []).map(ps => ps.site_id);
     renderSiteChecks('editSiteCheckList', selectedIds);
     document.getElementById('editSiteField').style.display = u.role === 'owner' ? 'none' : 'flex';
@@ -327,13 +340,13 @@
       username: fd.get('username'),
       full_name: fd.get('full_name') || fd.get('username'),
       role,
-      site_id: role === 'owner' ? null : (siteIds[0] || null), // primary/display site
+      job_title: fd.get('job_title') || null,
+      site_id: role === 'owner' ? null : (siteIds[0] || null),
     };
 
     const { error } = await sb.from('profiles').update(payload).eq('id', id);
     if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); btn.disabled = false; return; }
 
-    // Replace full multi-site membership
     await sb.from('profile_sites').delete().eq('profile_id', id);
     if (role !== 'owner' && siteIds.length) {
       const { error: sitesErr } = await sb.from('profile_sites').insert(siteIds.map(site_id => ({ profile_id: id, site_id })));
@@ -346,7 +359,6 @@
     loadUsers();
   });
 
-  // ===== Resend invite =====
   async function resendInvite(id) {
     const u = usersCache.find(x => x.id === id);
     if (!u) return;
@@ -358,7 +370,6 @@
     toast('נשלח קישור למשתמש', 'success');
   }
 
-  // ===== Delete user =====
   async function deleteUser(id) {
     const u = usersCache.find(x => x.id === id);
     if (!u) return;
@@ -383,7 +394,6 @@
     }
   }
 
-  // ===== Sites =====
   async function loadSites() {
     const { data, error } = await sb.from('sites').select('*').order('name');
     if (error) { document.getElementById('sitesBody').innerHTML = `<tr class="empty-row"><td>שגיאה: ${error.message}</td></tr>`; return; }
@@ -418,7 +428,6 @@
     await loadSites();
   });
 
-  // ===== Signup requests (pending owner/admin approval) =====
   async function loadRequests() {
     const host = document.getElementById('requestsList');
     const { data, error } = await sb.from('signup_requests')
