@@ -14,7 +14,13 @@
 <header class="app-header" id="app-header"></header>
 
 <main class="page">
-  <h1 class="page-title">לוח בקרה — <span id="siteName"></span></h1>
+  <div class="welcome-block" id="welcomeBlock">
+    <div class="welcome-text">
+      <h1 class="welcome-greeting" id="welcomeGreeting">שלום</h1>
+      <div class="welcome-meta" id="welcomeMeta"></div>
+    </div>
+    <div class="welcome-site" id="welcomeSite"></div>
+  </div>
 
   <div class="card">
     <div class="card-header"><h2>דורש תשומת לב</h2></div>
@@ -37,6 +43,7 @@
       <a href="concrete.html" class="btn btn-outline" style="justify-content:center;">יומני יציקות בטון</a>
       <a href="rebar.html" class="btn btn-outline" style="justify-content:center;">משלוחי ברזל</a>
       <a href="slabs.html" class="btn btn-outline" style="justify-content:center;">לוח״דים</a>
+      <a href="exceptions.html" class="btn btn-outline" style="justify-content:center;">חריגים</a>
       <a href="quantity.html" class="btn btn-outline" style="justify-content:center;">כתבי כמויות</a>
       <a href="prices.html" class="btn btn-outline" style="justify-content:center;">השוואת מחירים</a>
       <a href="reports.html" class="btn btn-outline" style="justify-content:center;">דוחות</a>
@@ -55,13 +62,32 @@
 <script>
 document.getElementById('year').textContent = new Date().getFullYear();
 
+function greetingByHour() {
+  const h = new Date().getHours();
+  if (h < 12) return 'בוקר טוב';
+  if (h < 17) return 'צהריים טובים';
+  if (h < 21) return 'ערב טוב';
+  return 'לילה טוב';
+}
+
+function roleLabel(role) {
+  if (role === 'owner') return 'בעלים';
+  if (role === 'admin') return 'מנהל מערכת';
+  if (role === 'site_user') return 'משתמש אתר';
+  return role || '';
+}
+
 (async function () {
   const auth = await requireAuth('dashboard.html');
   if (!auth) return;
-  const { site } = auth;
-  document.getElementById('siteName').textContent = site?.name || '';
+  const { profile, site } = auth;
 
-  // ===== "דורש תשומת לב" — actionable follow-ups =====
+  const name = profile.full_name || profile.username || profile.email || '';
+  document.getElementById('welcomeGreeting').textContent =
+    name ? `${greetingByHour()}, ${name}` : greetingByHour();
+  document.getElementById('welcomeMeta').textContent = roleLabel(profile.role);
+  document.getElementById('welcomeSite').textContent = site?.name ? `אתר: ${site.name}` : '';
+
   async function loadAttention() {
     const items = [];
 
@@ -102,7 +128,6 @@ document.getElementById('year').textContent = new Date().getFullYear();
     `).join('')}</div>`;
   }
 
-  // ===== "פעילות אחרונה" =====
   async function loadRecent() {
     const sources = [
       { table: 'concrete_pours', label: 'יציקת בטון', href: 'concrete.html', fmt: r => r.element, dateField: 'pour_date' },
@@ -114,6 +139,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
           return parts.join(' · ');
         }, dateField: 'delivery_date' },
       { table: 'price_quotes', label: 'הצעת מחיר', href: 'prices.html', fmt: r => r.material, dateField: 'quote_date' },
+      { table: 'exceptions', label: 'חריג', href: 'exceptions.html', fmt: r => r.description || r.category, dateField: 'exception_date' },
     ];
 
     const results = await Promise.all(sources.map(s =>
@@ -124,7 +150,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
     results.forEach((res, i) => {
       (res.data || []).forEach(row => merged.push({ ...sources[i], row }));
     });
-    merged.sort((a, b) => new Date(b.row.created_at) - new Date(a.row.created_at));
+    merged.sort((a, b) => new Date(b.row.created_at || 0) - new Date(a.row.created_at || 0));
     merged = merged.slice(0, 8);
 
     const host = document.getElementById('recentList');
@@ -147,6 +173,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
       { key: 'concrete_pours', label: 'יציקות בטון', icon: '🧱' },
       { key: 'rebar_deliveries', label: 'משלוחי ברזל', icon: '🔩' },
       { key: 'prestressed_slabs', label: 'לוח״דים', icon: '🏗️' },
+      { key: 'exceptions', label: 'חריגים', icon: '⚠️' },
       { key: 'quantity_sheets', label: 'גיליונות כמויות', icon: '📐' },
       { key: 'price_quotes', label: 'הצעות מחיר', icon: '💰' },
       { key: 'documents', label: 'מסמכים מצורפים', icon: '📎' },
@@ -164,7 +191,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
   }
 
   function isImageFile(name) {
-    return /\\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
+    return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
   }
   function openLightbox(url) {
     const overlay = document.createElement('div');
