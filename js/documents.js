@@ -17,6 +17,12 @@ function createAttachWidget(container) {
       </div>
       <input type="file" multiple accept="image/*,.pdf,.doc,.docx" style="display:none;">
       <div class="attach-list"></div>
+      <div class="upload-progress" id="uploadProgress" hidden>
+        <div class="upload-progress-track">
+          <div class="upload-progress-fill" id="uploadProgressFill"></div>
+        </div>
+        <div class="upload-progress-text" id="uploadProgressText">מעלה קבצים... 0%</div>
+      </div>
     </div>
   `;
 
@@ -24,6 +30,21 @@ function createAttachWidget(container) {
   const zoneLabel = container.querySelector('#attachZoneLabel');
   const input = container.querySelector('input[type=file]');
   const list = container.querySelector('.attach-list');
+  const progressEl = container.querySelector('#uploadProgress');
+  const progressFill = container.querySelector('#uploadProgressFill');
+  const progressText = container.querySelector('#uploadProgressText');
+
+  function setProgress(pct, label) {
+    progressEl.hidden = false;
+    const p = Math.max(0, Math.min(100, Math.round(pct)));
+    progressFill.style.width = p + '%';
+    progressText.textContent = label || (`מעלה קבצים... ${p}%`);
+  }
+
+  function hideProgress() {
+    progressEl.hidden = true;
+    progressFill.style.width = '0%';
+  }
 
   function render() {
     zoneLabel.textContent = files.length
@@ -58,7 +79,7 @@ function createAttachWidget(container) {
   zone.addEventListener('keydown', e => { if (e.key === 'Enter') input.click(); });
   input.addEventListener('change', () => { addFiles(input.files); input.value = ''; });
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'); });
   zone.addEventListener('drop', e => {
     e.preventDefault();
     zone.classList.remove('dragover');
@@ -67,13 +88,22 @@ function createAttachWidget(container) {
 
   return {
     getFiles: () => files,
-    clear: () => { files = []; render(); },
+    clear: () => { files = []; hideProgress(); render(); },
     async upload({ siteId, table, recordId, userId }) {
-      for (const file of files) {
+      if (!files.length) return;
+      const total = files.length;
+      setProgress(0, `מעלה קובץ 1 מתוך ${total}...`);
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const pctStart = (i / total) * 100;
+        setProgress(pctStart, `מעלה: ${file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name} (${i + 1}/${total})`);
+
         const ext = file.name.split('.').pop();
         const path = `${siteId}/${table}/${recordId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const { error: upErr } = await sb.storage.from('documents').upload(path, file);
         if (upErr) throw upErr;
+
         const { error: dbErr } = await sb.from('documents').insert({
           site_id: siteId,
           doc_type: 'other',
@@ -86,7 +116,13 @@ function createAttachWidget(container) {
           uploaded_by: userId,
         });
         if (dbErr) throw dbErr;
+
+        setProgress(((i + 1) / total) * 100, i + 1 === total ? 'ההעלאה הושלמה' : `הועלה ${i + 1} מתוך ${total}`);
       }
+
+      // brief pause so user sees 100%
+      await new Promise(r => setTimeout(r, 350));
+      hideProgress();
     }
   };
 }
