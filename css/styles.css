@@ -86,6 +86,11 @@ input, select, textarea {
   gap: 3px;
   padding: 16px 12px;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.app-header nav::-webkit-scrollbar {
+  display: none;
 }
 
 .app-header nav a {
