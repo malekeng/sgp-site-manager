@@ -289,11 +289,30 @@ tbody tr:hover { background: linear-gradient(90deg, rgba(0,214,143,0.04) 0%, tra
 
 .site-check-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .site-check {
-  display: flex; align-items: center; gap: 6px;
+  position: relative;
+  display: flex; align-items: center;
   background: var(--bg); border: 2px solid var(--border); border-radius: 999px;
-  padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;
+  padding: 7px 14px 7px 34px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;
+  white-space: nowrap;
 }
-.site-check input { accent-color: var(--green); width: 15px; height: 15px; cursor: pointer; }
+/* Native checkbox kept for form semantics/FormData, but visually hidden -- iOS Safari
+   doesn't respect width/height on checkboxes styled via accent-color, which broke the pill shape. */
+.site-check input {
+  position: absolute; opacity: 0; width: 0; height: 0; margin: 0;
+}
+.site-check::before {
+  content: '';
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; border-radius: 6px;
+  border: 2px solid var(--steel-light); background: var(--sheet);
+  transition: background 0.15s, border-color 0.15s;
+}
+.site-check.checked::before { background: var(--green); border-color: var(--green); }
+.site-check.checked::after {
+  content: '✓';
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: #04231a; font-size: 11px; font-weight: 800; line-height: 1;
+}
 .site-check.checked { border-color: var(--green); background: rgba(0,214,143,0.1); }
 
 .doc-badge {
