@@ -54,6 +54,7 @@ async function initCrudPage(config) {
     if (state.filters.to) q = q.lte(config.dateField, state.filters.to);
     q = q.order((config.orderBy && config.orderBy.column) || config.dateField, {
       ascending: (config.orderBy && config.orderBy.ascending) ?? false,
+      nullsFirst: false,
     });
     const { data, error } = await q;
     if (error) { toast('שגיאה בטעינת נתונים: ' + error.message, 'error'); return; }
@@ -345,7 +346,6 @@ async function initCrudPage(config) {
       payload[f.key] = v;
     });
 
-    // Audit fields
     payload.updated_by = user.id;
     payload.updated_at = new Date().toISOString();
 
