@@ -79,7 +79,7 @@ function createAttachWidget(container) {
   zone.addEventListener('keydown', e => { if (e.key === 'Enter') input.click(); });
   input.addEventListener('change', () => { addFiles(input.files); input.value = ''; });
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
   zone.addEventListener('drop', e => {
     e.preventDefault();
     zone.classList.remove('dragover');
@@ -120,14 +120,12 @@ function createAttachWidget(container) {
         setProgress(((i + 1) / total) * 100, i + 1 === total ? 'ההעלאה הושלמה' : `הועלה ${i + 1} מתוך ${total}`);
       }
 
-      // brief pause so user sees 100%
       await new Promise(r => setTimeout(r, 350));
       hideProgress();
     }
   };
 }
 
-// Loads & renders attached documents for a given record (read-only badge + list in a popover/modal).
 async function loadRecordDocuments(table, recordId) {
   const { data, error } = await sb
     .from('documents')
