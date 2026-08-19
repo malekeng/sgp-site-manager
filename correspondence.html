@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>תכתובת פיקוח | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+.dir-badge { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; padding:3px 9px; border-radius:999px; }
+.dir-badge.outgoing { background:rgba(0,214,143,0.14); color:var(--green-deep); }
+.dir-badge.incoming { background:rgba(61,158,255,0.14); color:#1a6fc4; }
+</style>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">תכתובת פיקוח</h1>
+
+  <div class="stats-row" id="statsRow"></div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>יומן תכתובת</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="addBtn">+ רישום תכתובת</button>
+        <button class="btn btn-outline" id="filterToggle">סינון</button>
+        <button class="btn btn-outline" id="exportRangeBtn">📄 ייצוא PDF לטווח</button>
+      </div>
+    </div>
+
+    <div class="filter-panel" id="filterPanel">
+      <div class="filter-field"><label>מתאריך</label><input type="date" id="filterFrom"></div>
+      <div class="filter-field"><label>עד תאריך</label><input type="date" id="filterTo"></div>
+      <div class="filter-field">
+        <label>כיוון</label>
+        <select id="filterDirection">
+          <option value="">הכל</option>
+          <option value="outgoing">יוצא אל הפיקוח</option>
+          <option value="incoming">נכנס מהפיקוח</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-sm" id="filterApply">החל סינון</button>
+      <button class="btn btn-ghost btn-sm" id="filterClear">איפוס</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>תאריך</th><th>כיוון</th><th>נושא</th><th>קטגוריה</th><th>קשור ל</th><th>מסמכים</th><th></th></tr></thead>
+        <tbody id="tableBody">
+          <tr class="empty-row"><td colspan="7"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Add/edit modal -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 id="modalTitle">רישום תכתובת</h3>
+    <div id="formMsg" class="msg"></div>
+    <form id="recordForm">
+      <div class="form-grid">
+        <div class="field"><label>תאריך *</label><input type="date" name="entry_date" required></div>
+        <div class="field">
+          <label>כיוון *</label>
+          <select name="direction" required>
+            <option value="outgoing">יוצא אל הפיקוח</option>
+            <option value="incoming">נכנס מהפיקוח</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>קטגוריה</label>
+          <select name="category">
+            <option value="">בחר...</option>
+            <option value="בקשת אישור">בקשת אישור</option>
+            <option value="הערת בטיחות">הערת בטיחות</option>
+            <option value="עדכון סטטוס">עדכון סטטוס</option>
+            <option value="הנחיה">הנחיה</option>
+            <option value="אחר">אחר</option>
+          </select>
+        </div>
+        <div class="field full"><label>נושא *</label><input type="text" name="subject" required></div>
+
+        <div class="field">
+          <label>קישור לרשומה (אופציונלי)</label>
+          <select id="linkedTableSelect">
+            <option value="">ללא קישור</option>
+            <option value="concrete_pours">יציקת בטון</option>
+            <option value="rebar_deliveries">משלוח ברזל</option>
+            <option value="prestressed_slabs">לוח"ד</option>
+            <option value="exceptions">חריג</option>
+          </select>
+        </div>
+        <div class="field" id="linkedRecordField" style="display:none;">
+          <label>רשומה</label>
+          <select id="linkedRecordSelect"><option value="">טוען...</option></select>
+        </div>
+
+        <div class="field full"><label>תוכן ההודעה</label><textarea name="body" rows="4"></textarea></div>
+      </div>
+      <div id="attachHost"></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">שמירה</button>
+        <button type="button" class="btn btn-outline" id="cancelBtn">ביטול</button>
+      </div>
+    </form>
+    <button class="icon-btn" id="closeModalBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script src="js/documents.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('correspondence.html');
+  if (!auth) return;
+  const { user, site } = auth;
+
+  const LINKED_TABLE_LABELS = {
+    concrete_pours: 'יציקת בטון',
+    rebar_deliveries: 'משלוח ברזל',
+    prestressed_slabs: 'לוח"ד',
+    exceptions: 'חריג',
+  };
+  const LINKED_TABLE_FETCH = {
+    concrete_pours: { dateField: 'pour_date', labelFn: r => `${r.pour_date || ''} · ${r.element || ''}` },
+    rebar_deliveries: { dateField: 'delivery_date', labelFn: r => `${r.delivery_date || ''} · ${r.supplier || ''}` },
+    prestressed_slabs: { dateField: 'delivery_date', labelFn: r => `${r.delivery_date || ''} · ${r.slab_id || r.supplier || ''}` },
+    exceptions: { dateField: 'exception_date', labelFn: r => `${r.exception_date || ''} · ${r.description ? r.description.slice(0, 30) : ''}` },
+  };
+
+  const state = { rows: [], docCounts: {}, editingId: null, filters: {} };
+  const attachHost = document.getElementById('attachHost');
+  const attachWidget = createAttachWidget(attachHost);
+
+  async function loadData() {
+    let q = sb.from('correspondence').select('*').eq('site_id', site.id);
+    if (state.filters.from) q = q.gte('entry_date', state.filters.from);
+    if (state.filters.to) q = q.lte('entry_date', state.filters.to);
+    if (state.filters.direction) q = q.eq('direction', state.filters.direction);
+    q = q.order('entry_date', { ascending: false });
+    const { data, error } = await q;
+    if (error) { toast('שגיאה בטעינת נתונים: ' + error.message, 'error'); return; }
+    state.rows = data || [];
+
+    if (state.rows.length) {
+      const ids = state.rows.map(r => r.id);
+      const { data: docs } = await sb.from('documents').select('linked_record_id')
+        .eq('linked_table', 'correspondence').in('linked_record_id', ids);
+      state.docCounts = {};
+      (docs || []).forEach(d => { state.docCounts[d.linked_record_id] = (state.docCounts[d.linked_record_id] || 0) + 1; });
+    } else {
+      state.docCounts = {};
+    }
+
+    renderStats();
+    renderTable();
+  }
+
+  function renderStats() {
+    const host = document.getElementById('statsRow');
+    const outgoing = state.rows.filter(r => r.direction === 'outgoing').length;
+    const incoming = state.rows.filter(r => r.direction === 'incoming').length;
+    host.innerHTML = `
+      <div class="stat-card"><div class="label">📋 סה"כ רשומות</div><div class="value">${state.rows.length}</div></div>
+      <div class="stat-card"><div class="label">➡️ יוצא אל הפיקוח</div><div class="value">${outgoing}</div></div>
+      <div class="stat-card"><div class="label">⬅️ נכנס מהפיקוח</div><div class="value">${incoming}</div></div>
+    `;
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('tableBody');
+    if (!state.rows.length) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="7">אין רשומות עדיין</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = state.rows.map(row => {
+      const dirLabel = row.direction === 'outgoing' ? 'יוצא' : 'נכנס';
+      const linkedLabel = row.linked_table ? (LINKED_TABLE_LABELS[row.linked_table] || row.linked_table) : '—';
+      const docCount = state.docCounts[row.id] || 0;
+      const docCell = docCount ? `<span class="doc-badge" data-docs="${row.id}">📎 ${docCount}</span>` : '—';
+      return `
+        <tr>
+          <td>${fmtDate(row.entry_date)}</td>
+          <td><span class="dir-badge ${row.direction}">${dirLabel}</span></td>
+          <td>${row.subject}</td>
+          <td>${row.category || '—'}</td>
+          <td>${linkedLabel}</td>
+          <td>${docCell}</td>
+          <td class="row-actions">
+            <button class="icon-btn" data-edit="${row.id}" title="עריכה">✏️</button>
+            <button class="icon-btn" data-pdf="${row.id}" title="PDF">📄</button>
+            <button class="icon-btn" data-mail="${row.id}" title="פתיחת מייל">✉️</button>
+            <button class="icon-btn danger" data-del="${row.id}" title="מחיקה">🗑️</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    tbody.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openModal(b.dataset.edit)));
+    tbody.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deleteRow(b.dataset.del)));
+    tbody.querySelectorAll('[data-pdf]').forEach(b => b.addEventListener('click', () => exportEntryPdf(b.dataset.pdf)));
+    tbody.querySelectorAll('[data-mail]').forEach(b => b.addEventListener('click', () => openMail(b.dataset.mail)));
+    tbody.querySelectorAll('[data-docs]').forEach(b => b.addEventListener('click', () => showDocsPopup(b.dataset.docs)));
+  }
+
+  function isImageFile(name) { return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || ''); }
+  function openLightbox(url) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(6,15,53,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
+    overlay.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:8px;">`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
+
+  async function showDocsPopup(recordId) {
+    const docs = await loadRecordDocuments('correspondence', recordId);
+    if (!docs.length) return;
+    const resolved = await Promise.all(docs.map(async d => ({ ...d, url: await getDocumentUrl(d.file_path) })));
+    const lines = resolved.map((d, i) => {
+      if (!d.url) return `<div class="attach-item"><span>${d.file_name}</span></div>`;
+      if (isImageFile(d.file_name)) {
+        return `<div class="attach-item" data-lightbox="${i}" style="cursor:pointer;"><span>${d.file_name}</span><span class="btn btn-sm btn-outline">הצגה</span></div>`;
+      }
+      return `<div class="attach-item"><span>${d.file_name}</span><a href="${d.url}" class="btn btn-sm btn-outline">פתיחה</a></div>`;
+    });
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop open';
+    backdrop.innerHTML = `<div class="modal"><h3>מסמכים מצורפים</h3><div class="attach-list">${lines.join('')}</div>
+      <div class="modal-actions"><button class="btn btn-outline" id="closeDocsPopup">סגירה</button></div></div>`;
+    document.body.appendChild(backdrop);
+    backdrop.querySelectorAll('[data-lightbox]').forEach(el => el.addEventListener('click', () => openLightbox(resolved[Number(el.dataset.lightbox)].url)));
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+    backdrop.querySelector('#closeDocsPopup').addEventListener('click', () => backdrop.remove());
+  }
+
+  // ===== Linked record picker =====
+  const linkedTableSelect = document.getElementById('linkedTableSelect');
+  const linkedRecordField = document.getElementById('linkedRecordField');
+  const linkedRecordSelect = document.getElementById('linkedRecordSelect');
+
+  linkedTableSelect.addEventListener('change', async () => {
+    const table = linkedTableSelect.value;
+    if (!table) { linkedRecordField.style.display = 'none'; return; }
+    linkedRecordField.style.display = 'flex';
+    linkedRecordSelect.innerHTML = '<option value="">טוען...</option>';
+    const cfg = LINKED_TABLE_FETCH[table];
+    const { data, error } = await sb.from(table).select('*').eq('site_id', site.id)
+      .order(cfg.dateField, { ascending: false }).limit(40);
+    if (error) { linkedRecordSelect.innerHTML = '<option value="">שגיאה בטעינה</option>'; return; }
+    linkedRecordSelect.innerHTML = '<option value="">בחר רשומה...</option>' +
+      (data || []).map(r => `<option value="${r.id}">${cfg.labelFn(r)}</option>`).join('');
+  });
+
+  // ===== Add / edit modal =====
+  function openModal(id) {
+    state.editingId = id || null;
+    document.getElementById('modalTitle').textContent = id ? 'עריכת תכתובת' : 'רישום תכתובת';
+    document.getElementById('recordForm').reset();
+    hideMsg(document.getElementById('formMsg'));
+    attachWidget.clear();
+    linkedTableSelect.value = '';
+    linkedRecordField.style.display = 'none';
+    document.getElementById('recordForm').entry_date.value = new Date().toISOString().slice(0, 10);
+
+    if (id) {
+      const row = state.rows.find(r => r.id === id);
+      const form = document.getElementById('recordForm');
+      form.entry_date.value = row.entry_date || '';
+      form.direction.value = row.direction || 'outgoing';
+      form.category.value = row.category || '';
+      form.subject.value = row.subject || '';
+      form.body.value = row.body || '';
+      if (row.linked_table) {
+        linkedTableSelect.value = row.linked_table;
+        linkedTableSelect.dispatchEvent(new Event('change'));
+        setTimeout(() => { linkedRecordSelect.value = row.linked_record_id || ''; }, 400);
+      }
+    }
+    document.getElementById('modalBackdrop').classList.add('open');
+  }
+  function closeModal() { document.getElementById('modalBackdrop').classList.remove('open'); }
+
+  document.getElementById('addBtn').addEventListener('click', () => openModal(null));
+  document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+  document.getElementById('cancelBtn').addEventListener('click', closeModal);
+  document.getElementById('modalBackdrop').addEventListener('click', e => { if (e.target.id === 'modalBackdrop') closeModal(); });
+
+  document.getElementById('recordForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('formMsg');
+    hideMsg(msgEl);
+    const fd = new FormData(e.target);
+    const payload = {
+      site_id: site.id,
+      entry_date: fd.get('entry_date'),
+      direction: fd.get('direction'),
+      category: fd.get('category') || null,
+      subject: fd.get('subject'),
+      body: fd.get('body') || null,
+      linked_table: linkedTableSelect.value || null,
+      linked_record_id: linkedRecordSelect.value || null,
+    };
+
+    const submitBtn = e.target.querySelector('[type=submit]');
+    submitBtn.disabled = true;
+    try {
+      let recordId = state.editingId;
+      if (state.editingId) {
+        payload.updated_by = user.id;
+        payload.updated_at = new Date().toISOString();
+        const { error } = await sb.from('correspondence').update(payload).eq('id', state.editingId);
+        if (error) throw error;
+      } else {
+        payload.created_by = user.id;
+        const { data, error } = await sb.from('correspondence').insert(payload).select().single();
+        if (error) throw error;
+        recordId = data.id;
+      }
+      if (attachWidget.getFiles().length) {
+        await attachWidget.upload({ siteId: site.id, table: 'correspondence', recordId, userId: user.id });
+      }
+      toast(state.editingId ? 'התכתובת עודכנה' : 'התכתובת נרשמה', 'success');
+      closeModal();
+      await loadData();
+    } catch (err) {
+      showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  async function deleteRow(id) {
+    if (!confirm('למחוק את הרשומה הזו?')) return;
+    const { error } = await sb.from('correspondence').delete().eq('id', id);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    toast('הרשומה נמחקה', 'success');
+    await loadData();
+  }
+
+  // ===== Filters =====
+  document.getElementById('filterToggle').addEventListener('click', () => document.getElementById('filterPanel').classList.toggle('open'));
+  document.getElementById('filterApply').addEventListener('click', () => {
+    state.filters.from = document.getElementById('filterFrom').value || null;
+    state.filters.to = document.getElementById('filterTo').value || null;
+    state.filters.direction = document.getElementById('filterDirection').value || null;
+    loadData();
+  });
+  document.getElementById('filterClear').addEventListener('click', () => {
+    document.getElementById('filterFrom').value = '';
+    document.getElementById('filterTo').value = '';
+    document.getElementById('filterDirection').value = '';
+    state.filters = {};
+    loadData();
+  });
+
+  // ===== Quick email (native mail app, prefilled) =====
+  function openMail(id) {
+    const row = state.rows.find(r => r.id === id);
+    if (!row) return;
+    const subject = encodeURIComponent(row.subject || '');
+    const bodyText = `תאריך: ${fmtDate(row.entry_date)}\nכיוון: ${row.direction === 'outgoing' ? 'יוצא אל הפיקוח' : 'נכנס מהפיקוח'}\nקטגוריה: ${row.category || '—'}\n\n${row.body || ''}`;
+    window.location.href = `mailto:?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+  }
+
+  // ===== PDF export (single entry) =====
+  async function exportEntryPdf(id) {
+    const row = state.rows.find(r => r.id === id);
+    if (!row) return;
+    await renderCorrespondencePdf(`תכתובת פיקוח — ${row.subject}`, [row]);
+  }
+
+  document.getElementById('exportRangeBtn').addEventListener('click', async () => {
+    if (!state.rows.length) { toast('אין רשומות בטווח הנוכחי', 'error'); return; }
+    await renderCorrespondencePdf('יומן תכתובת פיקוח', state.rows);
+  });
+
+  async function renderCorrespondencePdf(title, rows) {
+    const now = new Date();
+    const genStr = now.toLocaleDateString('he-IL') + ' ' + now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    const root = document.createElement('div');
+    root.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;background:#fff;direction:rtl;font-family:"Assistant","Segoe UI",sans-serif;';
+    root.innerHTML = `
+      <div style="background:linear-gradient(135deg,#1A237E 0%,#0F1757 100%);padding:26px 36px;display:flex;align-items:center;justify-content:space-between;">
+        <img src="icons/logo-white.svg" style="height:42px;display:block;">
+        <div style="color:#fff;font-size:12px;opacity:0.75;">${genStr}</div>
+      </div>
+      <div style="padding:28px 36px 8px;">
+        <h1 style="color:#1A237E;font-size:24px;font-weight:800;margin:0;">${title}</h1>
+        <div style="color:#6b7280;font-size:13px;margin-top:6px;">${site.name} · סה"כ ${rows.length} רשומות</div>
+      </div>
+      <div style="padding:12px 36px 28px;">
+        ${rows.map(r => `
+          <div style="border:1px solid #e1e5f0;border-radius:10px;padding:16px 20px;margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <strong style="font-size:15px;color:#1a1f36;">${r.subject}</strong>
+              <span style="font-size:12px;color:#6b7280;">${fmtDate(r.entry_date)} · ${r.direction === 'outgoing' ? 'יוצא אל הפיקוח' : 'נכנס מהפיקוח'}${r.category ? ' · ' + r.category : ''}</span>
+            </div>
+            <div style="font-size:13px;color:#374151;white-space:pre-wrap;">${r.body || '—'}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div style="padding:14px 36px;border-top:1px solid #e1e5f0;color:#9aa0ab;font-size:11px;text-align:center;">
+        SGP ניהול אתרי בנייה — שי גיל פרויקטים
+      </div>
+    `;
+    document.body.appendChild(root);
+    try {
+      const canvas = await html2canvas(root, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgData = canvas.toDataURL('image/png');
+      let heightLeft = imgHeight, position = 0;
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      pdf.save(`${title}_${now.toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      toast('שגיאה בייצוא PDF: ' + err.message, 'error');
+    } finally {
+      document.body.removeChild(root);
+    }
+  }
+
+  await loadData();
+})();
+</script>
+</body>
+</html>
