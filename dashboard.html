@@ -34,6 +34,15 @@
     <a href="profile.html" class="btn btn-outline btn-sm">עריכת פרופיל</a>
   </div>
 
+  <div class="card" id="announcementCard" style="display:none;border-right:4px solid var(--warn);">
+    <div class="card-header">
+      <h2>📌 הודעה לאתר</h2>
+      <button class="btn btn-ghost btn-sm" id="editAnnouncementBtn" style="display:none;">עריכה</button>
+    </div>
+    <div id="announcementText" style="white-space:pre-wrap;font-size:14px;line-height:1.6;"></div>
+    <div id="announcementMeta" style="font-size:11.5px;color:var(--steel);margin-top:10px;"></div>
+  </div>
+
   <div class="card">
     <div class="card-header"><h2>דורש תשומת לב</h2></div>
     <div id="attentionList"><div class="loading-overlay"><div class="spinner"></div></div></div>
@@ -87,6 +96,51 @@ function greetingByHour() {
   if (!auth) return;
   const { user, profile, site } = auth;
   const canEditSite = profile.role === 'owner' || profile.role === 'admin';
+
+  // ===== Site announcement banner: visible to everyone, editable by owner/admin =====
+  function renderAnnouncement(text, updatedAt) {
+    const card = document.getElementById('announcementCard');
+    const textEl = document.getElementById('announcementText');
+    const metaEl = document.getElementById('announcementMeta');
+    const editBtn = document.getElementById('editAnnouncementBtn');
+
+    editBtn.style.display = canEditSite ? 'inline-flex' : 'none';
+
+    if (!text) {
+      if (!canEditSite) { card.style.display = 'none'; return; }
+      card.style.display = 'block';
+      textEl.textContent = 'אין הודעה כרגע.';
+      textEl.style.color = 'var(--steel)';
+      metaEl.textContent = '';
+      return;
+    }
+    card.style.display = 'block';
+    textEl.textContent = text;
+    textEl.style.color = 'var(--ink)';
+    metaEl.textContent = updatedAt ? `עודכן לאחרונה: ${fmtDate(updatedAt)}` : '';
+  }
+
+  renderAnnouncement(site.announcement, site.announcement_updated_at);
+
+  document.getElementById('editAnnouncementBtn').addEventListener('click', () => {
+    const current = prompt('הודעה לאתר (תוצג לכל מי שנכנס):', site.announcement || '');
+    if (current === null) return; // cancelled
+    const trimmed = current.trim();
+    sb.from('sites')
+      .update({
+        announcement: trimmed || null,
+        announcement_updated_at: new Date().toISOString(),
+        announcement_updated_by: user.id,
+      })
+      .eq('id', site.id)
+      .then(({ error }) => {
+        if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+        site.announcement = trimmed || null;
+        site.announcement_updated_at = new Date().toISOString();
+        renderAnnouncement(site.announcement, site.announcement_updated_at);
+        toast('ההודעה עודכנה', 'success');
+      });
+  });
 
   // Welcome
   const name = profileDisplayName(profile);
