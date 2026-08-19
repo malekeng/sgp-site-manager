@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>תכתובת פיקוח | SGP</title>
+<title>אישורי ועדכוני יועצים ומתכננים | SGP</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
@@ -21,15 +21,15 @@
 <header class="app-header" id="app-header"></header>
 
 <main class="page">
-  <h1 class="page-title">תכתובת פיקוח</h1>
+  <h1 class="page-title">אישורי ועדכוני יועצים ומתכננים</h1>
 
   <div class="stats-row" id="statsRow"></div>
 
   <div class="card">
     <div class="card-header">
-      <h2>יומן תכתובת</h2>
+      <h2>יומן אישורים ועדכונים</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn btn-primary" id="addBtn">+ רישום תכתובת</button>
+        <button class="btn btn-primary" id="addBtn">+ רישום אישור/עדכון</button>
         <button class="btn btn-outline" id="filterToggle">סינון</button>
         <button class="btn btn-outline" id="exportRangeBtn">📄 ייצוא PDF לטווח</button>
       </div>
@@ -42,8 +42,8 @@
         <label>כיוון</label>
         <select id="filterDirection">
           <option value="">הכל</option>
-          <option value="outgoing">יוצא אל הפיקוח</option>
-          <option value="incoming">נכנס מהפיקוח</option>
+          <option value="outgoing">יוצא (בקשה/פנייה ליועץ)</option>
+          <option value="incoming">נכנס (אישור/עדכון מהיועץ)</option>
         </select>
       </div>
       <button class="btn btn-primary btn-sm" id="filterApply">החל סינון</button>
@@ -52,9 +52,9 @@
 
     <div class="table-wrap">
       <table>
-        <thead><tr><th>תאריך</th><th>כיוון</th><th>נושא</th><th>קטגוריה</th><th>קשור ל</th><th>מסמכים</th><th></th></tr></thead>
+        <thead><tr><th>תאריך</th><th>כיוון</th><th>גורם</th><th>נושא</th><th>קטגוריה</th><th>קשור ל</th><th>מסמכים</th><th></th></tr></thead>
         <tbody id="tableBody">
-          <tr class="empty-row"><td colspan="7"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+          <tr class="empty-row"><td colspan="8"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -64,7 +64,7 @@
 <!-- Add/edit modal -->
 <div class="modal-backdrop" id="modalBackdrop">
   <div class="modal">
-    <h3 id="modalTitle">רישום תכתובת</h3>
+    <h3 id="modalTitle">רישום אישור/עדכון</h3>
     <div id="formMsg" class="msg"></div>
     <form id="recordForm">
       <div class="form-grid">
@@ -72,8 +72,8 @@
         <div class="field">
           <label>כיוון *</label>
           <select name="direction" required>
-            <option value="outgoing">יוצא אל הפיקוח</option>
-            <option value="incoming">נכנס מהפיקוח</option>
+            <option value="outgoing">יוצא (בקשה/פנייה ליועץ)</option>
+            <option value="incoming">נכנס (אישור/עדכון מהיועץ)</option>
           </select>
         </div>
         <div class="field">
@@ -86,6 +86,19 @@
             <option value="הנחיה">הנחיה</option>
             <option value="אחר">אחר</option>
           </select>
+        </div>
+        <div class="field">
+          <label>גורם מקצועי</label>
+          <input type="text" name="party" list="partyOptions" autocomplete="off">
+          <datalist id="partyOptions">
+            <option value="אדריכל">
+            <option value="קונסטרוקטור">
+            <option value="יועץ חשמל">
+            <option value="יועץ אינסטלציה">
+            <option value="יועץ בטיחות">
+            <option value="מודד">
+            <option value="מפקח">
+          </datalist>
         </div>
         <div class="field full"><label>נושא *</label><input type="text" name="subject" required></div>
 
@@ -172,15 +185,15 @@
     const incoming = state.rows.filter(r => r.direction === 'incoming').length;
     host.innerHTML = `
       <div class="stat-card"><div class="label">📋 סה"כ רשומות</div><div class="value">${state.rows.length}</div></div>
-      <div class="stat-card"><div class="label">➡️ יוצא אל הפיקוח</div><div class="value">${outgoing}</div></div>
-      <div class="stat-card"><div class="label">⬅️ נכנס מהפיקוח</div><div class="value">${incoming}</div></div>
+      <div class="stat-card"><div class="label">➡️ יוצא (בקשה/פנייה ליועץ)</div><div class="value">${outgoing}</div></div>
+      <div class="stat-card"><div class="label">⬅️ נכנס (אישור/עדכון מהיועץ)</div><div class="value">${incoming}</div></div>
     `;
   }
 
   function renderTable() {
     const tbody = document.getElementById('tableBody');
     if (!state.rows.length) {
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="7">אין רשומות עדיין</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="8">אין רשומות עדיין</td></tr>`;
       return;
     }
     tbody.innerHTML = state.rows.map(row => {
@@ -192,6 +205,7 @@
         <tr>
           <td>${fmtDate(row.entry_date)}</td>
           <td><span class="dir-badge ${row.direction}">${dirLabel}</span></td>
+          <td>${row.party || '—'}</td>
           <td>${row.subject}</td>
           <td>${row.category || '—'}</td>
           <td>${linkedLabel}</td>
@@ -264,7 +278,7 @@
   // ===== Add / edit modal =====
   function openModal(id) {
     state.editingId = id || null;
-    document.getElementById('modalTitle').textContent = id ? 'עריכת תכתובת' : 'רישום תכתובת';
+    document.getElementById('modalTitle').textContent = id ? 'עריכת רשומה' : 'רישום אישור/עדכון';
     document.getElementById('recordForm').reset();
     hideMsg(document.getElementById('formMsg'));
     attachWidget.clear();
@@ -279,6 +293,7 @@
       form.direction.value = row.direction || 'outgoing';
       form.category.value = row.category || '';
       form.subject.value = row.subject || '';
+      form.party.value = row.party || '';
       form.body.value = row.body || '';
       if (row.linked_table) {
         linkedTableSelect.value = row.linked_table;
@@ -305,6 +320,7 @@
       entry_date: fd.get('entry_date'),
       direction: fd.get('direction'),
       category: fd.get('category') || null,
+      party: fd.get('party') || null,
       subject: fd.get('subject'),
       body: fd.get('body') || null,
       linked_table: linkedTableSelect.value || null,
@@ -329,7 +345,7 @@
       if (attachWidget.getFiles().length) {
         await attachWidget.upload({ siteId: site.id, table: 'correspondence', recordId, userId: user.id });
       }
-      toast(state.editingId ? 'התכתובת עודכנה' : 'התכתובת נרשמה', 'success');
+      toast(state.editingId ? 'הרשומה עודכנה' : 'הרשומה נרשמה', 'success');
       closeModal();
       await loadData();
     } catch (err) {
@@ -368,7 +384,7 @@
     const row = state.rows.find(r => r.id === id);
     if (!row) return;
     const subject = encodeURIComponent(row.subject || '');
-    const bodyText = `תאריך: ${fmtDate(row.entry_date)}\nכיוון: ${row.direction === 'outgoing' ? 'יוצא אל הפיקוח' : 'נכנס מהפיקוח'}\nקטגוריה: ${row.category || '—'}\n\n${row.body || ''}`;
+    const bodyText = `תאריך: ${fmtDate(row.entry_date)}\nגורם מקצועי: ${row.party || '—'}\nכיוון: ${row.direction === 'outgoing' ? 'יוצא (בקשה/פנייה ליועץ)' : 'נכנס (אישור/עדכון מהיועץ)'}\nקטגוריה: ${row.category || '—'}\n\n${row.body || ''}`;
     window.location.href = `mailto:?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
   }
 
@@ -376,12 +392,12 @@
   async function exportEntryPdf(id) {
     const row = state.rows.find(r => r.id === id);
     if (!row) return;
-    await renderCorrespondencePdf(`תכתובת פיקוח — ${row.subject}`, [row]);
+    await renderCorrespondencePdf(`אישורי ועדכוני יועצים ומתכננים — ${row.subject}`, [row]);
   }
 
   document.getElementById('exportRangeBtn').addEventListener('click', async () => {
     if (!state.rows.length) { toast('אין רשומות בטווח הנוכחי', 'error'); return; }
-    await renderCorrespondencePdf('יומן תכתובת פיקוח', state.rows);
+    await renderCorrespondencePdf('יומן אישורי ועדכוני יועצים ומתכננים', state.rows);
   });
 
   async function renderCorrespondencePdf(title, rows) {
@@ -403,7 +419,7 @@
           <div style="border:1px solid #e1e5f0;border-radius:10px;padding:16px 20px;margin-bottom:14px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
               <strong style="font-size:15px;color:#1a1f36;">${r.subject}</strong>
-              <span style="font-size:12px;color:#6b7280;">${fmtDate(r.entry_date)} · ${r.direction === 'outgoing' ? 'יוצא אל הפיקוח' : 'נכנס מהפיקוח'}${r.category ? ' · ' + r.category : ''}</span>
+              <span style="font-size:12px;color:#6b7280;">${fmtDate(r.entry_date)} · ${r.direction === 'outgoing' ? 'יוצא (בקשה/פנייה ליועץ)' : 'נכנס (אישור/עדכון מהיועץ)'}${r.party ? ' · ' + r.party : ''}${r.category ? ' · ' + r.category : ''}</span>
             </div>
             <div style="font-size:13px;color:#374151;white-space:pre-wrap;">${r.body || '—'}</div>
           </div>
