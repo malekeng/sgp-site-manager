@@ -345,6 +345,10 @@
     prestressed_slabs: 'לוח״ד',
     price_quotes: 'הצעת מחיר',
   };
+  const DOC_TYPE_LABELS = {
+    photo: 'תמונה', delivery_note: 'תעודת משלוח', order: 'הזמנה',
+    lab_report: 'דוח מעבדה', drawing: 'תוכנית', other: 'אחר',
+  };
 
   function isImageFile(name) {
     return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
@@ -406,6 +410,8 @@
 
     function renderDocItem(d, i) {
       const typeLabel = LINKED_TABLE_LABELS[d.linked_table] || d.linked_table || '';
+      const docTypeLabel = DOC_TYPE_LABELS[d.doc_type] || '';
+      const metaLabel = [docTypeLabel, typeLabel].filter(Boolean).join(' · ');
       if (!d.url) {
         return `<div class="attach-item"><span>${d.file_name}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
       }
@@ -413,7 +419,7 @@
         return `<div class="attach-item">
           <span style="display:flex;align-items:center;gap:8px;min-width:0;">
             <img src="${d.url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">
-            <span style="overflow:hidden;text-overflow:ellipsis;">${d.file_name}<br><span style="color:var(--steel);font-size:12px;">${typeLabel} · ${fmtDate(d.created_at)}</span></span>
+            <span style="overflow:hidden;text-overflow:ellipsis;">${d.file_name}<br><span style="color:var(--steel);font-size:12px;">${metaLabel ? metaLabel + ' · ' : ''}${fmtDate(d.created_at)}</span></span>
           </span>
           <span style="display:flex;gap:6px;flex-shrink:0;">
             <button type="button" class="btn btn-sm btn-outline" data-view="${i}">צפייה</button>
@@ -422,7 +428,7 @@
         </div>`;
       }
       return `<div class="attach-item">
-        <span style="overflow:hidden;text-overflow:ellipsis;">${d.file_name}<br><span style="color:var(--steel);font-size:12px;">${typeLabel} · ${fmtDate(d.created_at)}</span></span>
+        <span style="overflow:hidden;text-overflow:ellipsis;">${d.file_name}<br><span style="color:var(--steel);font-size:12px;">${metaLabel ? metaLabel + ' · ' : ''}${fmtDate(d.created_at)}</span></span>
         <span style="display:flex;gap:6px;flex-shrink:0;">
           <a href="${d.url}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">פתיחה</a>
           <button type="button" class="btn btn-sm btn-outline" data-dl="${i}">הורדה</button>

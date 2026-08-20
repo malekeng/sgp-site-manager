@@ -1,14 +1,32 @@
 // ===== Reusable "attach document/image" widget =====
 // Usage: const attach = createAttachWidget(containerEl);
-//   attach.getFiles() -> File[]
+//   attach.getFiles() -> {file, docType}[]
 //   attach.clear()
 //   after the parent record is inserted and you have its id + table name:
 //   await attach.upload({ siteId, table: 'concrete_pours', recordId, userId })
+//
+// options.docType: if set (e.g. rebar's 'order' / 'delivery_note' slots), every file
+//   in this widget is tagged with that fixed type -- no per-file selector shown.
+// If not set, each attached file gets its own type dropdown (default guessed from
+//   the file extension: images -> 'photo', everything else -> 'other').
+
+const DOC_TYPE_OPTIONS = [
+  { value: 'photo', label: 'תמונה' },
+  { value: 'delivery_note', label: 'תעודת משלוח' },
+  { value: 'order', label: 'הזמנה' },
+  { value: 'lab_report', label: 'דוח / אישור מעבדה' },
+  { value: 'drawing', label: 'תוכנית / שרטוט' },
+  { value: 'other', label: 'אחר' },
+];
+
+function isImageFileName(name) {
+  return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
+}
 
 function createAttachWidget(container, options = {}) {
   const label = options.label || 'מסמכים / תמונות (אופציונלי)';
-  const docType = options.docType || 'other';
-  let files = [];
+  const fixedDocType = options.docType || null;
+  let entries = []; // { file, docType }
 
   container.innerHTML = `
     <div class="field full">
@@ -49,19 +67,37 @@ function createAttachWidget(container, options = {}) {
   }
 
   function render() {
-    zoneLabel.textContent = files.length
-      ? `📎 ${files.length} קבצים נבחרו — לחצו כאן להוספת עוד`
+    zoneLabel.textContent = entries.length
+      ? `📎 ${entries.length} קבצים נבחרו — לחצו כאן להוספת עוד`
       : '📎 גררו קבצים לכאן או לחצו לבחירה — ניתן לבחור כמה קבצים ביחד';
-    list.innerHTML = files.map((f, i) => `
-      <div class="attach-item">
-        <span>${f.name.length > 34 ? f.name.slice(0, 31) + '…' : f.name} (${(f.size / 1024).toFixed(0)}KB)</span>
-        <button type="button" class="remove" data-i="${i}">✕</button>
-      </div>
-    `).join('');
+
+    list.innerHTML = entries.map((entry, i) => {
+      const f = entry.file;
+      const shortName = f.name.length > 30 ? f.name.slice(0, 27) + '…' : f.name;
+      const typeSelect = fixedDocType ? '' : `
+        <select class="attach-type-select" data-i="${i}" style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--sheet);">
+          ${DOC_TYPE_OPTIONS.map(o => `<option value="${o.value}" ${o.value === entry.docType ? 'selected' : ''}>${o.label}</option>`).join('')}
+        </select>`;
+      return `
+        <div class="attach-item" style="flex-wrap:wrap;gap:6px;">
+          <span>${shortName} (${(f.size / 1024).toFixed(0)}KB)</span>
+          <span style="display:flex;align-items:center;gap:6px;">
+            ${typeSelect}
+            <button type="button" class="remove" data-i="${i}">✕</button>
+          </span>
+        </div>
+      `;
+    }).join('');
+
     list.querySelectorAll('.remove').forEach(btn => {
       btn.addEventListener('click', () => {
-        files.splice(Number(btn.dataset.i), 1);
+        entries.splice(Number(btn.dataset.i), 1);
         render();
+      });
+    });
+    list.querySelectorAll('.attach-type-select').forEach(sel => {
+      sel.addEventListener('change', () => {
+        entries[Number(sel.dataset.i)].docType = sel.value;
       });
     });
   }
@@ -72,7 +108,8 @@ function createAttachWidget(container, options = {}) {
         toast(`הקובץ ${f.name} גדול מ-10MB ולא נוסף`, 'error');
         continue;
       }
-      files.push(f);
+      const guessedType = fixedDocType || (isImageFileName(f.name) ? 'photo' : 'other');
+      entries.push({ file: f, docType: guessedType });
     }
     render();
   }
@@ -89,15 +126,15 @@ function createAttachWidget(container, options = {}) {
   });
 
   return {
-    getFiles: () => files,
-    clear: () => { files = []; hideProgress(); render(); },
+    getFiles: () => entries,
+    clear: () => { entries = []; hideProgress(); render(); },
     async upload({ siteId, table, recordId, userId }) {
-      if (!files.length) return;
-      const total = files.length;
+      if (!entries.length) return;
+      const total = entries.length;
       setProgress(0, `מעלה קובץ 1 מתוך ${total}...`);
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < entries.length; i++) {
+        const { file, docType } = entries[i];
         const pctStart = (i / total) * 100;
         setProgress(pctStart, `מעלה: ${file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name} (${i + 1}/${total})`);
 
@@ -108,7 +145,7 @@ function createAttachWidget(container, options = {}) {
 
         const { error: dbErr } = await sb.from('documents').insert({
           site_id: siteId,
-          doc_type: docType,
+          doc_type: docType || fixedDocType || 'other',
           title: file.name,
           file_path: path,
           file_name: file.name,
