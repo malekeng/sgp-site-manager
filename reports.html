@@ -86,11 +86,18 @@
       dateField: 'pour_date',
       columns: [
         { key: 'pour_date', label: 'תאריך יציקה', type: 'date' },
+        { key: 'location', label: 'קומה / מיקום', type: 'text' },
         { key: 'element', label: 'אלמנט', type: 'text' },
         { key: 'concrete_grade', label: 'סוג בטון', type: 'text' },
-        { key: 'volume_m3', label: 'נפח (מ\"ק)', type: 'number', digits: 2 },
+        { key: 'volume_m3', label: 'כמות (מ"ק)', type: 'number', digits: 1 },
+        { key: 'pour_method', label: 'אופן יציקה', type: 'text' },
+        { key: 'supplier', label: 'ספק בטון', type: 'text' },
+        { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
         { key: 'lab_tested', label: 'נבדק במעבדה', type: 'boolean' },
-        { key: 'cube_test_date', label: 'בדיקת קוביות', type: 'date' },
+        { key: 'lab_test_number', label: 'מס\' בדיקה', type: 'text' },
+        { key: 'cube_test_date', label: 'תאריך בדיקת קוביות', type: 'date' },
+        { key: 'strength_7d', label: 'חוזק 7 יום (מגפ"ס)', type: 'number', digits: 1 },
+        { key: 'strength_28d', label: 'חוזק 28 יום (מגפ"ס)', type: 'number', digits: 1 },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
@@ -98,11 +105,16 @@
       title: 'משלוחי ברזל',
       dateField: 'delivery_date',
       columns: [
+        { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
         { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
         { key: 'supplier', label: 'ספק', type: 'text' },
-        { key: 'diameter_mm', label: 'קוטר (מ\"מ)', type: 'number', digits: 0 },
-        { key: 'weight_kg', label: 'משקל (ק\"ג)', type: 'number', digits: 0 },
-        { key: 'delivery_note_number', label: 'מס\' תעודה', type: 'multiline' },
+        { key: 'diameter_text', label: 'קוטר', type: 'text' },
+        { key: 'location', label: 'אלמנט / מיקום', type: 'text' },
+        { key: 'description', label: 'תיאור / קוד', type: 'text' },
+        { key: 'weight_kg', label: 'משקל (ק"ג)', type: 'number', digits: 0 },
+        { key: 'supply_status', label: 'סופק', type: 'text' },
+        { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
+        { key: 'plan_ref', label: 'רשימה / תוכנית', type: 'text' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
@@ -110,12 +122,15 @@
       title: 'לוח״דים',
       dateField: 'delivery_date',
       columns: [
-        { key: 'supplier', label: 'ספק', type: 'text' },
-        { key: 'quantity_m2', label: 'כמות (מ\"ר)', type: 'number', digits: 2 },
+        { key: 'order_number', label: 'מס\' הזמנה', type: 'text' },
         { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
         { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
-        { key: 'delivery_note_number', label: 'מס\' תעודת משלוח', type: 'multiline' },
-        { key: 'installed_date', label: 'תאריך התקנה', type: 'date' },
+        { key: 'installed_date', label: 'תאריך הנחה', type: 'date' },
+        { key: 'supplier', label: 'ספק', type: 'text' },
+        { key: 'location', label: 'קומה / מיקום', type: 'text' },
+        { key: 'plan_ref', label: 'מס\' תכנית', type: 'text' },
+        { key: 'quantity_m2', label: 'סה"כ מ"ר', type: 'number', digits: 2 },
+        { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
@@ -389,10 +404,10 @@
     downloadAllBtn.style.display = currentDocs.length ? 'inline-flex' : 'none';
     downloadAllBtn.textContent = `⬇️ הורד הכל (${currentDocs.length})`;
 
-    host.innerHTML = `<div class="attach-list">${resolved.map((d, i) => {
+    function renderDocItem(d, i) {
       const typeLabel = LINKED_TABLE_LABELS[d.linked_table] || d.linked_table || '';
       if (!d.url) {
-        return `<div class="attach-item"><span>${d.file_name} · ${typeLabel}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
+        return `<div class="attach-item"><span>${d.file_name}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
       }
       if (isImageFile(d.file_name)) {
         return `<div class="attach-item">
@@ -413,7 +428,26 @@
           <button type="button" class="btn btn-sm btn-outline" data-dl="${i}">הורדה</button>
         </span>
       </div>`;
-    }).join('')}</div>`;
+    }
+
+    // Group by source category so files of the same type sit together, instead of one interleaved feed
+    const GROUP_ORDER = ['concrete_pours', 'rebar_deliveries', 'prestressed_slabs', 'price_quotes', '__none__'];
+    const GROUP_ICONS = {
+      concrete_pours: '🧱 בטון', rebar_deliveries: '🔩 ברזל',
+      prestressed_slabs: '🏗️ לוח״דים', price_quotes: '💰 השוואת מחירים', __none__: '📎 כללי / לא משויך',
+    };
+    const groups = {};
+    resolved.forEach((d, i) => {
+      const key = d.linked_table || '__none__';
+      (groups[key] ||= []).push(i);
+    });
+
+    host.innerHTML = GROUP_ORDER.filter(key => groups[key]?.length).map(key => `
+      <div style="margin-bottom:18px;">
+        <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:8px;">${GROUP_ICONS[key]} (${groups[key].length})</div>
+        <div class="attach-list">${groups[key].map(i => renderDocItem(resolved[i], i)).join('')}</div>
+      </div>
+    `).join('');
 
     host.querySelectorAll('[data-view]').forEach(btn => {
       btn.addEventListener('click', () => openLightbox(resolved[Number(btn.dataset.view)].url));
