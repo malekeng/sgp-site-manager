@@ -80,9 +80,14 @@ initCrudPage({
     { key: 'location', label: 'אלמנט / מיקום', type: 'text' },
     { key: 'description', label: 'תיאור / קוד', type: 'text' },
     { key: 'weight_kg', label: 'משקל (ק\"ג)', type: 'number', digits: 0 },
+    { key: 'supply_status', label: 'סופק', type: 'text' },
     { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
     { key: 'plan_ref', label: 'רשימה / תוכנית', type: 'text' },
     { key: 'notes', label: 'הערות', type: 'text' },
+  ],
+  attachments: [
+    { label: 'קובץ הזמנה', docType: 'order' },
+    { label: 'קובץ תעודת משלוח', docType: 'delivery_note' },
   ],
   formFields: [
     { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
@@ -95,6 +100,7 @@ initCrudPage({
     { key: 'location', label: 'אלמנט / מיקום', type: 'text' },
     { key: 'description', label: 'תיאור / קוד ברזל', type: 'text' },
     { key: 'weight_kg', label: 'כמות (ק\"ג)', type: 'number', step: '1' },
+    { key: 'supply_status', label: 'סופק', type: 'select', options: ['כן', 'לא', 'חלקית'] },
     { key: 'delivery_note_number', label: 'מס\' תעודת משלוח (שורה לכל מספר)', type: 'textarea' },
     { key: 'plan_ref', label: 'מס\' רשימת ברזל / תוכנית', type: 'text' },
     { key: 'notes', label: 'הערות', type: 'textarea', full: true },

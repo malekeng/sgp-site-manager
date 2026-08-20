@@ -9,7 +9,18 @@ async function initCrudPage(config) {
   document.getElementById('pageTitle').textContent = config.title;
 
   const attachHost = document.getElementById('attachHost');
-  const attachWidget = attachHost ? createAttachWidget(attachHost) : null;
+  let attachWidgets = [];
+  if (attachHost) {
+    if (Array.isArray(config.attachments) && config.attachments.length) {
+      attachHost.innerHTML = config.attachments.map((_, i) => `<div id="attachSlot${i}"></div>`).join('');
+      attachWidgets = config.attachments.map((a, i) =>
+        createAttachWidget(document.getElementById(`attachSlot${i}`), { label: a.label, docType: a.docType })
+      );
+    } else {
+      attachWidgets = [createAttachWidget(attachHost)];
+    }
+  }
+  const attachWidget = attachWidgets[0] || null; // kept for backward compatibility below
 
   function displayName(p) {
     if (!p) return 'משתמש';
@@ -271,7 +282,7 @@ async function initCrudPage(config) {
     modalTitle.textContent = id ? 'עריכת רשומה' : 'הוספת רשומה';
     formEl.reset();
     hideMsg(formMsg);
-    if (attachWidget) attachWidget.clear();
+    attachWidgets.forEach(w => w.clear());
 
     formEl.querySelectorAll('.other-input').forEach(inp => {
       inp.style.display = 'none';
@@ -367,8 +378,10 @@ async function initCrudPage(config) {
         recordId = data.id;
       }
 
-      if (attachWidget && attachWidget.getFiles().length) {
-        await attachWidget.upload({ siteId: site.id, table: config.table, recordId, userId: user.id });
+      for (const w of attachWidgets) {
+        if (w.getFiles().length) {
+          await w.upload({ siteId: site.id, table: config.table, recordId, userId: user.id });
+        }
       }
 
       toast(state.editingId ? 'הרשומה עודכנה' : 'הרשומה נוספה', 'success');

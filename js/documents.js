@@ -5,12 +5,14 @@
 //   after the parent record is inserted and you have its id + table name:
 //   await attach.upload({ siteId, table: 'concrete_pours', recordId, userId })
 
-function createAttachWidget(container) {
+function createAttachWidget(container, options = {}) {
+  const label = options.label || 'מסמכים / תמונות (אופציונלי)';
+  const docType = options.docType || 'other';
   let files = [];
 
   container.innerHTML = `
     <div class="field full">
-      <label>מסמכים / תמונות (אופציונלי)</label>
+      <label>${label}</label>
       <div class="attach-zone" tabindex="0">
         <div id="attachZoneLabel">📎 גררו קבצים לכאן או לחצו לבחירה — ניתן לבחור כמה קבצים ביחד</div>
         <div style="font-size:11px;margin-top:4px;">תמונות, PDF, Word — עד 10MB לקובץ</div>
@@ -106,7 +108,7 @@ function createAttachWidget(container) {
 
         const { error: dbErr } = await sb.from('documents').insert({
           site_id: siteId,
-          doc_type: 'other',
+          doc_type: docType,
           title: file.name,
           file_path: path,
           file_name: file.name,
