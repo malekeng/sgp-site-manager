@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>משימות | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .kanban-board { grid-template-columns: 1fr; }
+}
+.kanban-col {
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 14px;
+  min-height: 120px;
+}
+.kanban-col.dragover { background: rgba(0,214,143,0.08); outline: 2px dashed var(--green); }
+.kanban-col-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; padding: 0 2px;
+}
+.kanban-col-header h3 { font-size: 14px; font-weight: 800; color: var(--navy); margin: 0; display: flex; align-items: center; gap: 6px; }
+.kanban-count {
+  background: var(--sheet); color: var(--steel); font-size: 12px; font-weight: 700;
+  padding: 2px 9px; border-radius: 999px;
+}
+.kanban-card {
+  background: var(--sheet);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+  cursor: grab;
+}
+.kanban-card:active { cursor: grabbing; }
+.kanban-card.dragging { opacity: 0.4; }
+.kanban-card-title { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 6px; line-height: 1.4; }
+.kanban-card-desc { font-size: 12.5px; color: var(--steel); margin-bottom: 8px; line-height: 1.4; }
+.kanban-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.priority-badge { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+.priority-badge.high { background: rgba(255,71,87,0.14); color: var(--danger); }
+.priority-badge.medium { background: rgba(255,157,66,0.16); color: #b5651d; }
+.priority-badge.low { background: rgba(0,214,143,0.14); color: var(--green-deep); }
+.due-badge { font-size: 11px; color: var(--steel); font-weight: 600; }
+.due-badge.overdue { color: var(--danger); font-weight: 800; }
+.assignee-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bg); border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; color: var(--navy);
+}
+.kanban-card-actions { display: flex; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">משימות</h1>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>לוח משימות</h2>
+      <button class="btn btn-primary btn-sm" id="addTaskBtn">+ משימה חדשה</button>
+    </div>
+    <div class="kanban-board" id="kanbanBoard">
+      <div class="loading-overlay"><div class="spinner"></div></div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="taskModalBackdrop">
+  <div class="modal">
+    <h3 id="taskModalTitle">משימה חדשה</h3>
+    <div id="taskFormMsg" class="msg"></div>
+    <form id="taskForm">
+      <div class="form-grid">
+        <div class="field full"><label>כותרת *</label><input type="text" name="title" required></div>
+        <div class="field full"><label>תיאור</label><textarea name="description" rows="3"></textarea></div>
+        <div class="field">
+          <label>עמודה</label>
+          <select name="status">
+            <option value="todo">לביצוע</option>
+            <option value="in_progress">בתהליך</option>
+            <option value="done">הושלם</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>עדיפות</label>
+          <select name="priority">
+            <option value="">ללא</option>
+            <option value="low">נמוכה</option>
+            <option value="medium">בינונית</option>
+            <option value="high">גבוהה</option>
+          </select>
+        </div>
+        <div class="field"><label>תאריך יעד</label><input type="date" name="due_date"></div>
+        <div class="field">
+          <label>אחראי</label>
+          <select name="assignee_id"><option value="">ללא</option></select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">שמירה</button>
+        <button type="button" class="btn btn-outline" id="cancelTaskBtn">ביטול</button>
+        <button type="button" class="btn btn-danger" id="deleteTaskBtn" style="display:none;margin-right:auto;">מחיקה</button>
+      </div>
+    </form>
+    <button class="icon-btn" id="closeTaskModalBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('tasks.html');
+  if (!auth) return;
+  const { user, site } = auth;
+
+  const COLUMNS = [
+    { status: 'todo', title: '📋 לביצוע' },
+    { status: 'in_progress', title: '🔨 בתהליך' },
+    { status: 'done', title: '✅ הושלם' },
+  ];
+  const PRIORITY_LABELS = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
+
+  let tasks = [];
+  let members = [];
+  let editingId = null;
+  let draggedId = null;
+
+  async function loadMembers() {
+    const { data, error } = await sb.from('profile_sites')
+      .select('profiles(id, full_name, username)')
+      .eq('site_id', site.id);
+    if (error) { console.error(error); return; }
+    const seen = new Map();
+    (data || []).forEach(r => { if (r.profiles) seen.set(r.profiles.id, r.profiles); });
+    members = Array.from(seen.values());
+    const select = document.querySelector('select[name=assignee_id]');
+    select.innerHTML = '<option value="">ללא</option>' +
+      members.map(m => `<option value="${m.id}">${m.full_name || m.username}</option>`).join('');
+  }
+
+  function memberName(id) {
+    const m = members.find(x => x.id === id);
+    return m ? (m.full_name || m.username) : null;
+  }
+
+  async function loadTasks() {
+    const { data, error } = await sb.from('tasks').select('*').eq('site_id', site.id).order('sort_order', { ascending: true });
+    if (error) { toast('שגיאה בטעינת משימות: ' + error.message, 'error'); return; }
+    tasks = data || [];
+    renderBoard();
+  }
+
+  function isOverdue(dueDate, status) {
+    if (!dueDate || status === 'done') return false;
+    return new Date(dueDate) < new Date(new Date().toDateString());
+  }
+
+  function renderBoard() {
+    const board = document.getElementById('kanbanBoard');
+    board.innerHTML = COLUMNS.map(col => {
+      const colTasks = tasks.filter(t => t.status === col.status);
+      return `
+        <div class="kanban-col" data-status="${col.status}">
+          <div class="kanban-col-header">
+            <h3>${col.title}</h3>
+            <span class="kanban-count">${colTasks.length}</span>
+          </div>
+          <div class="kanban-cards" data-status="${col.status}">
+            ${colTasks.map(t => renderCard(t)).join('') || '<p style="color:var(--steel);font-size:12.5px;text-align:center;padding:10px;">אין משימות</p>'}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    wireCardEvents();
+    wireColumnDropZones();
+  }
+
+  function renderCard(t) {
+    const priorityBadge = t.priority ? `<span class="priority-badge ${t.priority}">${PRIORITY_LABELS[t.priority]}</span>` : '<span></span>';
+    const overdue = isOverdue(t.due_date, t.status);
+    const dueBadge = t.due_date ? `<span class="due-badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠️ ' : '📅 '}${fmtDate(t.due_date)}</span>` : '';
+    const assigneeName = memberName(t.assignee_id);
+    const assigneePill = assigneeName ? `<span class="assignee-pill">👤 ${assigneeName}</span>` : '';
+
+    const currentIdx = COLUMNS.findIndex(c => c.status === t.status);
+    const prevCol = COLUMNS[currentIdx - 1];
+    const nextCol = COLUMNS[currentIdx + 1];
+
+    return `
+      <div class="kanban-card" draggable="true" data-id="${t.id}">
+        <div class="kanban-card-title">${t.title}</div>
+        ${t.description ? `<div class="kanban-card-desc">${t.description}</div>` : ''}
+        <div class="kanban-card-meta">
+          ${priorityBadge}
+          ${dueBadge}
+        </div>
+        ${assigneePill ? `<div style="margin-top:6px;">${assigneePill}</div>` : ''}
+        <div class="kanban-card-actions">
+          ${prevCol ? `<button type="button" class="icon-btn" data-move="${t.id}" data-to="${prevCol.status}" title="העבר ל${prevCol.title}">◀</button>` : '<span></span>'}
+          <button type="button" class="icon-btn" data-edit="${t.id}" title="עריכה" style="flex:1;">✏️ עריכה</button>
+          ${nextCol ? `<button type="button" class="icon-btn" data-move="${t.id}" data-to="${nextCol.status}" title="העבר ל${nextCol.title}">▶</button>` : '<span></span>'}
+        </div>
+      </div>
+    `;
+  }
+
+  function wireCardEvents() {
+    document.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openModal(btn.dataset.edit)));
+    document.querySelectorAll('[data-move]').forEach(btn => btn.addEventListener('click', () => moveTask(btn.dataset.move, btn.dataset.to)));
+
+    document.querySelectorAll('.kanban-card').forEach(card => {
+      card.addEventListener('dragstart', e => {
+        draggedId = card.dataset.id;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    });
+  }
+
+  function wireColumnDropZones() {
+    document.querySelectorAll('.kanban-col').forEach(col => {
+      col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); });
+      col.addEventListener('dragleave', () => col.classList.remove('dragover'));
+      col.addEventListener('drop', e => {
+        e.preventDefault();
+        col.classList.remove('dragover');
+        if (draggedId) moveTask(draggedId, col.dataset.status);
+        draggedId = null;
+      });
+    });
+  }
+
+  async function moveTask(id, newStatus) {
+    const task = tasks.find(t => t.id === id);
+    if (!task || task.status === newStatus) return;
+    task.status = newStatus; // optimistic
+    renderBoard();
+    const { error } = await sb.from('tasks').update({ status: newStatus, updated_by: user.id, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); loadTasks(); }
+  }
+
+  function openModal(id) {
+    editingId = id || null;
+    const form = document.getElementById('taskForm');
+    form.reset();
+    hideMsg(document.getElementById('taskFormMsg'));
+    document.getElementById('taskModalTitle').textContent = id ? 'עריכת משימה' : 'משימה חדשה';
+    document.getElementById('deleteTaskBtn').style.display = id ? 'inline-flex' : 'none';
+
+    if (id) {
+      const t = tasks.find(x => x.id === id);
+      form.title.value = t.title || '';
+      form.description.value = t.description || '';
+      form.status.value = t.status;
+      form.priority.value = t.priority || '';
+      form.due_date.value = t.due_date || '';
+      form.assignee_id.value = t.assignee_id || '';
+    }
+    document.getElementById('taskModalBackdrop').classList.add('open');
+  }
+  function closeModal() { document.getElementById('taskModalBackdrop').classList.remove('open'); }
+
+  document.getElementById('addTaskBtn').addEventListener('click', () => openModal(null));
+  document.getElementById('closeTaskModalBtn').addEventListener('click', closeModal);
+  document.getElementById('cancelTaskBtn').addEventListener('click', closeModal);
+  document.getElementById('taskModalBackdrop').addEventListener('click', e => { if (e.target.id === 'taskModalBackdrop') closeModal(); });
+
+  document.getElementById('taskForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('taskFormMsg');
+    hideMsg(msgEl);
+    const fd = new FormData(e.target);
+    const payload = {
+      site_id: site.id,
+      title: fd.get('title'),
+      description: fd.get('description') || null,
+      status: fd.get('status'),
+      priority: fd.get('priority') || null,
+      due_date: fd.get('due_date') || null,
+      assignee_id: fd.get('assignee_id') || null,
+    };
+
+    const submitBtn = e.target.querySelector('[type=submit]');
+    submitBtn.disabled = true;
+    try {
+      if (editingId) {
+        payload.updated_by = user.id;
+        payload.updated_at = new Date().toISOString();
+        const { error } = await sb.from('tasks').update(payload).eq('id', editingId);
+        if (error) throw error;
+      } else {
+        payload.created_by = user.id;
+        payload.sort_order = tasks.filter(t => t.status === payload.status).length;
+        const { error } = await sb.from('tasks').insert(payload);
+        if (error) throw error;
+      }
+      toast(editingId ? 'המשימה עודכנה' : 'המשימה נוצרה', 'success');
+      closeModal();
+      await loadTasks();
+    } catch (err) {
+      showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('deleteTaskBtn').addEventListener('click', async () => {
+    if (!editingId || !confirm('למחוק את המשימה הזו?')) return;
+    const { error } = await sb.from('tasks').delete().eq('id', editingId);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    toast('המשימה נמחקה', 'success');
+    closeModal();
+    await loadTasks();
+  });
+
+  await loadMembers();
+  await loadTasks();
+})();
+</script>
+</body>
+</html>

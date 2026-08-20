@@ -42,6 +42,36 @@
     <div id="noticesList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
 
+  <div class="modal-backdrop" id="noticeModalBackdrop">
+    <div class="modal">
+      <h3>הודעה חדשה</h3>
+      <div id="noticeFormMsg" class="msg"></div>
+      <form id="noticeForm">
+        <div class="field" style="margin-bottom:14px;">
+          <label>נושא</label>
+          <select name="topic">
+            <option value="כללי">כללי</option>
+            <option value="בטיחות">בטיחות</option>
+            <option value="לוח זמנים">לוח זמנים</option>
+            <option value="ציוד">ציוד</option>
+            <option value="כוח אדם">כוח אדם</option>
+            <option value="אספקה">אספקה</option>
+            <option value="איכות">איכות</option>
+            <option value="אחר">אחר</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>הודעה *</label>
+          <textarea name="message" rows="4" required placeholder="כל מי שנכנס לאתר יראה את ההודעה הזו"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary">פרסום</button>
+          <button type="button" class="btn btn-outline" id="cancelNoticeBtn">ביטול</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-header"><h2>דורש תשומת לב</h2></div>
     <div id="attentionList"><div class="loading-overlay"><div class="spinner"></div></div></div>
@@ -97,10 +127,16 @@ function greetingByHour() {
   const canEditSite = profile.role === 'owner' || profile.role === 'admin';
 
   // ===== Notice board: anyone on this site can post; owner/admin or the author can delete =====
+  const TOPIC_COLORS = {
+    'כללי': 'var(--blue)', 'בטיחות': 'var(--danger)', 'לוח זמנים': 'var(--purple)',
+    'ציוד': 'var(--orange)', 'כוח אדם': 'var(--green-deep)', 'אספקה': 'var(--blue)',
+    'איכות': 'var(--purple)', 'אחר': 'var(--steel)',
+  };
+
   async function loadNotices() {
     const host = document.getElementById('noticesList');
     const { data, error } = await sb.from('site_notices')
-      .select('id, message, created_at, created_by, profiles(full_name, username)')
+      .select('id, message, topic, created_at, created_by, profiles(full_name, username)')
       .eq('site_id', site.id)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -110,10 +146,17 @@ function greetingByHour() {
     host.innerHTML = `<div class="attach-list">${data.map(n => {
       const authorName = n.profiles?.full_name || n.profiles?.username || 'משתמש';
       const canDelete = canEditSite || n.created_by === user.id;
+      const topicColor = TOPIC_COLORS[n.topic] || 'var(--steel)';
+      const topicBadge = n.topic
+        ? `<span style="display:inline-block;background:${topicColor};color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px;margin-bottom:6px;">${n.topic}</span>`
+        : '';
       return `
         <div class="attach-item" style="align-items:flex-start;flex-direction:column;gap:4px;">
           <div style="display:flex;justify-content:space-between;width:100%;align-items:flex-start;gap:8px;">
-            <span style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${n.message}</span>
+            <div>
+              ${topicBadge}
+              <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${n.message}</div>
+            </div>
             ${canDelete ? `<button type="button" class="icon-btn danger" data-del-notice="${n.id}" title="מחיקה" style="flex-shrink:0;">🗑️</button>` : ''}
           </div>
           <span style="font-size:11.5px;color:var(--steel);">${authorName} · ${fmtDate(n.created_at)}</span>
@@ -132,15 +175,30 @@ function greetingByHour() {
   }
 
   document.getElementById('addNoticeBtn').addEventListener('click', () => {
-    const message = prompt('כתבו הודעה — כל מי שנכנס לאתר יראה אותה:');
-    if (!message || !message.trim()) return;
-    sb.from('site_notices')
-      .insert({ site_id: site.id, message: message.trim(), created_by: user.id })
-      .then(({ error }) => {
-        if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
-        toast('ההודעה פורסמה', 'success');
-        loadNotices();
-      });
+    document.getElementById('noticeForm').reset();
+    hideMsg(document.getElementById('noticeFormMsg'));
+    document.getElementById('noticeModalBackdrop').classList.add('open');
+  });
+  document.getElementById('cancelNoticeBtn').addEventListener('click', () => document.getElementById('noticeModalBackdrop').classList.remove('open'));
+  document.getElementById('noticeModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'noticeModalBackdrop') e.target.classList.remove('open');
+  });
+
+  document.getElementById('noticeForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('noticeFormMsg');
+    hideMsg(msgEl);
+    const fd = new FormData(e.target);
+    const message = (fd.get('message') || '').trim();
+    if (!message) { showMsg(msgEl, 'יש לכתוב הודעה', 'error'); return; }
+
+    const { error } = await sb.from('site_notices')
+      .insert({ site_id: site.id, topic: fd.get('topic'), message, created_by: user.id });
+    if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); return; }
+
+    toast('ההודעה פורסמה', 'success');
+    document.getElementById('noticeModalBackdrop').classList.remove('open');
+    loadNotices();
   });
 
   loadNotices();
