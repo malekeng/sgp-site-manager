@@ -80,7 +80,10 @@ function createAttachWidget(container, options = {}) {
         </select>`;
       return `
         <div class="attach-item" style="flex-wrap:wrap;gap:6px;">
-          <span>${shortName} (${(f.size / 1024).toFixed(0)}KB)</span>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" class="attach-select" data-i="${i}" ${entry.selected !== false ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--green);cursor:pointer;">
+            <span style="${entry.selected === false ? 'color:var(--steel);text-decoration:line-through;' : ''}">${shortName} (${(f.size / 1024).toFixed(0)}KB)</span>
+          </label>
           <span style="display:flex;align-items:center;gap:6px;">
             ${typeSelect}
             <button type="button" class="remove" data-i="${i}">✕</button>
@@ -89,6 +92,12 @@ function createAttachWidget(container, options = {}) {
       `;
     }).join('');
 
+    list.querySelectorAll('.attach-select').forEach(cb => {
+      cb.addEventListener('change', () => {
+        entries[Number(cb.dataset.i)].selected = cb.checked;
+        render();
+      });
+    });
     list.querySelectorAll('.remove').forEach(btn => {
       btn.addEventListener('click', () => {
         entries.splice(Number(btn.dataset.i), 1);
@@ -109,7 +118,7 @@ function createAttachWidget(container, options = {}) {
         continue;
       }
       const guessedType = fixedDocType || (isImageFileName(f.name) ? 'photo' : 'other');
-      entries.push({ file: f, docType: guessedType });
+      entries.push({ file: f, docType: guessedType, selected: true });
     }
     render();
   }
@@ -129,12 +138,13 @@ function createAttachWidget(container, options = {}) {
     getFiles: () => entries,
     clear: () => { entries = []; hideProgress(); render(); },
     async upload({ siteId, table, recordId, userId }) {
-      if (!entries.length) return;
-      const total = entries.length;
+      const toUpload = entries.filter(e => e.selected !== false);
+      if (!toUpload.length) return;
+      const total = toUpload.length;
       setProgress(0, `מעלה קובץ 1 מתוך ${total}...`);
 
-      for (let i = 0; i < entries.length; i++) {
-        const { file, docType } = entries[i];
+      for (let i = 0; i < toUpload.length; i++) {
+        const { file, docType } = toUpload[i];
         const pctStart = (i / total) * 100;
         setProgress(pctStart, `מעלה: ${file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name} (${i + 1}/${total})`);
 
