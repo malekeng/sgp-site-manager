@@ -113,6 +113,7 @@
         { key: 'description', label: 'תיאור / קוד', type: 'text' },
         { key: 'weight_kg', label: 'משקל (ק"ג)', type: 'number', digits: 0 },
         { key: 'supply_status', label: 'סופק', type: 'text' },
+        { key: 'order_closed', label: 'סטטוס הזמנה', type: 'boolean', trueLabel: 'סגורה', falseLabel: 'פתוחה' },
         { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
         { key: 'plan_ref', label: 'רשימה / תוכנית', type: 'text' },
         { key: 'notes', label: 'הערות', type: 'text' },
@@ -154,7 +155,7 @@
       return v.map(d => d.name || 'קובץ').join(', ');
     }
     if (v === null || v === undefined || v === '') return '—';
-    if (col.type === 'boolean') return v ? 'כן' : 'לא';
+    if (col.type === 'boolean') return v ? (col.trueLabel || 'כן') : (col.falseLabel || 'לא');
     if (col.type === 'date') return fmtDate(v);
     if (col.type === 'number') return fmtNum(v, col.digits ?? 2);
     if (col.type === 'multiline') return String(v).split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join('<br>');

@@ -122,7 +122,7 @@ async function initCrudPage(config) {
         if (v !== null && v !== undefined && v !== '') {
           if (c.type === 'date') out = fmtDate(v);
           else if (c.type === 'number') out = fmtNum(v, c.digits ?? 2);
-          else if (c.type === 'boolean') out = v ? 'כן' : 'לא';
+          else if (c.type === 'boolean') out = v ? (c.trueLabel || 'כן') : (c.falseLabel || 'לא');
           else if (c.type === 'multiline') {
             out = String(v).split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join('<br>');
           }
@@ -236,10 +236,12 @@ async function initCrudPage(config) {
         </div>`;
       }
       if (f.type === 'boolean') {
+        const tLabel = f.trueLabel || 'כן';
+        const fLabel = f.falseLabel || 'לא';
         return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
           <select name="${f.key}" ${f.required ? 'required' : ''}>
-            <option value="כן">כן</option>
-            <option value="לא">לא</option>
+            <option value="${tLabel}">${tLabel}</option>
+            <option value="${fLabel}">${fLabel}</option>
           </select></div>`;
       }
       if (f.type === 'datalist') {
@@ -307,7 +309,7 @@ async function initCrudPage(config) {
       config.formFields.forEach(f => {
         const el = formEl.querySelector(`[name="${f.key}"]`);
         if (!el) return;
-        if (f.type === 'boolean') { el.value = row[f.key] ? 'כן' : 'לא'; return; }
+        if (f.type === 'boolean') { el.value = row[f.key] ? (f.trueLabel || 'כן') : (f.falseLabel || 'לא'); return; }
 
         const val = row[f.key];
         if (val === null || val === undefined || val === '') return;
@@ -352,7 +354,7 @@ async function initCrudPage(config) {
 
     config.formFields.forEach(f => {
       let v = fd.get(f.key);
-      if (f.type === 'boolean') { payload[f.key] = (v === 'כן'); return; }
+      if (f.type === 'boolean') { payload[f.key] = (v === (f.trueLabel || 'כן')); return; }
 
       if (f.type === 'select' && v === 'אחר') {
         v = fd.get(f.key + '__other');
