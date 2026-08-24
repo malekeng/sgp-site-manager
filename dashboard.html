@@ -329,7 +329,7 @@ function greetingByHour() {
   async function loadRecent() {
     const sources = [
       { table: 'concrete_pours', label: 'יציקת בטון', href: 'concrete.html', fmt: r => r.element, dateField: 'pour_date' },
-      { table: 'rebar_deliveries', label: 'משלוח ברזל', href: 'rebar.html', fmt: r => r.supplier, dateField: 'delivery_date' },
+      { table: 'rebar_deliveries', label: 'משלוח ברזל', href: 'rebar.html', fmt: r => r.supplier, dateField: 'order_date' },
       { table: 'prestressed_slabs', label: 'לוח״ד', href: 'slabs.html', fmt: r => {
           const parts = [r.supplier];
           if (r.quantity_m2 != null) parts.push(r.quantity_m2 + ' מ\"ר');

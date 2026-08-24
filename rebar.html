@@ -70,8 +70,8 @@ initCrudPage({
   table: 'rebar_deliveries', icon: '🔩',
   activePage: 'rebar.html',
   title: 'משלוחי ברזל',
-  dateField: 'delivery_date',
-  orderBy: { column: 'delivery_date', ascending: false },
+  dateField: 'order_date',
+  orderBy: { column: 'order_date', ascending: false },
   columns: [
     { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
     { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
@@ -97,8 +97,8 @@ initCrudPage({
     { label: 'קובץ תעודת משלוח', docType: 'delivery_note' },
   ],
   formFields: [
-    { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
-    { key: 'delivery_date', label: 'תאריך אספקה', type: 'date', required: true },
+    { key: 'order_date', label: 'תאריך הזמנה', type: 'date', required: true },
+    { key: 'delivery_date', label: 'תאריך אספקה (כללי, לא חובה)', type: 'date' },
     { key: 'supplier', label: 'ספק', type: 'datalist', required: true,
       options: ['עין עירון בע\"מ', 'ERON STEEL', 'נוימן תעשיות פלדה'] },
     { key: 'diameter_text', label: 'קוטר (מ\"מ / תיאור)', type: 'text',

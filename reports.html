@@ -103,7 +103,7 @@
     },
     rebar_deliveries: {
       title: 'משלוחי ברזל',
-      dateField: 'delivery_date',
+      dateField: 'order_date',
       columns: [
         { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
         { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
@@ -316,9 +316,9 @@
       );
     };
 
-    let rq = sb.from('rebar_deliveries').select('supplier, weight_kg, delivery_date, site_id').in('site_id', filterState.siteIds);
-    if (filterState.from) rq = rq.gte('delivery_date', filterState.from);
-    if (filterState.to) rq = rq.lte('delivery_date', filterState.to);
+    let rq = sb.from('rebar_deliveries').select('supplier, weight_kg, order_date, site_id').in('site_id', filterState.siteIds);
+    if (filterState.from) rq = rq.gte('order_date', filterState.from);
+    if (filterState.to) rq = rq.lte('order_date', filterState.to);
     const { data: rebar } = await rq;
     const bySupplier = {};
     (rebar || []).forEach(r => {
