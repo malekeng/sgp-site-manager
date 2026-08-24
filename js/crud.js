@@ -139,12 +139,17 @@ async function initCrudPage(config) {
       const auditCell = whoId || when
         ? `<td class="audit-cell"><div class="audit-who">${whoId ? (state.profileNames[whoId] || 'משתמש') : '—'}</div><div class="audit-when">${fmtDateTime(when)}</div></td>`
         : `<td style="color:var(--steel-light);">—</td>`;
+      const qt = config.quickToggle;
+      const toggleBtn = qt
+        ? `<button class="icon-btn" data-toggle="${row.id}" title="${row[qt.key] ? qt.trueAction : qt.falseAction}">${row[qt.key] ? qt.trueLabel : qt.falseLabel}</button>`
+        : '';
       return `
         <tr>
           ${cells}
           ${docCell}
           ${auditCell}
           <td class="row-actions">
+            ${toggleBtn}
             <button class="icon-btn" data-edit="${row.id}" title="עריכה">✏️</button>
             <button class="icon-btn danger" data-del="${row.id}" title="מחיקה">🗑️</button>
           </td>
@@ -156,6 +161,8 @@ async function initCrudPage(config) {
       btn.addEventListener('click', () => openModal(btn.dataset.edit)));
     tbody.querySelectorAll('[data-del]').forEach(btn =>
       btn.addEventListener('click', () => deleteRow(btn.dataset.del)));
+    tbody.querySelectorAll('[data-toggle]').forEach(btn =>
+      btn.addEventListener('click', () => quickToggle(btn.dataset.toggle)));
     tbody.querySelectorAll('[data-docs]').forEach(btn =>
       btn.addEventListener('click', () => showDocsPopup(btn.dataset.docs)));
   }
@@ -177,17 +184,18 @@ async function initCrudPage(config) {
     if (!docs.length) return;
     const resolved = await Promise.all(docs.map(async d => ({ ...d, url: await getDocumentUrl(d.file_path) })));
     const lines = resolved.map((d, i) => {
-      if (!d.url) return `<div class="attach-item"><span>${d.file_name}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
+      const dateLabel = d.document_date ? ` · ${fmtDate(d.document_date)}` : '';
+      if (!d.url) return `<div class="attach-item"><span>${d.file_name}${dateLabel}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
       if (isImageFile(d.file_name)) {
         return `<div class="attach-item" data-lightbox="${i}" style="cursor:pointer;">
           <span style="display:flex;align-items:center;gap:8px;">
             <img src="${d.url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
-            ${d.file_name}
+            ${d.file_name}${dateLabel}
           </span>
           <span class="btn btn-sm btn-outline">הצגה</span>
         </div>`;
       }
-      return `<div class="attach-item"><span>${d.file_name}</span><a href="${d.url}" class="btn btn-sm btn-outline">פתיחה / הורדה</a></div>`;
+      return `<div class="attach-item"><span>${d.file_name}${dateLabel}</span><a href="${d.url}" class="btn btn-sm btn-outline">פתיחה / הורדה</a></div>`;
     });
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop open';
@@ -404,6 +412,20 @@ async function initCrudPage(config) {
     const { error } = await sb.from(config.table).delete().eq('id', id);
     if (error) { toast('שגיאה במחיקה: ' + error.message, 'error'); return; }
     toast('הרשומה נמחקה', 'success');
+    await loadData();
+  }
+
+  async function quickToggle(id) {
+    const qt = config.quickToggle;
+    if (!qt) return;
+    const row = state.rows.find(r => r.id === id);
+    if (!row) return;
+    const newValue = !row[qt.key];
+    const { error } = await sb.from(config.table)
+      .update({ [qt.key]: newValue, updated_by: user.id, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    toast(newValue ? qt.trueToast : qt.falseToast, 'success');
     await loadData();
   }
 

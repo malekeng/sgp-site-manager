@@ -78,20 +78,32 @@ function createAttachWidget(container, options = {}) {
         <select class="attach-type-select" data-i="${i}" style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--sheet);">
           ${DOC_TYPE_OPTIONS.map(o => `<option value="${o.value}" ${o.value === entry.docType ? 'selected' : ''}>${o.label}</option>`).join('')}
         </select>`;
+      const isDeliveryNote = entry.docType === 'delivery_note';
+      const dateInput = isDeliveryNote ? `
+        <span style="display:flex;align-items:center;gap:4px;">
+          <label style="font-size:11px;color:var(--steel);white-space:nowrap;">תאריך קבלה:</label>
+          <input type="date" class="attach-date" data-i="${i}" value="${entry.documentDate || ''}" style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--sheet);">
+        </span>` : '';
       return `
         <div class="attach-item" style="flex-wrap:wrap;gap:6px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
             <input type="checkbox" class="attach-select" data-i="${i}" ${entry.selected !== false ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--green);cursor:pointer;">
             <span style="${entry.selected === false ? 'color:var(--steel);text-decoration:line-through;' : ''}">${shortName} (${(f.size / 1024).toFixed(0)}KB)</span>
           </label>
-          <span style="display:flex;align-items:center;gap:6px;">
+          <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             ${typeSelect}
+            ${dateInput}
             <button type="button" class="remove" data-i="${i}">✕</button>
           </span>
         </div>
       `;
     }).join('');
 
+    list.querySelectorAll('.attach-date').forEach(inp => {
+      inp.addEventListener('change', () => {
+        entries[Number(inp.dataset.i)].documentDate = inp.value || null;
+      });
+    });
     list.querySelectorAll('.attach-select').forEach(cb => {
       cb.addEventListener('change', () => {
         entries[Number(cb.dataset.i)].selected = cb.checked;
@@ -106,7 +118,12 @@ function createAttachWidget(container, options = {}) {
     });
     list.querySelectorAll('.attach-type-select').forEach(sel => {
       sel.addEventListener('change', () => {
-        entries[Number(sel.dataset.i)].docType = sel.value;
+        const entry = entries[Number(sel.dataset.i)];
+        entry.docType = sel.value;
+        if (entry.docType === 'delivery_note' && !entry.documentDate) {
+          entry.documentDate = new Date().toISOString().slice(0, 10);
+        }
+        render();
       });
     });
   }
@@ -118,7 +135,8 @@ function createAttachWidget(container, options = {}) {
         continue;
       }
       const guessedType = fixedDocType || (isImageFileName(f.name) ? 'photo' : 'other');
-      entries.push({ file: f, docType: guessedType, selected: true });
+      const defaultDate = guessedType === 'delivery_note' ? new Date().toISOString().slice(0, 10) : null;
+      entries.push({ file: f, docType: guessedType, selected: true, documentDate: defaultDate });
     }
     render();
   }
@@ -144,7 +162,7 @@ function createAttachWidget(container, options = {}) {
       setProgress(0, `מעלה קובץ 1 מתוך ${total}...`);
 
       for (let i = 0; i < toUpload.length; i++) {
-        const { file, docType } = toUpload[i];
+        const { file, docType, documentDate } = toUpload[i];
         const pctStart = (i / total) * 100;
         setProgress(pctStart, `מעלה: ${file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name} (${i + 1}/${total})`);
 
@@ -156,6 +174,7 @@ function createAttachWidget(container, options = {}) {
         const { error: dbErr } = await sb.from('documents').insert({
           site_id: siteId,
           doc_type: docType || fixedDocType || 'other',
+          document_date: documentDate || null,
           title: file.name,
           file_path: path,
           file_name: file.name,
