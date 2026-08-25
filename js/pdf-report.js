@@ -2,6 +2,18 @@
 async function sgpExportPdf({ title, columns, rows, siteNames, periodText, subtitle }) {
   if (!rows.length) { toast('אין נתונים תואמים לסינון שנבחר', 'error'); return; }
 
+  // Reports with many columns don't fit a readable table -- cells get too narrow and
+  // text wraps into many lines, producing a cramped, screenshot-like mess. Past a
+  // threshold, switch to one card per record instead (key/value grid + long fields
+  // like notes get a full-width block).
+  const useCardLayout = columns.length > 6;
+  const LONG_KEYS = ['notes', 'description'];
+  const isLongField = c => c.type === 'multiline' || c.type === 'docs' || LONG_KEYS.includes(c.key);
+
+  function esc(s) {
+    return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   function fmtPdfCell(v, col) {
     if (col.type === 'docs') {
       if (!v || !v.length) return '<span style="color:#9aa0ab;">—</span>';
@@ -9,37 +21,27 @@ async function sgpExportPdf({ title, columns, rows, siteNames, periodText, subti
     }
     if (v === null || v === undefined || v === '') return '<span style="color:#9aa0ab;">—</span>';
     if (col.type === 'boolean') {
-      return v ? '<span style="color:#00A86B;font-weight:700;">כן</span>' : '<span style="color:#9aa0ab;">לא</span>';
+      return v ? `<span style="color:#00A86B;font-weight:700;">${col.trueLabel || 'כן'}</span>` : `<span style="color:#9aa0ab;">${col.falseLabel || 'לא'}</span>`;
     }
     if (col.type === 'date') return fmtDate(v);
     if (col.type === 'number') return `<span style="font-variant-numeric:tabular-nums;font-weight:600;">${fmtNum(v, col.digits ?? 2)}</span>`;
-    let s = String(v);
-    if (s.length > 80) s = s.slice(0, 77) + '…';
-    return s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (col.type === 'multiline') {
+      return esc(String(v)).split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join('<br>');
+    }
+    let s = esc(String(v));
+    if (s.length > 300) s = s.slice(0, 297) + '…';
+    return s;
   }
 
   const now = new Date();
   const genStr = now.toLocaleDateString('he-IL') + ' · ' + now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-  const landscape = columns.length >= 5;
+  const landscape = !useCardLayout && columns.length >= 5;
   const rootW = landscape ? 1280 : 920;
   const names = siteNames || [];
   const period = periodText || 'כל התקופה';
   const fileDate = now.toISOString().slice(0, 10);
 
-  const tableHeadHtml = `
-    <tr>
-      <th style="background:#F7F8FC;color:#6B7090;font-weight:700;font-size:11px;text-align:right;padding:12px 10px;border-bottom:1px solid #E6EAF5;width:36px;">#</th>
-      ${columns.map(c => `<th style="background:#F7F8FC;color:#6B7090;font-weight:700;font-size:11px;text-align:right;padding:12px 12px;border-bottom:1px solid #E6EAF5;white-space:nowrap;">${c.label}</th>`).join('')}
-    </tr>`;
-
-  function rowHtml(row, indexInFullSet) {
-    return `
-      <tr style="background:${indexInFullSet % 2 === 0 ? '#ffffff' : '#FAFBFE'};">
-        <td style="padding:11px 10px;border-bottom:1px solid #EEF1F8;color:#A0A5C0;font-size:11px;font-weight:600;">${indexInFullSet + 1}</td>
-        ${columns.map(c => `<td style="padding:11px 12px;border-bottom:1px solid #EEF1F8;color:#141729;vertical-align:top;line-height:1.45;">${fmtPdfCell(row[c.key], c)}</td>`).join('')}
-      </tr>`;
-  }
-
+  // ---------- shared chrome ----------
   function bannerHtml() {
     return `
       <div style="background:linear-gradient(135deg,#121A6B 0%,#0A1048 100%);padding:22px 32px;display:flex;align-items:center;justify-content:space-between;">
@@ -95,16 +97,6 @@ async function sgpExportPdf({ title, columns, rows, siteNames, periodText, subti
       </div>`;
   }
 
-  function tableWrap(theadHtml, bodyRowsHtml) {
-    return `
-      <div style="padding:18px 32px 24px;">
-        <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;border:1px solid #E6EAF5;border-radius:14px;overflow:hidden;">
-          <thead>${theadHtml}</thead>
-          <tbody>${bodyRowsHtml}</tbody>
-        </table>
-      </div>`;
-  }
-
   async function waitForImages(el) {
     const imgs = Array.from(el.querySelectorAll('img'));
     await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(res => {
@@ -120,6 +112,68 @@ async function sgpExportPdf({ title, columns, rows, siteNames, periodText, subti
     return root;
   }
 
+  // ---------- layout A: table (few columns) ----------
+  const tableHeadHtml = `
+    <tr>
+      <th style="background:#F7F8FC;color:#6B7090;font-weight:700;font-size:11px;text-align:right;padding:12px 10px;border-bottom:1px solid #E6EAF5;width:36px;">#</th>
+      ${columns.map(c => `<th style="background:#F7F8FC;color:#6B7090;font-weight:700;font-size:11px;text-align:right;padding:12px 12px;border-bottom:1px solid #E6EAF5;white-space:nowrap;">${c.label}</th>`).join('')}
+    </tr>`;
+
+  function rowHtml(row, i) {
+    return `
+      <tr style="background:${i % 2 === 0 ? '#ffffff' : '#FAFBFE'};">
+        <td style="padding:11px 10px;border-bottom:1px solid #EEF1F8;color:#A0A5C0;font-size:11px;font-weight:600;">${i + 1}</td>
+        ${columns.map(c => `<td style="padding:11px 12px;border-bottom:1px solid #EEF1F8;color:#141729;vertical-align:top;line-height:1.45;">${fmtPdfCell(row[c.key], c)}</td>`).join('')}
+      </tr>`;
+  }
+
+  function tableWrap(bodyRowsHtml) {
+    return `
+      <div style="padding:18px 32px 24px;">
+        <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;border:1px solid #E6EAF5;border-radius:14px;overflow:hidden;">
+          <thead>${tableHeadHtml}</thead>
+          <tbody>${bodyRowsHtml}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // ---------- layout B: card per record (many columns) ----------
+  const gridCols = columns.filter(c => !isLongField(c));
+  const longCols = columns.filter(isLongField);
+
+  function cardHtml(row, i) {
+    const gridItems = gridCols.map(c => `
+      <div>
+        <div style="font-size:10px;color:#A0A5C0;font-weight:700;margin-bottom:2px;">${c.label}</div>
+        <div style="font-size:12.5px;color:#141729;line-height:1.4;">${fmtPdfCell(row[c.key], c)}</div>
+      </div>`).join('');
+    const longItems = longCols.map(c => {
+      const v = fmtPdfCell(row[c.key], c);
+      if (v === '<span style="color:#9aa0ab;">—</span>') return '';
+      return `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #E6EAF5;">
+          <div style="font-size:10px;color:#A0A5C0;font-weight:700;margin-bottom:3px;">${c.label}</div>
+          <div style="font-size:12.5px;color:#141729;line-height:1.5;white-space:pre-wrap;">${v}</div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="pdf-card" style="border:1px solid #E6EAF5;border-radius:12px;padding:14px 18px;margin-bottom:10px;background:#fff;">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+          <span style="background:#F4F6FB;color:#6B7090;font-size:10.5px;font-weight:700;padding:2px 10px;border-radius:999px;">#${i + 1}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px 18px;">
+          ${gridItems}
+        </div>
+        ${longItems}
+      </div>`;
+  }
+
+  function cardsWrap(cardsHtml) {
+    return `<div style="padding:16px 32px 24px;">${cardsHtml}</div>`;
+  }
+
+  // ---------- pagination-aware render ----------
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
   const pageWidthMm = pdf.internal.pageSize.getWidth();
@@ -127,50 +181,64 @@ async function sgpExportPdf({ title, columns, rows, siteNames, periodText, subti
   const margin = 6;
   const usableWMm = pageWidthMm - margin * 2;
   const usableHMm = pageHeightMm - margin * 2;
-  const pxPerMm = rootW / usableWMm;          // DOM px (unscaled) per mm, independent of html2canvas's internal scale
-  const pageHeightPx = usableHMm * pxPerMm;   // how many DOM px of content fit on one page
+  const pxPerMm = rootW / usableWMm;
+  const pageHeightPx = usableHMm * pxPerMm;
 
   try {
-    // ---- Step 1: measure everything on one throwaway, fully-built root (all rows) ----
+    // Step 1: measure every item's real height on one throwaway root
     const measureRoot = makeRoot();
-    measureRoot.innerHTML = bannerHtml() + titleBlockHtml() + tableWrap(tableHeadHtml, rows.map((r, i) => rowHtml(r, i)).join('')) + footerHtml();
-    await waitForImages(measureRoot);
-    const measureRect = measureRoot.getBoundingClientRect();
-    const theadEl = measureRoot.querySelector('thead');
-    const theadTop = theadEl.getBoundingClientRect().top - measureRect.top;
-    const theadHeight = theadEl.getBoundingClientRect().height;
-    const trs = Array.from(measureRoot.querySelectorAll('tbody tr'));
-    const rowHeights = trs.map(tr => tr.getBoundingClientRect().height);
+    let theadTop = 0, theadHeight = 0, itemHeights = [];
+
+    if (useCardLayout) {
+      measureRoot.innerHTML = bannerHtml() + titleBlockHtml() + cardsWrap(rows.map((r, i) => cardHtml(r, i)).join(''));
+      await waitForImages(measureRoot);
+      const cardsWrapEl = measureRoot.querySelector('.pdf-card')?.parentElement;
+      theadTop = cardsWrapEl ? (cardsWrapEl.getBoundingClientRect().top - measureRoot.getBoundingClientRect().top) : 0;
+      theadHeight = 0;
+      itemHeights = Array.from(measureRoot.querySelectorAll('.pdf-card')).map(el => el.getBoundingClientRect().height + 10 /* margin-bottom */);
+    } else {
+      measureRoot.innerHTML = bannerHtml() + titleBlockHtml() + tableWrap(rows.map((r, i) => rowHtml(r, i)).join(''));
+      await waitForImages(measureRoot);
+      const measureRect = measureRoot.getBoundingClientRect();
+      const theadEl = measureRoot.querySelector('thead');
+      theadTop = theadEl.getBoundingClientRect().top - measureRect.top;
+      theadHeight = theadEl.getBoundingClientRect().height;
+      itemHeights = Array.from(measureRoot.querySelectorAll('tbody tr')).map(tr => tr.getBoundingClientRect().height);
+    }
     document.body.removeChild(measureRoot);
 
-    // ---- Step 2: compute page break points that always fall between rows ----
-    const pages = []; // each entry: { startIdx, endIdx (exclusive), isFirst, isLast }
+    // Step 2: compute page breaks that always fall between items
+    const pages = [];
     let idx = 0;
     let isFirst = true;
     while (idx < rows.length) {
-      const availableForRows = isFirst
-        ? (pageHeightPx - theadTop - theadHeight - 30 /* small buffer */)
-        : (pageHeightPx - 80 /* continuation header */ - theadHeight - 30);
+      const available = isFirst
+        ? (pageHeightPx - theadTop - theadHeight - 30)
+        : (pageHeightPx - 80 - theadHeight - 30);
       let used = 0;
       const start = idx;
-      while (idx < rows.length && (used + rowHeights[idx]) <= availableForRows) {
-        used += rowHeights[idx];
+      while (idx < rows.length && (used + itemHeights[idx]) <= available) {
+        used += itemHeights[idx];
         idx++;
       }
-      if (idx === start) idx++; // guarantee progress even if a single row is taller than a page
+      if (idx === start) idx++; // guarantee progress if a single item is taller than a page
       pages.push({ startIdx: start, endIdx: idx, isFirst });
       isFirst = false;
     }
     pages[pages.length - 1].isLast = true;
 
-    // ---- Step 3: render + rasterize each page separately, one clean image per PDF page ----
+    // Step 3: render + rasterize each page separately
     for (let p = 0; p < pages.length; p++) {
       const { startIdx, endIdx, isFirst: first, isLast } = pages[p];
-      const chunkRowsHtml = rows.slice(startIdx, endIdx).map((r, i) => rowHtml(r, startIdx + i)).join('');
+      const chunk = rows.slice(startIdx, endIdx);
+      const bodyHtml = useCardLayout
+        ? cardsWrap(chunk.map((r, i) => cardHtml(r, startIdx + i)).join(''))
+        : tableWrap(chunk.map((r, i) => rowHtml(r, startIdx + i)).join(''));
+
       const pageRoot = makeRoot();
       pageRoot.innerHTML =
         (first ? bannerHtml() + titleBlockHtml() : continuationHeaderHtml(`עמוד ${p + 1} מתוך ${pages.length}`)) +
-        tableWrap(tableHeadHtml, chunkRowsHtml) +
+        bodyHtml +
         (isLast ? footerHtml() : '');
       await waitForImages(pageRoot);
 
