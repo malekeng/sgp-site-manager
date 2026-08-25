@@ -106,7 +106,7 @@
       dateField: 'order_date',
       columns: [
         { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
-        { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
+        { key: '_delivery_dates', label: 'אספקות בפועל', type: 'text' },
         { key: 'supplier', label: 'ספק', type: 'text' },
         { key: 'diameter_text', label: 'קוטר', type: 'text' },
         { key: 'location', label: 'אלמנט / מיקום', type: 'text' },
@@ -269,13 +269,28 @@
           .select('linked_record_id, file_path, file_name, document_date, doc_type')
           .eq('linked_table', key)
           .in('linked_record_id', ids);
+
+        const byRecord = {};
+        (docs || []).forEach(d => {
+          (byRecord[d.linked_record_id] ||= []).push({ name: d.file_name, date: d.document_date, docType: d.doc_type });
+        });
+
         if (docs && docs.length) {
-          const byRecord = {};
-          docs.forEach(d => {
-            (byRecord[d.linked_record_id] ||= []).push({ name: d.file_name, date: d.document_date, docType: d.doc_type });
-          });
           rows = rows.map(r => ({ ...r, _docs: byRecord[r.id] || [] }));
           columns = [...columns, { key: '_docs', label: 'מסמכים', type: 'docs' }];
+        }
+
+        // For rebar specifically: the real delivery dates live per-shipment on the
+        // delivery-note files (an order can be split across several trucks), so a
+        // single record-level delivery_date is often stale/misleading. Compute the
+        // actual dates from the attached delivery notes instead.
+        if (key === 'rebar_deliveries') {
+          rows = rows.map(r => {
+            const noteDocs = (byRecord[r.id] || []).filter(d => d.docType === 'delivery_note' && d.date);
+            const dates = [...new Set(noteDocs.map(d => d.date))].sort();
+            const summary = dates.length ? dates.map(fmtDate).join(', ') : (r.delivery_date ? fmtDate(r.delivery_date) : null);
+            return { ...r, _delivery_dates: summary };
+          });
         }
       }
 
