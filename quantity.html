@@ -167,8 +167,10 @@
         <td>${s.plan_version || '—'}</td>
         <td>${fmtDate(s.plan_date)}</td>
         <td class="row-actions">
-          <button class="btn btn-sm btn-outline" data-open="${s.id}">פתיחה</button>
-          <button class="icon-btn danger" data-del-sheet="${s.id}" title="מחיקה">🗑️</button>
+          <div class="row-actions-inner">
+            <button class="btn btn-sm btn-outline" data-open="${s.id}">פתיחה</button>
+            <button class="icon-btn danger" data-del-sheet="${s.id}" title="מחיקה">🗑️</button>
+          </div>
         </td>
       </tr>
     `).join('');

@@ -213,10 +213,12 @@
           <td>${linkedLabel}</td>
           <td>${docCell}</td>
           <td class="row-actions">
-            <button class="icon-btn" data-edit="${row.id}" title="עריכה">✏️</button>
-            <button class="icon-btn" data-pdf="${row.id}" title="PDF">📄</button>
-            <button class="icon-btn" data-mail="${row.id}" title="פתיחת מייל">✉️</button>
-            <button class="icon-btn danger" data-del="${row.id}" title="מחיקה">🗑️</button>
+            <div class="row-actions-inner">
+              <button class="icon-btn" data-edit="${row.id}" title="עריכה">✏️</button>
+              <button class="icon-btn" data-pdf="${row.id}" title="PDF">📄</button>
+              <button class="icon-btn" data-mail="${row.id}" title="פתיחת מייל">✉️</button>
+              <button class="icon-btn danger" data-del="${row.id}" title="מחיקה">🗑️</button>
+            </div>
           </td>
         </tr>
       `;

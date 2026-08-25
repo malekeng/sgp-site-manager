@@ -183,11 +183,13 @@
         <td>${u.job_title || '—'}</td>
         <td>${siteNames}</td>
         <td class="row-actions">
-          ${isOwner ? `
-            <button class="icon-btn" data-edit-user="${u.id}" title="עריכה">✏️</button>
-            <button class="icon-btn" data-resend="${u.id}" title="שליחת הזמנה מחדש">📧</button>
-            ${u.id !== user.id ? `<button class="icon-btn danger" data-del-user="${u.id}" title="מחיקה">🗑️</button>` : ''}
-          ` : ''}
+          <div class="row-actions-inner">
+            ${isOwner ? `
+              <button class="icon-btn" data-edit-user="${u.id}" title="עריכה">✏️</button>
+              <button class="icon-btn" data-resend="${u.id}" title="שליחת הזמנה מחדש">📧</button>
+              ${u.id !== user.id ? `<button class="icon-btn danger" data-del-user="${u.id}" title="מחיקה">🗑️</button>` : ''}
+            ` : ''}
+          </div>
         </td>
       </tr>
     `;

@@ -149,9 +149,11 @@ async function initCrudPage(config) {
           ${docCell}
           ${auditCell}
           <td class="row-actions">
-            ${toggleBtn}
-            <button class="icon-btn" data-edit="${row.id}" title="עריכה">✏️</button>
-            <button class="icon-btn danger" data-del="${row.id}" title="מחיקה">🗑️</button>
+            <div class="row-actions-inner">
+              ${toggleBtn}
+              <button class="icon-btn" data-edit="${row.id}" title="עריכה">✏️</button>
+              <button class="icon-btn danger" data-del="${row.id}" title="מחיקה">🗑️</button>
+            </div>
           </td>
         </tr>
       `;

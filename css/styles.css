@@ -387,7 +387,8 @@ tbody tr:hover {
 }
 .empty-row td { text-align: center; color: var(--steel); padding: 40px 14px; }
 
-.row-actions { display: flex; gap: 4px; }
+.row-actions { white-space: nowrap; }
+.row-actions-inner { display: flex; gap: 4px; align-items: center; }
 .icon-btn {
   width: 34px; height: 34px;
   display: inline-flex; align-items: center; justify-content: center;
