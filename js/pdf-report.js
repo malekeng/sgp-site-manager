@@ -29,7 +29,12 @@ async function sgpExportPdf({ title, columns, rows, siteNames, periodText, subti
       return esc(String(v)).split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join('<br>');
     }
     let s = esc(String(v));
-    if (s.length > 300) s = s.slice(0, 297) + '…';
+    if (s.length > 140) {
+      let cut = s.slice(0, 140);
+      const lastSpace = cut.lastIndexOf(' ');
+      if (lastSpace > 80) cut = cut.slice(0, lastSpace);
+      s = cut.trim() + '…';
+    }
     return s;
   }
 
