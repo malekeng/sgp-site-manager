@@ -74,17 +74,11 @@ initCrudPage({
   orderBy: { column: 'order_date', ascending: false },
   columns: [
     { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
-    { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
     { key: 'supplier', label: 'ספק', type: 'text' },
     { key: 'diameter_text', label: 'קוטר', type: 'text' },
-    { key: 'location', label: 'אלמנט / מיקום', type: 'text' },
-    { key: 'description', label: 'תיאור / קוד', type: 'text' },
-    { key: 'weight_kg', label: 'משקל (ק\"ג)', type: 'number', digits: 0 },
+    { key: 'weight_kg', label: 'משקל (ק"ג)', type: 'number', digits: 0 },
     { key: 'supply_status', label: 'סופק', type: 'text' },
     { key: 'order_closed', label: 'סטטוס הזמנה', type: 'boolean', trueLabel: 'סגורה', falseLabel: 'פתוחה' },
-    { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
-    { key: 'plan_ref', label: 'רשימה / תוכנית', type: 'text' },
-    { key: 'notes', label: 'הערות', type: 'text' },
   ],
   quickToggle: {
     key: 'order_closed',
