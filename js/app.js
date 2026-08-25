@@ -127,7 +127,7 @@ async function renderHeader(activePage, profile, site) {
 
   host.innerHTML = `
     <div class="brand">
-      <img src="icons/logo.svg" alt="SGP">
+      <img src="icons/logo-white.svg" alt="SGP">
     </div>
     <nav id="mainNav">${navHtml}</nav>
     <div class="sidebar-footer">

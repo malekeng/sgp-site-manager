@@ -192,6 +192,7 @@ input, select, textarea {
   .header-menu-btn { display: flex; }
   .page { margin-right: 0 !important; }
   footer.app-footer { margin-right: 0 !important; }
+  .page-title { padding-right: 62px; }
 }
 
 /* ===== Layout ===== */
