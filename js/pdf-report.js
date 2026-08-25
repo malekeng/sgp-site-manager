@@ -14,10 +14,23 @@ async function sgpExportPdf({ title, columns, rows, siteNames, periodText, subti
     return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  const DOC_TYPE_LABELS = {
+    photo: 'תמונה', delivery_note: 'תעודת משלוח', order: 'הזמנה',
+    lab_report: 'דוח מעבדה', drawing: 'תוכנית', other: 'מסמך',
+  };
+
   function fmtPdfCell(v, col) {
     if (col.type === 'docs') {
       if (!v || !v.length) return '<span style="color:#9aa0ab;">—</span>';
-      return `<span style="display:inline-block;background:#E8FBF3;color:#00A86B;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;">📎 ${v.length}</span>`;
+      return v.map(d => {
+        const typeLabel = DOC_TYPE_LABELS[d.docType] || 'מסמך';
+        const dateLabel = d.date ? ` · ${fmtDate(d.date)}` : '';
+        return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;">
+          <span style="background:#E8FBF3;color:#00A86B;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700;white-space:nowrap;">📎 ${typeLabel}</span>
+          <span style="color:#141729;">${esc(d.name)}</span>
+          ${dateLabel ? `<span style="color:#A0A5C0;font-weight:600;">${dateLabel}</span>` : ''}
+        </div>`;
+      }).join('');
     }
     if (v === null || v === undefined || v === '') return '<span style="color:#9aa0ab;">—</span>';
     if (col.type === 'boolean') {

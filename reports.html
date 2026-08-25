@@ -266,13 +266,13 @@
       if (rows.length) {
         const ids = rows.map(r => r.id);
         const { data: docs } = await sb.from('documents')
-          .select('linked_record_id, file_path, file_name')
+          .select('linked_record_id, file_path, file_name, document_date, doc_type')
           .eq('linked_table', key)
           .in('linked_record_id', ids);
         if (docs && docs.length) {
           const byRecord = {};
           docs.forEach(d => {
-            (byRecord[d.linked_record_id] ||= []).push({ name: d.file_name });
+            (byRecord[d.linked_record_id] ||= []).push({ name: d.file_name, date: d.document_date, docType: d.doc_type });
           });
           rows = rows.map(r => ({ ...r, _docs: byRecord[r.id] || [] }));
           columns = [...columns, { key: '_docs', label: 'מסמכים', type: 'docs' }];
