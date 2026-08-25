@@ -67,6 +67,7 @@ async function initCrudPage(config) {
       ascending: (config.orderBy && config.orderBy.ascending) ?? false,
       nullsFirst: false,
     });
+    q = q.order('created_at', { ascending: false }); // stable tie-breaker when the primary date repeats
     const { data, error } = await q;
     if (error) { toast('שגיאה בטעינת נתונים: ' + error.message, 'error'); return; }
     state.rows = data || [];

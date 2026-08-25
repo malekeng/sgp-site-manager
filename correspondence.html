@@ -162,7 +162,7 @@
     if (state.filters.from) q = q.gte('entry_date', state.filters.from);
     if (state.filters.to) q = q.lte('entry_date', state.filters.to);
     if (state.filters.direction) q = q.eq('direction', state.filters.direction);
-    q = q.order('entry_date', { ascending: false });
+    q = q.order('entry_date', { ascending: false }).order('created_at', { ascending: false });
     const { data, error } = await q;
     if (error) { toast('שגיאה בטעינת נתונים: ' + error.message, 'error'); return; }
     state.rows = data || [];
