@@ -63,6 +63,14 @@
       <input type="file" id="ocrInput" accept="image/*,.pdf" style="display:none;">
     </div>
     <div class="ocr-progress" id="ocrProgress"><div class="spinner"></div><span id="ocrProgressText">מעבד...</span></div>
+    <div id="ocrAttachChoice" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;">
+      <div style="font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:8px;">לאיזה סוג מסמך שייך הקובץ שנסרק?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-sm btn-outline" id="ocrAttachAsOrder">📎 קובץ הזמנה</button>
+        <button type="button" class="btn btn-sm btn-outline" id="ocrAttachAsDeliveryNote">📎 תעודת משלוח</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="ocrAttachSkip">לא לצרף</button>
+      </div>
+    </div>
 
     <div id="formMsg" class="msg"></div>
     <form id="recordForm">
@@ -91,7 +99,7 @@ initCrudPage({
   columns: [
     { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
     { key: 'supplier', label: 'ספק', type: 'text' },
-    { key: 'diameter_text', label: 'קוטר', type: 'text' },
+    { key: 'location', label: 'אלמנט / מיקום', type: 'text' },
     { key: 'weight_kg', label: 'משקל (ק"ג)', type: 'number', digits: 0 },
     { key: 'supply_status', label: 'סופק', type: 'text' },
     { key: 'order_closed', label: 'סטטוס הזמנה', type: 'boolean', trueLabel: 'סגורה', falseLabel: 'פתוחה' },
@@ -165,7 +173,7 @@ function toIsoDate(d, m, y) {
 function parseRebarText(text) {
   const result = {
     supplier: null, diameter_text: null, weight_kg: null,
-    delivery_note_number: null, plan_ref: null,
+    delivery_note_number: null, plan_ref: null, location: null,
     order_date: null, delivery_date: null,
   };
 
@@ -193,6 +201,9 @@ function parseRebarText(text) {
   const planMatch = text.match(/(?:רשימת ברזל|מס['"]? תוכנית|תוכנית מס['"]?)[:\s]*([A-Za-z0-9\-/]{2,15})/);
   if (planMatch) result.plan_ref = planMatch[1];
 
+  const locationMatch = text.match(/\b(קיר|קירות|רצפה|תקרה|עמוד|עמודים|קורה|קורות|מרתף|קומה\s?\d*|יסודות|ממ["']?ד)\b[^\n]{0,25}/);
+  if (locationMatch) result.location = locationMatch[0].trim();
+
   const dateMatches = [...text.matchAll(/(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})/g)];
   if (dateMatches.length >= 1) result.order_date = toIsoDate(dateMatches[0][1], dateMatches[0][2], dateMatches[0][3]);
   if (dateMatches.length >= 2) result.delivery_date = toIsoDate(dateMatches[1][1], dateMatches[1][2], dateMatches[1][3]);
@@ -200,7 +211,11 @@ function parseRebarText(text) {
   return result;
 }
 
+let lastOcrFile = null;
+
 async function handleOcrFile(file) {
+  lastOcrFile = file;
+  document.getElementById('ocrAttachChoice').style.display = 'none';
   ocrProgress.classList.add('show');
   ocrProgressText.textContent = 'טוען קובץ...';
   try {
@@ -226,10 +241,12 @@ async function handleOcrFile(file) {
     if (parsed.weight_kg) form.querySelector('[name=weight_kg]').value = parsed.weight_kg;
     if (parsed.delivery_note_number) form.querySelector('[name=delivery_note_number]').value = parsed.delivery_note_number;
     if (parsed.plan_ref) form.querySelector('[name=plan_ref]').value = parsed.plan_ref;
+    if (parsed.location) form.querySelector('[name=location]').value = parsed.location;
     if (parsed.order_date) form.querySelector('[name=order_date]').value = parsed.order_date;
     if (parsed.delivery_date) form.querySelector('[name=delivery_date]').value = parsed.delivery_date;
 
     toast('הזיהוי הושלם — בדקו ותקנו את השדות לפני שמירה', 'success');
+    document.getElementById('ocrAttachChoice').style.display = 'block';
   } catch (err) {
     console.error(err);
     toast('שגיאה בזיהוי הטקסט: ' + err.message, 'error');
@@ -237,6 +254,23 @@ async function handleOcrFile(file) {
     ocrProgress.classList.remove('show');
   }
 }
+
+function attachOcrFileAs(docType) {
+  if (!lastOcrFile) return;
+  const widget = window.sgpAttachWidgetsByType && window.sgpAttachWidgetsByType[docType];
+  if (!widget) { toast('שגיאה: לא נמצא אזור צירוף מתאים', 'error'); return; }
+  widget.addFile(lastOcrFile);
+  toast(docType === 'order' ? 'הקובץ צורף כקובץ הזמנה' : 'הקובץ צורף כתעודת משלוח', 'success');
+  document.getElementById('ocrAttachChoice').style.display = 'none';
+  lastOcrFile = null;
+}
+
+document.getElementById('ocrAttachAsOrder').addEventListener('click', () => attachOcrFileAs('order'));
+document.getElementById('ocrAttachAsDeliveryNote').addEventListener('click', () => attachOcrFileAs('delivery_note'));
+document.getElementById('ocrAttachSkip').addEventListener('click', () => {
+  lastOcrFile = null;
+  document.getElementById('ocrAttachChoice').style.display = 'none';
+});
 </script>
 </body>
 </html>

@@ -155,6 +155,7 @@ function createAttachWidget(container, options = {}) {
   return {
     getFiles: () => entries,
     clear: () => { entries = []; hideProgress(); render(); },
+    addFile: (file) => addFiles([file]),
     async upload({ siteId, table, recordId, userId }) {
       const toUpload = entries.filter(e => e.selected !== false);
       if (!toUpload.length) return;
