@@ -114,10 +114,6 @@ initCrudPage({
     trueAction: 'פתיחת ההזמנה מחדש', falseAction: 'סגירת ההזמנה',
     trueToast: 'ההזמנה נפתחה מחדש', falseToast: 'ההזמנה נסגרה',
   },
-  attachments: [
-    { label: 'קובץ הזמנה', docType: 'order' },
-    { label: 'קובץ תעודת משלוח', docType: 'delivery_note' },
-  ],
   formFields: [
     { key: 'order_date', label: 'תאריך הזמנה', type: 'date', required: true },
     { key: 'delivery_date', label: 'תאריך אספקה (כללי, לא חובה)', type: 'date' },
@@ -268,9 +264,10 @@ async function handleOcrFile(file) {
 
 function attachOcrFileAs(docType) {
   if (!lastOcrFile) return;
-  const widget = window.sgpAttachWidgetsByType && window.sgpAttachWidgetsByType[docType];
+  const widget = (window.sgpAttachWidgetsByType && window.sgpAttachWidgetsByType[docType])
+    || (window.sgpAttachWidgetsByType && window.sgpAttachWidgetsByType.default);
   if (!widget) { toast('שגיאה: לא נמצא אזור צירוף מתאים', 'error'); return; }
-  widget.addFile(lastOcrFile);
+  widget.addFile(lastOcrFile, docType);
   toast(docType === 'order' ? 'הקובץ צורף כקובץ הזמנה' : 'הקובץ צורף כתעודת משלוח', 'success');
   document.getElementById('ocrAttachChoice').style.display = 'none';
   lastOcrFile = null;

@@ -22,6 +22,7 @@ async function initCrudPage(config) {
   }
   window.sgpAttachWidgetsByType = {};
   (config.attachments || []).forEach((a, i) => { window.sgpAttachWidgetsByType[a.docType] = attachWidgets[i]; });
+  if (attachWidgets[0]) window.sgpAttachWidgetsByType.default = attachWidgets[0];
   const attachWidget = attachWidgets[0] || null; // kept for backward compatibility below
 
   function displayName(p) {

@@ -128,13 +128,13 @@ function createAttachWidget(container, options = {}) {
     });
   }
 
-  function addFiles(fileList) {
+  function addFiles(fileList, typeOverride) {
     for (const f of fileList) {
       if (f.size > 10 * 1024 * 1024) {
         toast(`הקובץ ${f.name} גדול מ-10MB ולא נוסף`, 'error');
         continue;
       }
-      const guessedType = fixedDocType || (isImageFileName(f.name) ? 'photo' : 'other');
+      const guessedType = typeOverride || fixedDocType || (isImageFileName(f.name) ? 'photo' : 'other');
       const defaultDate = guessedType === 'delivery_note' ? new Date().toISOString().slice(0, 10) : null;
       entries.push({ file: f, docType: guessedType, selected: true, documentDate: defaultDate });
     }
@@ -155,7 +155,7 @@ function createAttachWidget(container, options = {}) {
   return {
     getFiles: () => entries,
     clear: () => { entries = []; hideProgress(); render(); },
-    addFile: (file) => addFiles([file]),
+    addFile: (file, typeOverride) => addFiles([file], typeOverride),
     async upload({ siteId, table, recordId, userId }) {
       const toUpload = entries.filter(e => e.selected !== false);
       if (!toUpload.length) return;
