@@ -182,7 +182,7 @@ function parseConcreteText(text) {
     pour_date: null,
   };
 
-  const knownSuppliers = ['א.מואסי', 'רדימיקס', 'הנקל'];
+  const knownSuppliers = ['מוואסי', 'רדימיקס', 'הנקל'];
   for (const s of knownSuppliers) {
     if (text.includes(s)) { result.supplier = s; break; }
   }
@@ -195,10 +195,13 @@ function parseConcreteText(text) {
   const gradeMatch = text.match(/ב-?\s?(20|25|30|40|50)\b/);
   if (gradeMatch) result.concrete_grade = `ב-${gradeMatch[1]}`;
 
-  const volumeMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:מ["']?ק|קוב)/i);
-  if (volumeMatch) result.volume_m3 = parseFloat(volumeMatch[1].replace(',', '.'));
+  // Prefer the actual delivered quantity ("כמות:") over the requested quantity
+  // ("כמות מבוקשת") when a document shows both.
+  const actualVolMatch = text.match(/כמות\s*:?\s*(?:מ["']?ק)?\s*(\d+(?:[.,]\d+)?)\s*מ["']?ק/i)
+    || text.match(/(\d+(?:[.,]\d+)?)\s*(?:מ["']?ק|קוב)/i);
+  if (actualVolMatch) result.volume_m3 = parseFloat(actualVolMatch[1].replace(',', '.'));
 
-  const noteMatch = text.match(/(?:תעודת משלוח|מספר תעודה|תעודה מס['"]?)[:\s]*([0-9]{3,10})/);
+  const noteMatch = text.match(/(?:תעודת משלוח|מספר תעודה|תעודה)\s*(?:מספר|מס['"]?)?[:\s]*([A-Za-z]{0,4}[0-9]{4,10})/);
   if (noteMatch) result.delivery_note_number = noteMatch[1];
 
   const labMatch = text.match(/(?:מס['"]? בדיקה|בדיקה מס['"]?|דוח בדיקה)[:\s]*([0-9A-Za-z\-/]{2,15})/);
