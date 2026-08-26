@@ -10,6 +10,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="js/pdf-report.js"></script>
 <style>
 .ocr-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center; cursor: pointer; margin-bottom: 16px; }
 .ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(0,214,143,0.06); }
@@ -47,6 +50,7 @@
       <h2 id="itemsTitle">שורות כמויות</h2>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-primary" id="addItemBtn">+ הוספת שורה</button>
+        <button class="btn btn-outline" id="exportSheetPdfBtn">📄 ייצוא PDF</button>
         <button class="btn btn-outline" id="backToSheets">חזרה לגיליונות</button>
       </div>
     </div>
@@ -133,7 +137,7 @@
       </div>
       <div style="margin-top:10px;font-size:14px;color:var(--steel);">סה"כ משוער: <strong id="itemLivePreview">—</strong></div>
       <div class="modal-actions">
-        <button type="submit" class="btn btn-primary">הוספה</button>
+        <button type="submit" class="btn btn-primary" id="itemSubmitBtn">הוספה</button>
         <button type="button" class="btn btn-outline" id="cancelItemBtn">ביטול</button>
       </div>
     </form>
@@ -149,6 +153,27 @@
   const { user, site } = auth;
 
   let currentSheet = null;
+  let itemsCache = [];
+  let editingItemId = null;
+  let sheetsCache = [];
+  let editingSheetId = null;
+
+  function openSheetModal(sheet) {
+    editingSheetId = sheet ? sheet.id : null;
+    const form = document.getElementById('sheetForm');
+    form.reset();
+    hideMsg(document.getElementById('sheetFormMsg'));
+    document.querySelector('#sheetModalBackdrop h3').textContent = sheet ? 'עריכת גיליון' : 'גיליון כמויות חדש';
+    document.querySelector('#sheetForm [type=submit]').textContent = sheet ? 'שמירה' : 'יצירה';
+    if (sheet) {
+      form.plan_name.value = sheet.plan_name || '';
+      form.plan_number.value = sheet.plan_number || '';
+      form.floor.value = sheet.floor || '';
+      form.plan_version.value = sheet.plan_version || '';
+      form.plan_date.value = sheet.plan_date || '';
+    }
+    document.getElementById('sheetModalBackdrop').classList.add('open');
+  }
 
   // ===== Sheets =====
   async function loadSheets() {
@@ -169,12 +194,15 @@
         <td class="row-actions">
           <div class="row-actions-inner">
             <button class="btn btn-sm btn-outline" data-open="${s.id}">פתיחה</button>
+            <button class="icon-btn" data-edit-sheet="${s.id}" title="עריכה">✏️</button>
             <button class="icon-btn danger" data-del-sheet="${s.id}" title="מחיקה">🗑️</button>
           </div>
         </td>
       </tr>
     `).join('');
+    sheetsCache = data;
     body.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openSheet(data.find(s => s.id === b.dataset.open))));
+    body.querySelectorAll('[data-edit-sheet]').forEach(b => b.addEventListener('click', () => openSheetModal(data.find(s => s.id === b.dataset.editSheet))));
     body.querySelectorAll('[data-del-sheet]').forEach(b => b.addEventListener('click', () => deleteSheet(b.dataset.delSheet)));
   }
 
@@ -187,11 +215,7 @@
     loadSheets();
   }
 
-  document.getElementById('addSheetBtn').addEventListener('click', () => {
-    document.getElementById('sheetForm').reset();
-    hideMsg(document.getElementById('sheetFormMsg'));
-    document.getElementById('sheetModalBackdrop').classList.add('open');
-  });
+  document.getElementById('addSheetBtn').addEventListener('click', () => openSheetModal(null));
   document.getElementById('cancelSheetBtn').addEventListener('click', () => document.getElementById('sheetModalBackdrop').classList.remove('open'));
   document.getElementById('sheetModalBackdrop').addEventListener('click', e => {
     if (e.target.id === 'sheetModalBackdrop') e.target.classList.remove('open');
@@ -202,13 +226,22 @@
     const fd = new FormData(e.target);
     const payload = Object.fromEntries(fd.entries());
     Object.keys(payload).forEach(k => { if (payload[k] === '') payload[k] = null; });
-    payload.site_id = site.id;
-    payload.created_by = user.id;
-    const { data, error } = await sb.from('quantity_sheets').insert(payload).select().single();
-    if (error) { showMsg(document.getElementById('sheetFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }
-    toast('הגיליון נוצר — ממשיכים למילוי השורות', 'success');
-    document.getElementById('sheetModalBackdrop').classList.remove('open');
-    await openSheet(data);
+
+    if (editingSheetId) {
+      const { error } = await sb.from('quantity_sheets').update(payload).eq('id', editingSheetId);
+      if (error) { showMsg(document.getElementById('sheetFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }
+      toast('הגיליון עודכן', 'success');
+      document.getElementById('sheetModalBackdrop').classList.remove('open');
+      await loadSheets();
+    } else {
+      payload.site_id = site.id;
+      payload.created_by = user.id;
+      const { data, error } = await sb.from('quantity_sheets').insert(payload).select().single();
+      if (error) { showMsg(document.getElementById('sheetFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }
+      toast('הגיליון נוצר — ממשיכים למילוי השורות', 'success');
+      document.getElementById('sheetModalBackdrop').classList.remove('open');
+      await openSheet(data);
+    }
   });
 
   // ===== OCR import: upload a ready BOQ file, extract text, parse candidate rows =====
@@ -390,6 +423,34 @@
     await loadItems();
   }
 
+  document.getElementById('exportSheetPdfBtn').addEventListener('click', async () => {
+    if (!itemsCache.length) { toast('אין שורות בגיליון הזה לייצוא', 'error'); return; }
+    const columns = [
+      { key: 'item_no', label: 'מס\' פריט', type: 'text' },
+      { key: 'description', label: 'תיאור', type: 'text' },
+      { key: 'multiplier', label: 'מכפיל', type: 'number', digits: 2 },
+      { key: 'height', label: 'גובה', type: 'number', digits: 2 },
+      { key: 'width', label: 'רוחב', type: 'number', digits: 2 },
+      { key: 'length', label: 'אורך', type: 'number', digits: 2 },
+      { key: 'total', label: 'סה"כ', type: 'number', digits: 2 },
+    ];
+    const planLabel = currentSheet.plan_name || currentSheet.plan_number || '';
+    const subtitleParts = [
+      currentSheet.plan_number ? `מס' תוכנית ${currentSheet.plan_number}` : null,
+      currentSheet.floor ? `קומה ${currentSheet.floor}` : null,
+      currentSheet.plan_version ? `גרסה ${currentSheet.plan_version}` : null,
+      currentSheet.plan_date ? fmtDate(currentSheet.plan_date) : null,
+    ].filter(Boolean);
+    await sgpExportPdf({
+      title: `כתב כמויות — ${planLabel}`,
+      columns,
+      rows: itemsCache,
+      siteNames: [site.name],
+      periodText: subtitleParts.join(' · ') || null,
+      subtitle: null,
+    });
+  });
+
   document.getElementById('backToSheets').addEventListener('click', () => {
     document.getElementById('itemsCard').style.display = 'none';
     document.getElementById('sheetsCard').style.display = 'block';
@@ -399,14 +460,15 @@
   async function loadItems() {
     const { data, error } = await sb.from('quantity_items').select('*').eq('sheet_id', currentSheet.id).order('sort_order', { ascending: true });
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    itemsCache = data || [];
     const body = document.getElementById('itemsBody');
-    if (!data.length) {
+    if (!itemsCache.length) {
       body.innerHTML = `<tr class="empty-row"><td colspan="8">אין שורות עדיין</td></tr>`;
       document.getElementById('itemsGrandTotal').textContent = '0';
       return;
     }
     let grand = 0;
-    body.innerHTML = data.map(it => {
+    body.innerHTML = itemsCache.map(it => {
       grand += Number(it.total) || 0;
       return `
       <tr>
@@ -417,10 +479,14 @@
         <td class="num-cell">${it.width !== null ? fmtNum(it.width) : '—'}</td>
         <td class="num-cell">${it.length !== null ? fmtNum(it.length) : '—'}</td>
         <td class="num-cell" style="font-weight:700;">${fmtNum(it.total)}</td>
-        <td><button class="icon-btn danger" data-del-item="${it.id}" title="מחיקה">🗑️</button></td>
+        <td class="row-actions"><div class="row-actions-inner">
+          <button class="icon-btn" data-edit-item="${it.id}" title="עריכה">✏️</button>
+          <button class="icon-btn danger" data-del-item="${it.id}" title="מחיקה">🗑️</button>
+        </div></td>
       </tr>`;
     }).join('');
     document.getElementById('itemsGrandTotal').textContent = fmtNum(grand);
+    body.querySelectorAll('[data-edit-item]').forEach(b => b.addEventListener('click', () => openItemModal(itemsCache.find(x => x.id === b.dataset.editItem))));
     body.querySelectorAll('[data-del-item]').forEach(b => b.addEventListener('click', () => deleteItem(b.dataset.delItem)));
   }
 
@@ -431,13 +497,28 @@
     loadItems();
   }
 
-  document.getElementById('addItemBtn').addEventListener('click', () => {
-    document.getElementById('itemForm').reset();
-    document.getElementById('itemForm').querySelector('[name=multiplier]').value = 1;
+  function openItemModal(item) {
+    editingItemId = item ? item.id : null;
+    const form = document.getElementById('itemForm');
+    form.reset();
     hideMsg(document.getElementById('itemFormMsg'));
+    document.querySelector('#itemModalBackdrop h3').textContent = item ? 'עריכת שורה' : 'הוספת שורת כמות';
+    document.getElementById('itemSubmitBtn').textContent = item ? 'שמירה' : 'הוספה';
+    if (item) {
+      form.item_no.value = item.item_no || '';
+      form.description.value = item.description || '';
+      form.multiplier.value = item.multiplier ?? 1;
+      form.height.value = item.height ?? '';
+      form.width.value = item.width ?? '';
+      form.length.value = item.length ?? '';
+    } else {
+      form.multiplier.value = 1;
+    }
     updateLivePreview();
     document.getElementById('itemModalBackdrop').classList.add('open');
-  });
+  }
+
+  document.getElementById('addItemBtn').addEventListener('click', () => openItemModal(null));
   document.getElementById('cancelItemBtn').addEventListener('click', () => document.getElementById('itemModalBackdrop').classList.remove('open'));
   document.getElementById('itemModalBackdrop').addEventListener('click', e => {
     if (e.target.id === 'itemModalBackdrop') e.target.classList.remove('open');
@@ -462,11 +543,19 @@
     ['multiplier', 'height', 'width', 'length'].forEach(k => {
       payload[k] = payload[k] === '' ? null : Number(payload[k]);
     });
-    payload.sheet_id = currentSheet.id;
-    payload.site_id = site.id;
-    const { error } = await sb.from('quantity_items').insert(payload);
-    if (error) { showMsg(document.getElementById('itemFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }
-    toast('השורה נוספה', 'success');
+
+    if (editingItemId) {
+      const { error } = await sb.from('quantity_items').update(payload).eq('id', editingItemId);
+      if (error) { showMsg(document.getElementById('itemFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }
+      toast('השורה עודכנה', 'success');
+    } else {
+      payload.sheet_id = currentSheet.id;
+      payload.site_id = site.id;
+      payload.sort_order = itemsCache.length;
+      const { error } = await sb.from('quantity_items').insert(payload);
+      if (error) { showMsg(document.getElementById('itemFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }
+      toast('השורה נוספה', 'success');
+    }
     document.getElementById('itemModalBackdrop').classList.remove('open');
     loadItems();
   });

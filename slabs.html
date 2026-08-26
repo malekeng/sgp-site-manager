@@ -8,6 +8,14 @@
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<style>
+.ocr-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center; cursor: pointer; margin-bottom: 16px; }
+.ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(0,214,143,0.06); }
+.ocr-progress { display: none; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 13px; color: var(--steel); }
+.ocr-progress.show { display: flex; }
+</style>
 </head>
 <body>
 
@@ -48,6 +56,26 @@
 <div class="modal-backdrop" id="modalBackdrop">
   <div class="modal">
     <h3 id="modalTitle">הוספת רשומה</h3>
+
+    <div class="ocr-zone" id="ocrZone">
+      <div>📄 גררו כאן קובץ הזמנה / תעודת משלוח (תמונה או PDF) למילוי אוטומטי</div>
+      <div style="font-size:11px;color:var(--steel);margin-top:4px;">זיהוי טקסט אוטומטי — בדקו את התוצאה ותקנו ידנית לפני שמירה</div>
+      <input type="file" id="ocrInput" accept="image/*,.pdf" style="display:none;">
+    </div>
+    <div class="ocr-progress" id="ocrProgress"><div class="spinner"></div><span id="ocrProgressText">מעבד...</span></div>
+    <details id="ocrRawWrap" style="display:none;margin-bottom:16px;">
+      <summary style="cursor:pointer;font-size:12px;color:var(--steel);font-weight:600;">📄 טקסט גולמי שזוהה (למקרה שלא כל השדות התמלאו)</summary>
+      <div id="ocrRawText" style="max-height:140px;overflow-y:auto;background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;font-size:11.5px;white-space:pre-wrap;margin-top:6px;direction:ltr;text-align:right;font-family:monospace;"></div>
+    </details>
+    <div id="ocrAttachChoice" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;">
+      <div style="font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:8px;">לאיזה סוג מסמך שייך הקובץ שנסרק?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-sm btn-outline" id="ocrAttachAsOrder">📎 קובץ הזמנה</button>
+        <button type="button" class="btn btn-sm btn-outline" id="ocrAttachAsDeliveryNote">📎 תעודת משלוח</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="ocrAttachSkip">לא לצרף</button>
+      </div>
+    </div>
+
     <div id="formMsg" class="msg"></div>
     <form id="recordForm">
       <div class="form-grid" id="formGrid"></div>
@@ -98,6 +126,145 @@ initCrudPage({
     { key: 'delivery_note_number', label: 'מס\' תעודת משלוח (שורה לכל מספר)', type: 'textarea' },
     { key: 'notes', label: 'הערות / עדכונים', type: 'textarea', full: true },
   ],
+});
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+const ocrZone = document.getElementById('ocrZone');
+const ocrInput = document.getElementById('ocrInput');
+const ocrProgress = document.getElementById('ocrProgress');
+const ocrProgressText = document.getElementById('ocrProgressText');
+
+ocrZone.addEventListener('click', () => ocrInput.click());
+ocrZone.addEventListener('dragover', e => { e.preventDefault(); ocrZone.classList.add('dragover'); });
+ocrZone.addEventListener('dragleave', () => ocrZone.classList.remove('dragover'));
+ocrZone.addEventListener('drop', e => {
+  e.preventDefault();
+  ocrZone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) handleOcrFile(e.dataTransfer.files[0]);
+});
+ocrInput.addEventListener('change', () => {
+  if (ocrInput.files[0]) handleOcrFile(ocrInput.files[0]);
+  ocrInput.value = '';
+});
+
+async function pdfToImageDataUrl(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2.2 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/png');
+}
+
+function toIsoDate(d, m, y) {
+  if (y.length === 2) y = '20' + y;
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+
+function parseSlabText(text) {
+  const result = {
+    supplier: null, order_number: null, plan_ref: null,
+    quantity_m2: null, delivery_note_number: null, location: null,
+    order_date: null, delivery_date: null,
+  };
+
+  if (text.includes('רמט טרום')) result.supplier = 'רמט טרום בע"מ';
+  if (!result.supplier) {
+    const candidates = [...text.matchAll(/([א-ת][א-ת\s.]{2,30}(?:בע["']?מ|בעמ))/g)];
+    const match = candidates.find(m => !m[1].includes('גיל') && !m[1].includes('שי גיל'));
+    if (match) result.supplier = match[1].trim();
+  }
+
+  const orderMatch = text.match(/(?:מס['"]? הזמנה|הזמנה מס['"]?)[:\s]*([0-9A-Za-z\-/]{2,15})/);
+  if (orderMatch) result.order_number = orderMatch[1];
+
+  const planMatch = text.match(/(?:מס['"]? תכנית|תכנית מס['"]?)[:\s]*([0-9A-Za-z\-/]{2,15})/);
+  if (planMatch) result.plan_ref = planMatch[1];
+
+  const qtyMatch = text.match(/(\d+(?:[.,]\d+)?)\s*מ["']?ר/);
+  if (qtyMatch) result.quantity_m2 = parseFloat(qtyMatch[1].replace(',', '.'));
+
+  const noteMatch = text.match(/(?:תעודת משלוח|מספר תעודה|תעודה מס['"]?)[:\s]*([0-9]{3,10})/);
+  if (noteMatch) result.delivery_note_number = noteMatch[1];
+
+  const locationMatch = text.match(/\b(מרתף\s?-?\d*|קומה\s?\d*)\b[^\n]{0,20}/);
+  if (locationMatch) result.location = locationMatch[0].trim();
+
+  const dateMatches = [...text.matchAll(/(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})/g)];
+  if (dateMatches.length >= 1) result.order_date = toIsoDate(dateMatches[0][1], dateMatches[0][2], dateMatches[0][3]);
+  if (dateMatches.length >= 2) result.delivery_date = toIsoDate(dateMatches[1][1], dateMatches[1][2], dateMatches[1][3]);
+
+  return result;
+}
+
+let lastOcrFile = null;
+
+async function handleOcrFile(file) {
+  lastOcrFile = file;
+  document.getElementById('ocrAttachChoice').style.display = 'none';
+  document.getElementById('ocrRawWrap').style.display = 'none';
+  ocrProgress.classList.add('show');
+  ocrProgressText.textContent = 'טוען קובץ...';
+  try {
+    let imageSource = file;
+    if (file.type === 'application/pdf') {
+      ocrProgressText.textContent = 'ממיר PDF לתמונה...';
+      imageSource = await pdfToImageDataUrl(file);
+    }
+
+    ocrProgressText.textContent = 'מזהה טקסט (OCR)...';
+    const { data } = await Tesseract.recognize(imageSource, 'heb+eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          ocrProgressText.textContent = `מזהה טקסט... ${Math.round(m.progress * 100)}%`;
+        }
+      },
+    });
+
+    document.getElementById('ocrRawText').textContent = data.text;
+    document.getElementById('ocrRawWrap').style.display = 'block';
+
+    const parsed = parseSlabText(data.text);
+    const form = document.getElementById('recordForm');
+    if (parsed.supplier) form.querySelector('[name=supplier]').value = parsed.supplier;
+    if (parsed.order_number) form.querySelector('[name=order_number]').value = parsed.order_number;
+    if (parsed.plan_ref) form.querySelector('[name=plan_ref]').value = parsed.plan_ref;
+    if (parsed.quantity_m2) form.querySelector('[name=quantity_m2]').value = parsed.quantity_m2;
+    if (parsed.delivery_note_number) form.querySelector('[name=delivery_note_number]').value = parsed.delivery_note_number;
+    if (parsed.location) form.querySelector('[name=location]').value = parsed.location;
+    if (parsed.order_date) form.querySelector('[name=order_date]').value = parsed.order_date;
+    if (parsed.delivery_date) form.querySelector('[name=delivery_date]').value = parsed.delivery_date;
+
+    toast('הזיהוי הושלם — בדקו ותקנו את השדות לפני שמירה', 'success');
+    document.getElementById('ocrAttachChoice').style.display = 'block';
+  } catch (err) {
+    console.error(err);
+    toast('שגיאה בזיהוי הטקסט: ' + err.message, 'error');
+  } finally {
+    ocrProgress.classList.remove('show');
+  }
+}
+
+function attachOcrFileAs(docType) {
+  if (!lastOcrFile) return;
+  const widget = (window.sgpAttachWidgetsByType && window.sgpAttachWidgetsByType[docType])
+    || (window.sgpAttachWidgetsByType && window.sgpAttachWidgetsByType.default);
+  if (!widget) { toast('שגיאה: לא נמצא אזור צירוף מתאים', 'error'); return; }
+  widget.addFile(lastOcrFile, docType);
+  toast(docType === 'order' ? 'הקובץ צורף כקובץ הזמנה' : 'הקובץ צורף כתעודת משלוח', 'success');
+  document.getElementById('ocrAttachChoice').style.display = 'none';
+  lastOcrFile = null;
+}
+
+document.getElementById('ocrAttachAsOrder').addEventListener('click', () => attachOcrFileAs('order'));
+document.getElementById('ocrAttachAsDeliveryNote').addEventListener('click', () => attachOcrFileAs('delivery_note'));
+document.getElementById('ocrAttachSkip').addEventListener('click', () => {
+  lastOcrFile = null;
+  document.getElementById('ocrAttachChoice').style.display = 'none';
 });
 </script>
 </body>
