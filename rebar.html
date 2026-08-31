@@ -280,7 +280,10 @@ async function handleOcrFile(file) {
     if (parsed.delivery_note_number) form.querySelector('[name=delivery_note_number]').value = parsed.delivery_note_number;
     if (parsed.plan_ref) form.querySelector('[name=plan_ref]').value = parsed.plan_ref;
     if (parsed.location) form.querySelector('[name=location]').value = parsed.location;
-    if (parsed.order_date) form.querySelector('[name=order_date]').value = parsed.order_date;
+    // Deliberately NOT auto-filling order_date: a scanned delivery-note file's date
+    // reflects when that shipment arrived, not when the order was originally placed.
+    // Auto-filling it here would silently move the record's position in every list
+    // sorted by order_date. order_date is set manually only.
     if (parsed.delivery_date) form.querySelector('[name=delivery_date]').value = parsed.delivery_date;
 
     toast('הזיהוי הושלם — בדקו ותקנו את השדות לפני שמירה', 'success');
