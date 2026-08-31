@@ -129,11 +129,11 @@
     },
     prestressed_slabs: {
       title: 'לוח״דים',
-      dateField: 'delivery_date',
+      dateField: 'order_date',
       columns: [
         { key: 'order_number', label: 'מס\' הזמנה', type: 'text' },
         { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
-        { key: 'delivery_date', label: 'תאריך אספקה', type: 'date' },
+        { key: '_delivery_dates', label: 'אספקות בפועל', type: 'text' },
         { key: 'installed_date', label: 'תאריך הנחה', type: 'date' },
         { key: 'supplier', label: 'ספק', type: 'text' },
         { key: 'location', label: 'קומה / מיקום', type: 'text' },
@@ -394,11 +394,11 @@
           columns = [...columns, { key: '_docs', label: 'מסמכים', type: 'docs' }];
         }
 
-        // For rebar specifically: the real delivery dates live per-shipment on the
+        // For rebar and slabs: the real delivery dates live per-shipment on the
         // delivery-note files (an order can be split across several trucks), so a
         // single record-level delivery_date is often stale/misleading. Compute the
         // actual dates from the attached delivery notes instead.
-        if (key === 'rebar_deliveries') {
+        if (key === 'rebar_deliveries' || key === 'prestressed_slabs') {
           rows = rows.map(r => {
             const noteDocs = (byRecord[r.id] || []).filter(d => d.docType === 'delivery_note' && d.date);
             const dates = [...new Set(noteDocs.map(d => d.date))].sort();

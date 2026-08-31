@@ -259,12 +259,27 @@ async function initCrudPage(config) {
         </div>`;
       }
       if (f.type === 'textarea') {
+        const appendBtn = f.key === 'notes'
+          ? `<button type="button" class="btn btn-sm btn-outline" data-append-note style="margin-bottom:6px;">+ הוספת הערה</button>`
+          : '';
         return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
+          ${appendBtn}
           <textarea name="${f.key}" rows="2" ${f.required ? 'required' : ''}></textarea></div>`;
       }
       return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
         <input type="${f.type}" name="${f.key}" ${f.step ? `step="${f.step}"` : ''} ${f.required ? 'required' : ''}></div>`;
     }).join('');
+
+    grid.querySelectorAll('[data-append-note]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const textarea = btn.parentElement.querySelector('textarea');
+        const newNote = prompt('הערה חדשה:');
+        if (!newNote || !newNote.trim()) return;
+        const dateStr = new Date().toLocaleDateString('he-IL');
+        const entry = `[${dateStr}] ${newNote.trim()}`;
+        textarea.value = textarea.value ? `${entry}\n${textarea.value}` : entry;
+      });
+    });
 
     grid.querySelectorAll('select[data-has-other]').forEach(sel => {
       const otherInput = sel.parentElement.querySelector('.other-input');
