@@ -256,7 +256,7 @@ function greetingByHour() {
       if (!file.type.startsWith('image/')) { toast('יש לבחור קובץ תמונה', 'error'); return; }
 
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `site-covers/${site.id}/cover_${Date.now()}.${ext}`;
+      const path = `${site.id}/site-covers/cover_${Date.now()}.${ext}`;
       toast('מעלה תמונת אתר...');
       const { error: upErr } = await sb.storage.from('documents').upload(path, file, { upsert: true, contentType: file.type });
       if (upErr) { toast('שגיאה בהעלאה: ' + upErr.message, 'error'); return; }
