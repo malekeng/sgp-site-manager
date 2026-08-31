@@ -78,15 +78,15 @@
       <div class="attach-item" style="align-items:flex-start;flex-direction:column;gap:6px;">
         <div style="display:flex;justify-content:space-between;width:100%;align-items:flex-start;gap:8px;">
           <div>
-            <strong style="font-size:14px;">${fmtDate(m.meeting_date)}</strong>
-            ${m.attendees ? `<span style="color:var(--steel);font-size:12px;"> · ${m.attendees}</span>` : ''}
+            <strong style="font-size:14px;">${esc(fmtDate(m.meeting_date))}</strong>
+            ${m.attendees ? `<span style="color:var(--steel);font-size:12px;"> · ${esc(m.attendees)}</span>` : ''}
           </div>
           <div style="display:flex;gap:4px;">
             <button type="button" class="icon-btn" data-edit="${m.id}" title="עריכה">✏️</button>
             <button type="button" class="icon-btn danger" data-del="${m.id}" title="מחיקה">🗑️</button>
           </div>
         </div>
-        <div style="font-size:13.5px;color:var(--ink);white-space:pre-wrap;line-height:1.5;">${m.summary}</div>
+        <div style="font-size:13.5px;color:var(--ink);white-space:pre-wrap;line-height:1.5;">${esc(m.summary)}</div>
       </div>
     `).join('')}</div>`;
 

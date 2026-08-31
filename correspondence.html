@@ -205,12 +205,12 @@
       const docCell = docCount ? `<span class="doc-badge" data-docs="${row.id}">📎 ${docCount}</span>` : '—';
       return `
         <tr>
-          <td>${fmtDate(row.entry_date)}</td>
+          <td>${esc(fmtDate(row.entry_date))}</td>
           <td><span class="dir-badge ${row.direction}">${dirLabel}</span></td>
-          <td>${row.party || '—'}</td>
-          <td>${row.subject}</td>
-          <td>${row.category || '—'}</td>
-          <td>${linkedLabel}</td>
+          <td>${esc(row.party || '—')}</td>
+          <td>${esc(row.subject)}</td>
+          <td>${esc(row.category || '—')}</td>
+          <td>${esc(linkedLabel)}</td>
           <td>${docCell}</td>
           <td class="row-actions">
             <div class="row-actions-inner">
@@ -245,11 +245,12 @@
     if (!docs.length) return;
     const resolved = await Promise.all(docs.map(async d => ({ ...d, url: await getDocumentUrl(d.file_path) })));
     const lines = resolved.map((d, i) => {
-      if (!d.url) return `<div class="attach-item"><span>${d.file_name}</span></div>`;
+      const fileName = esc(d.file_name);
+      if (!d.url) return `<div class="attach-item"><span>${fileName}</span></div>`;
       if (isImageFile(d.file_name)) {
-        return `<div class="attach-item" data-lightbox="${i}" style="cursor:pointer;"><span>${d.file_name}</span><span class="btn btn-sm btn-outline">הצגה</span></div>`;
+        return `<div class="attach-item" data-lightbox="${i}" style="cursor:pointer;"><span>${fileName}</span><span class="btn btn-sm btn-outline">הצגה</span></div>`;
       }
-      return `<div class="attach-item"><span>${d.file_name}</span><a href="${d.url}" class="btn btn-sm btn-outline">פתיחה</a></div>`;
+      return `<div class="attach-item"><span>${fileName}</span><a href="${esc(d.url)}" class="btn btn-sm btn-outline">פתיחה</a></div>`;
     });
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop open';
@@ -276,7 +277,7 @@
       .order(cfg.dateField, { ascending: false }).limit(40);
     if (error) { linkedRecordSelect.innerHTML = '<option value="">שגיאה בטעינה</option>'; return; }
     linkedRecordSelect.innerHTML = '<option value="">בחר רשומה...</option>' +
-      (data || []).map(r => `<option value="${r.id}">${cfg.labelFn(r)}</option>`).join('');
+      (data || []).map(r => `<option value="${r.id}">${esc(cfg.labelFn(r))}</option>`).join('');
   });
 
   // ===== Add / edit modal =====
@@ -415,17 +416,17 @@
         <div style="color:#fff;font-size:12px;opacity:0.75;">${genStr}</div>
       </div>
       <div style="padding:28px 36px 8px;">
-        <h1 style="color:#1A237E;font-size:24px;font-weight:800;margin:0;">${title}</h1>
-        <div style="color:#6b7280;font-size:13px;margin-top:6px;">${site.name} · סה"כ ${rows.length} רשומות</div>
+        <h1 style="color:#1A237E;font-size:24px;font-weight:800;margin:0;">${esc(title)}</h1>
+        <div style="color:#6b7280;font-size:13px;margin-top:6px;">${esc(site.name)} · סה"כ ${rows.length} רשומות</div>
       </div>
       <div style="padding:12px 36px 28px;">
         ${rows.map(r => `
           <div style="border:1px solid #e1e5f0;border-radius:10px;padding:16px 20px;margin-bottom:14px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <strong style="font-size:15px;color:#1a1f36;">${r.subject}</strong>
-              <span style="font-size:12px;color:#6b7280;">${fmtDate(r.entry_date)} · ${r.direction === 'outgoing' ? 'יוצא (בקשה/פנייה ליועץ)' : 'נכנס (אישור/עדכון מהיועץ)'}${r.party ? ' · ' + r.party : ''}${r.category ? ' · ' + r.category : ''}</span>
+              <strong style="font-size:15px;color:#1a1f36;">${esc(r.subject)}</strong>
+              <span style="font-size:12px;color:#6b7280;">${esc(fmtDate(r.entry_date))} · ${r.direction === 'outgoing' ? 'יוצא (בקשה/פנייה ליועץ)' : 'נכנס (אישור/עדכון מהיועץ)'}${r.party ? ' · ' + esc(r.party) : ''}${r.category ? ' · ' + esc(r.category) : ''}</span>
             </div>
-            <div style="font-size:13px;color:#374151;white-space:pre-wrap;">${r.body || '—'}</div>
+            <div style="font-size:13px;color:#374151;white-space:pre-wrap;">${esc(r.body || '—')}</div>
           </div>
         `).join('')}
       </div>

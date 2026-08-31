@@ -112,7 +112,7 @@ async function initCrudPage(config) {
   function renderTable() {
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
-    thead.innerHTML = '<tr>' + config.columns.map(c => `<th>${c.label}</th>`).join('') + '<th>מסמכים</th><th>עודכן</th><th></th></tr>';
+    thead.innerHTML = '<tr>' + config.columns.map(c => `<th>${esc(c.label)}</th>`).join('') + '<th>מסמכים</th><th>עודכן</th><th></th></tr>';
 
     if (!state.rows.length) {
       tbody.innerHTML = `<tr class="empty-row"><td colspan="${config.columns.length + 3}">אין רשומות עדיין</td></tr>`;
@@ -124,13 +124,13 @@ async function initCrudPage(config) {
         const v = row[c.key];
         let out = '—';
         if (v !== null && v !== undefined && v !== '') {
-          if (c.type === 'date') out = fmtDate(v);
-          else if (c.type === 'number') out = fmtNum(v, c.digits ?? 2);
-          else if (c.type === 'boolean') out = v ? (c.trueLabel || 'כן') : (c.falseLabel || 'לא');
+          if (c.type === 'date') out = esc(fmtDate(v));
+          else if (c.type === 'number') out = esc(fmtNum(v, c.digits ?? 2));
+          else if (c.type === 'boolean') out = esc(v ? (c.trueLabel || 'כן') : (c.falseLabel || 'לא'));
           else if (c.type === 'multiline') {
-            out = String(v).split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join('<br>');
+            out = String(v).split(/[\n,]+/).map(s => s.trim()).filter(Boolean).map(esc).join('<br>');
           }
-          else out = String(v);
+          else out = esc(String(v));
         }
         return `<td class="${c.type === 'number' ? 'num-cell' : ''}">${out}</td>`;
       }).join('');
@@ -141,7 +141,7 @@ async function initCrudPage(config) {
       const whoId = row.updated_by || row.created_by;
       const when = row.updated_at || row.created_at;
       const auditCell = whoId || when
-        ? `<td class="audit-cell"><div class="audit-who">${whoId ? (state.profileNames[whoId] || 'משתמש') : '—'}</div><div class="audit-when">${fmtDateTime(when)}</div></td>`
+        ? `<td class="audit-cell"><div class="audit-who">${esc(whoId ? (state.profileNames[whoId] || 'משתמש') : '—')}</div><div class="audit-when">${esc(fmtDateTime(when))}</div></td>`
         : `<td style="color:var(--steel-light);">—</td>`;
       const qt = config.quickToggle;
       const toggleBtn = qt
@@ -190,18 +190,19 @@ async function initCrudPage(config) {
     if (!docs.length) return;
     const resolved = await Promise.all(docs.map(async d => ({ ...d, url: await getDocumentUrl(d.file_path) })));
     const lines = resolved.map((d, i) => {
-      const dateLabel = d.document_date ? ` · ${fmtDate(d.document_date)}` : '';
-      if (!d.url) return `<div class="attach-item"><span>${d.file_name}${dateLabel}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
+      const dateLabel = d.document_date ? ` · ${esc(fmtDate(d.document_date))}` : '';
+      const fileName = esc(d.file_name);
+      if (!d.url) return `<div class="attach-item"><span>${fileName}${dateLabel}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
       if (isImageFile(d.file_name)) {
         return `<div class="attach-item" data-lightbox="${i}" style="cursor:pointer;">
           <span style="display:flex;align-items:center;gap:8px;">
-            <img src="${d.url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
-            ${d.file_name}${dateLabel}
+            <img src="${esc(d.url)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
+            ${fileName}${dateLabel}
           </span>
           <span class="btn btn-sm btn-outline">הצגה</span>
         </div>`;
       }
-      return `<div class="attach-item"><span>${d.file_name}${dateLabel}</span><a href="${d.url}" class="btn btn-sm btn-outline">פתיחה / הורדה</a></div>`;
+      return `<div class="attach-item"><span>${fileName}${dateLabel}</span><a href="${esc(d.url)}" class="btn btn-sm btn-outline">פתיחה / הורדה</a></div>`;
     });
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop open';

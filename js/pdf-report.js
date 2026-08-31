@@ -1,7 +1,7 @@
 // ===== Shared PDF rendering engine for SGP reports =====
 const SGP_DOC_TYPE_LABELS = {
   photo: 'תמונה', delivery_note: 'תעודת משלוח', order: 'הזמנה',
-  lab_report: 'דוח מעבדה', drawing: 'תוכנית', other: 'מסמך',
+  lab_test: 'דוח מעבדה', drawing: 'תוכנית', other: 'מסמך',
 };
 const SGP_LONG_KEYS = ['notes', 'description', 'summary'];
 
@@ -66,7 +66,7 @@ function sgpTitleBlockHtml(title, subtitle, names, period, count) {
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;">
         <div style="background:#F4F6FB;border:1px solid #E6EAF5;border-radius:12px;padding:10px 14px;min-width:140px;">
           <div style="font-size:11px;color:#6B7090;font-weight:600;">אתרים</div>
-          <div style="font-size:13px;font-weight:700;margin-top:2px;">${names.join(', ') || '—'}</div>
+          <div style="font-size:13px;font-weight:700;margin-top:2px;">${sgpEsc(names.join(', ') || '—')}</div>
         </div>
         <div style="background:#F4F6FB;border:1px solid #E6EAF5;border-radius:12px;padding:10px 14px;min-width:140px;">
           <div style="font-size:11px;color:#6B7090;font-weight:600;">תקופה</div>

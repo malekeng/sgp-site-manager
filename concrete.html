@@ -286,7 +286,7 @@ function attachOcrFileAs(docType) {
 }
 
 document.getElementById('ocrAttachAsDeliveryNote').addEventListener('click', () => attachOcrFileAs('delivery_note'));
-document.getElementById('ocrAttachAsLabReport').addEventListener('click', () => attachOcrFileAs('lab_report'));
+document.getElementById('ocrAttachAsLabReport').addEventListener('click', () => attachOcrFileAs('lab_test'));
 document.getElementById('ocrAttachSkip').addEventListener('click', () => {
   lastOcrFile = null;
   document.getElementById('ocrAttachChoice').style.display = 'none';

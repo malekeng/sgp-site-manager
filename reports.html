@@ -189,7 +189,7 @@
     host.innerHTML = sitesCache.map(s => `
       <label class="site-check ${filterState.siteIds.includes(s.id) ? 'checked' : ''}" data-site-id="${s.id}">
         <input type="checkbox" ${filterState.siteIds.includes(s.id) ? 'checked' : ''} ${isRestricted ? 'disabled' : ''}>
-        ${s.name}
+        ${esc(s.name)}
       </label>
     `).join('');
 
@@ -456,7 +456,7 @@
     const suppliers = Object.keys(bySupplier).sort();
     document.getElementById('rebarSummary').innerHTML = suppliers.length
       ? `<div class="table-wrap"><table><thead><tr><th>ספק</th><th>משקל כולל (ק\"ג)</th></tr></thead><tbody>${
-          suppliers.map(s => `<tr><td>${s}</td><td>${fmtNum(bySupplier[s], 0)}</td></tr>`).join('')
+          suppliers.map(s => `<tr><td>${esc(s)}</td><td>${fmtNum(bySupplier[s], 0)}</td></tr>`).join('')
         }</tbody></table></div>`
       : '<p style="color:var(--steel);">אין נתונים תואמים לסינון</p>';
 
@@ -477,7 +477,7 @@
   };
   const DOC_TYPE_LABELS = {
     photo: 'תמונה', delivery_note: 'תעודת משלוח', order: 'הזמנה',
-    lab_report: 'דוח מעבדה', drawing: 'תוכנית', other: 'אחר',
+    lab_test: 'דוח מעבדה', drawing: 'תוכנית', other: 'אחר',
   };
 
   function isImageFile(name) {
@@ -522,7 +522,7 @@
     if (filterState.from) q = q.gte('created_at', filterState.from);
     if (filterState.to) q = q.lte('created_at', filterState.to + 'T23:59:59');
     const { data, error } = await q;
-    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; downloadAllBtn.style.display = 'none'; return; }
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; downloadAllBtn.style.display = 'none'; return; }
     if (!data || !data.length) {
       host.innerHTML = '<p style="color:var(--steel);">אין מסמכים מצורפים בטווח שנבחר</p>';
       downloadAllBtn.style.display = 'none';
@@ -542,15 +542,16 @@
       const typeLabel = LINKED_TABLE_LABELS[d.linked_table] || d.linked_table || '';
       const docTypeLabel = DOC_TYPE_LABELS[d.doc_type] || '';
       const metaLabel = [docTypeLabel, typeLabel].filter(Boolean).join(' · ');
-      const displayDate = d.document_date ? fmtDate(d.document_date) : fmtDate(d.created_at);
+      const displayDate = esc(d.document_date ? fmtDate(d.document_date) : fmtDate(d.created_at));
+      const fileName = esc(d.file_name);
       if (!d.url) {
-        return `<div class="attach-item"><span>${d.file_name}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
+        return `<div class="attach-item"><span>${fileName}</span><span style="color:var(--danger);font-size:12px;">שגיאה בטעינה</span></div>`;
       }
       if (isImageFile(d.file_name)) {
         return `<div class="attach-item">
           <span style="display:flex;align-items:center;gap:8px;min-width:0;">
-            <img src="${d.url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">
-            <span style="overflow:hidden;text-overflow:ellipsis;">${d.file_name}<br><span style="color:var(--steel);font-size:12px;">${metaLabel ? metaLabel + ' · ' : ''}${displayDate}</span></span>
+            <img src="${esc(d.url)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+            <span style="overflow:hidden;text-overflow:ellipsis;">${fileName}<br><span style="color:var(--steel);font-size:12px;">${metaLabel ? esc(metaLabel) + ' · ' : ''}${displayDate}</span></span>
           </span>
           <span style="display:flex;gap:6px;flex-shrink:0;">
             <button type="button" class="btn btn-sm btn-outline" data-view="${i}">צפייה</button>
@@ -559,9 +560,9 @@
         </div>`;
       }
       return `<div class="attach-item">
-        <span style="overflow:hidden;text-overflow:ellipsis;">${d.file_name}<br><span style="color:var(--steel);font-size:12px;">${metaLabel ? metaLabel + ' · ' : ''}${displayDate}</span></span>
+        <span style="overflow:hidden;text-overflow:ellipsis;">${fileName}<br><span style="color:var(--steel);font-size:12px;">${metaLabel ? esc(metaLabel) + ' · ' : ''}${displayDate}</span></span>
         <span style="display:flex;gap:6px;flex-shrink:0;">
-          <a href="${d.url}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">פתיחה</a>
+          <a href="${esc(d.url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">פתיחה</a>
           <button type="button" class="btn btn-sm btn-outline" data-dl="${i}">הורדה</button>
         </span>
       </div>`;

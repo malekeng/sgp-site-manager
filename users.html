@@ -195,19 +195,19 @@
       .select('*, sites!profiles_site_id_fkey(name), profile_sites(site_id, sites(name))')
       .order('created_at', { ascending: true });
     const body = document.getElementById('usersBody');
-    if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="7">שגיאה: ${error.message}</td></tr>`; return; }
+    if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="7">שגיאה: ${esc(error.message)}</td></tr>`; return; }
     usersCache = data || [];
     body.innerHTML = usersCache.map(u => {
       const siteNames = u.role === 'owner'
         ? 'כל האתרים'
-        : ((u.profile_sites || []).map(ps => ps.sites?.name).filter(Boolean).join(', ') || '—');
+        : esc((u.profile_sites || []).map(ps => ps.sites?.name).filter(Boolean).join(', ') || '—');
       return `
       <tr>
-        <td>${u.full_name || '—'}</td>
-        <td>${u.username}</td>
-        <td>${u.email}</td>
-        <td>${roleLabels[u.role] || u.role}</td>
-        <td>${u.job_title || '—'}</td>
+        <td>${esc(u.full_name || '—')}</td>
+        <td>${esc(u.username)}</td>
+        <td>${esc(u.email)}</td>
+        <td>${esc(roleLabels[u.role] || u.role)}</td>
+        <td>${esc(u.job_title || '—')}</td>
         <td>${siteNames}</td>
         <td class="row-actions">
           <div class="row-actions-inner">
@@ -232,7 +232,7 @@
     host.innerHTML = sitesCache.map(s => `
       <label class="site-check ${selectedIds.includes(s.id) ? 'checked' : ''}">
         <input type="checkbox" name="site_ids" value="${s.id}" ${selectedIds.includes(s.id) ? 'checked' : ''}>
-        ${s.name}
+        ${esc(s.name)}
       </label>
     `).join('');
     host.querySelectorAll('.site-check').forEach(label => {
@@ -478,14 +478,14 @@
 
   async function loadSites() {
     const { data, error } = await sb.from('sites').select('*').order('name');
-    if (error) { document.getElementById('sitesBody').innerHTML = `<tr class="empty-row"><td>שגיאה: ${error.message}</td></tr>`; return; }
+    if (error) { document.getElementById('sitesBody').innerHTML = `<tr class="empty-row"><td>שגיאה: ${esc(error.message)}</td></tr>`; return; }
     sitesCache = data || [];
     const body = document.getElementById('sitesBody');
     if (!sitesCache.length) {
       body.innerHTML = `<tr class="empty-row"><td>אין אתרים עדיין</td></tr>`;
       return;
     }
-    body.innerHTML = sitesCache.map(s => `<tr><td>${s.name}</td></tr>`).join('');
+    body.innerHTML = sitesCache.map(s => `<tr><td>${esc(s.name)}</td></tr>`).join('');
   }
 
   document.getElementById('addSiteBtn').addEventListener('click', () => {
@@ -516,14 +516,14 @@
       .select('*')
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
-    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; return; }
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; return; }
     if (!data || !data.length) { host.innerHTML = '<p style="color:var(--steel);">אין בקשות ממתינות</p>'; return; }
 
     host.innerHTML = `<div class="attach-list">${data.map(r => `
       <div class="attach-item">
-        <span><strong>${r.first_name} ${r.last_name}</strong> · ${r.email} <span style="color:var(--steel);font-size:12px;">· ${fmtDate(r.created_at)}</span></span>
+        <span><strong>${esc(r.first_name)} ${esc(r.last_name)}</strong> · ${esc(r.email)} <span style="color:var(--steel);font-size:12px;">· ${esc(fmtDate(r.created_at))}</span></span>
         <span style="display:flex;gap:6px;">
-          <button type="button" class="btn btn-sm btn-primary" data-approve="${r.id}" data-email="${r.email}" data-name="${r.first_name} ${r.last_name}">אישור</button>
+          <button type="button" class="btn btn-sm btn-primary" data-approve="${r.id}" data-email="${esc(r.email)}" data-name="${esc(r.first_name)} ${esc(r.last_name)}">אישור</button>
           <button type="button" class="btn btn-sm btn-danger" data-reject="${r.id}">דחייה</button>
         </span>
       </div>

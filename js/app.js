@@ -37,6 +37,16 @@ const JOB_TITLE_OPTIONS = [
   'מהנדס בטיחות',
 ];
 
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function toast(message, type = '') {
   let host = document.querySelector('.toast-host');
   if (!host) {
@@ -46,7 +56,7 @@ function toast(message, type = '') {
   }
   const el = document.createElement('div');
   el.className = 'toast' + (type ? ' ' + type : '');
-  el.innerHTML = type === 'success' ? `<span class="toast-check">✓</span> ${message}` : message;
+  el.innerHTML = type === 'success' ? `<span class="toast-check">✓</span> ${esc(message)}` : esc(message);
   host.appendChild(el);
   setTimeout(() => el.remove(), type === 'success' ? 4500 : 3500);
 }
@@ -120,12 +130,12 @@ async function renderHeader(activePage, profile, site) {
   const allSites = site?.__allSites;
   const siteControl = (allSites && allSites.length > 1)
     ? `<select class="site-badge" id="siteSwitcher" style="cursor:pointer;">
-        ${allSites.map(s => `<option value="${s.id}" ${s.id === site.id ? 'selected' : ''}>${s.name}</option>`).join('')}
+        ${allSites.map(s => `<option value="${s.id}" ${s.id === site.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
       </select>`
-    : `<span class="site-badge">${site?.name || ''}</span>`;
+    : `<span class="site-badge">${esc(site?.name || '')}</span>`;
 
-  const name = profileDisplayName(profile);
-  const job = profile?.job_title || systemRoleLabel(profile?.role);
+  const name = esc(profileDisplayName(profile));
+  const job = esc(profile?.job_title || systemRoleLabel(profile?.role));
 
   host.innerHTML = `
     <div class="brand">
@@ -135,7 +145,7 @@ async function renderHeader(activePage, profile, site) {
     <div class="sidebar-footer">
       <a href="profile.html" class="user-chip" id="userChip">
         <div class="avatar-sm" id="sidebarAvatar">
-          <span>${profileInitials(profile)}</span>
+          <span>${esc(profileInitials(profile))}</span>
         </div>
         <div class="user-chip-text">
           <div class="user-chip-name">${name}</div>

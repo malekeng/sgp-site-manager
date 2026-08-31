@@ -160,7 +160,7 @@
     members = Array.from(seen.values());
     const select = document.querySelector('select[name=assignee_id]');
     select.innerHTML = '<option value="">ללא</option>' +
-      members.map(m => `<option value="${m.id}">${m.full_name || m.username}</option>`).join('');
+      members.map(m => `<option value="${m.id}">${esc(m.full_name || m.username)}</option>`).join('');
   }
 
   function memberName(id) {
@@ -216,8 +216,8 @@
     const overdue = isOverdue(t.due_date, t.status);
     const dueBadge = t.due_date ? `<span class="due-badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠️ ' : '📅 '}${fmtDate(t.due_date)}</span>` : '';
     const assigneeName = memberName(t.assignee_id);
-    const assigneePill = assigneeName ? `<span class="assignee-pill">👤 ${assigneeName}</span>` : '';
-    const locationPill = t.location ? `<div style="font-size:11.5px;color:var(--steel);margin-top:4px;">📍 ${t.location}</div>` : '';
+    const assigneePill = assigneeName ? `<span class="assignee-pill">👤 ${esc(assigneeName)}</span>` : '';
+    const locationPill = t.location ? `<div style="font-size:11.5px;color:var(--steel);margin-top:4px;">📍 ${esc(t.location)}</div>` : '';
 
     const docs = (taskDocs[t.id] || []).filter(d => isImageFile(d.file_name));
     let photosHtml = '';
@@ -237,8 +237,8 @@
 
     return `
       <div class="kanban-card" draggable="true" data-id="${t.id}">
-        <div class="kanban-card-title">${t.title}</div>
-        ${t.description ? `<div class="kanban-card-desc">${t.description}</div>` : ''}
+        <div class="kanban-card-title">${esc(t.title)}</div>
+        ${t.description ? `<div class="kanban-card-desc">${esc(t.description)}</div>` : ''}
         ${locationPill}
         <div class="kanban-card-meta">
           ${priorityBadge}

@@ -186,11 +186,11 @@
     }
     body.innerHTML = data.map(s => `
       <tr>
-        <td>${s.plan_name || '—'}</td>
-        <td>${s.plan_number || '—'}</td>
-        <td>${s.floor || '—'}</td>
-        <td>${s.plan_version || '—'}</td>
-        <td>${fmtDate(s.plan_date)}</td>
+        <td>${esc(s.plan_name || '—')}</td>
+        <td>${esc(s.plan_number || '—')}</td>
+        <td>${esc(s.floor || '—')}</td>
+        <td>${esc(s.plan_version || '—')}</td>
+        <td>${esc(fmtDate(s.plan_date))}</td>
         <td class="row-actions">
           <div class="row-actions-inner">
             <button class="btn btn-sm btn-outline" data-open="${s.id}">פתיחה</button>
@@ -315,7 +315,7 @@
     document.getElementById('ocrImportBtn').disabled = ocrRows.length === 0;
     list.innerHTML = ocrRows.map((r, i) => `
       <div class="ocr-preview-row">
-        <input type="text" value="${r.description.replace(/"/g, '&quot;')}" data-field="description" data-i="${i}">
+        <input type="text" value="${esc(r.description)}" data-field="description" data-i="${i}">
         <input type="number" step="0.01" value="${r.qty}" data-field="qty" data-i="${i}">
         <button type="button" class="icon-btn danger" data-remove-row="${i}" title="הסרה">✕</button>
       </div>
@@ -472,8 +472,8 @@
       grand += Number(it.total) || 0;
       return `
       <tr>
-        <td>${it.item_no || '—'}</td>
-        <td>${it.description}</td>
+        <td>${esc(it.item_no || '—')}</td>
+        <td>${esc(it.description)}</td>
         <td class="num-cell">${fmtNum(it.multiplier)}</td>
         <td class="num-cell">${it.height !== null ? fmtNum(it.height) : '—'}</td>
         <td class="num-cell">${it.width !== null ? fmtNum(it.width) : '—'}</td>

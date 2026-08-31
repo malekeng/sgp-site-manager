@@ -85,6 +85,16 @@
   const PRIORITY_LABELS = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
   let completingTaskId = null;
 
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function fmtDate(d) {
     if (!d) return '';
     const dt = new Date(d + 'T00:00:00');
@@ -103,7 +113,7 @@
       .order('due_date', { ascending: true, nullsFirst: false });
 
     const host = document.getElementById('tasksList');
-    if (error) { host.innerHTML = `<p style="color:var(--danger);text-align:center;">שגיאה: ${error.message}</p>`; return; }
+    if (error) { host.innerHTML = `<p style="color:var(--danger);text-align:center;">שגיאה: ${esc(error.message)}</p>`; return; }
     if (!tasks || !tasks.length) { host.innerHTML = '<div class="ct-empty">אין לך משימות כרגע</div>'; return; }
 
     const ids = tasks.map(t => t.id);
@@ -116,7 +126,7 @@
       const priorityBadge = t.priority ? `<span class="ct-badge priority-${t.priority}">${PRIORITY_LABELS[t.priority]}</span>` : '';
       const dueBadge = t.due_date ? `<span class="ct-badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠️ ' : '📅 '}${fmtDate(t.due_date)}</span>` : '';
       const doneBadge = t.status === 'done' ? `<span class="ct-badge ct-done-badge">✅ בוצע</span>` : '';
-      const locationBadge = t.location ? `<span class="ct-badge">📍 ${t.location}</span>` : '';
+      const locationBadge = t.location ? `<span class="ct-badge">📍 ${esc(t.location)}</span>` : '';
 
       const taskDocs = docsByTask[t.id] || [];
       let thumbsHtml = '';
@@ -130,8 +140,8 @@
 
       return `
         <div class="ct-card ${t.status === 'done' ? 'done' : ''}">
-          <div class="ct-title">${t.title}</div>
-          ${t.description ? `<div class="ct-desc">${t.description}</div>` : ''}
+          <div class="ct-title">${esc(t.title)}</div>
+          ${t.description ? `<div class="ct-desc">${esc(t.description)}</div>` : ''}
           <div class="ct-meta">${locationBadge}${priorityBadge}${dueBadge}${doneBadge}</div>
           ${thumbsHtml}
           ${t.status !== 'done' ? `<button type="button" class="btn btn-primary btn-sm" data-complete="${t.id}">✅ סימון כבוצע</button>` : ''}

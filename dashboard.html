@@ -140,22 +140,22 @@ function greetingByHour() {
       .eq('site_id', site.id)
       .order('created_at', { ascending: false })
       .limit(20);
-    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; return; }
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; return; }
     if (!data || !data.length) { host.innerHTML = '<p style="color:var(--steel);">אין הודעות עדיין — היו הראשונים לכתוב אחת</p>'; return; }
 
     host.innerHTML = `<div class="attach-list">${data.map(n => {
-      const authorName = n.profiles?.full_name || n.profiles?.username || 'משתמש';
+      const authorName = esc(n.profiles?.full_name || n.profiles?.username || 'משתמש');
       const canDelete = canEditSite || n.created_by === user.id;
       const topicColor = TOPIC_COLORS[n.topic] || 'var(--steel)';
       const topicBadge = n.topic
-        ? `<span style="display:inline-block;background:${topicColor};color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px;margin-bottom:6px;">${n.topic}</span>`
+        ? `<span style="display:inline-block;background:${topicColor};color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px;margin-bottom:6px;">${esc(n.topic)}</span>`
         : '';
       return `
         <div class="attach-item" style="align-items:flex-start;flex-direction:column;gap:4px;">
           <div style="display:flex;justify-content:space-between;width:100%;align-items:flex-start;gap:8px;">
             <div>
               ${topicBadge}
-              <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${n.message}</div>
+              <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${esc(n.message)}</div>
             </div>
             ${canDelete ? `<button type="button" class="icon-btn danger" data-del-notice="${n.id}" title="מחיקה" style="flex-shrink:0;">🗑️</button>` : ''}
           </div>
@@ -320,7 +320,7 @@ function greetingByHour() {
     }
     host.innerHTML = `<div class="attach-list">${items.slice(0, 8).map(it => `
       <a href="${it.href}" class="attach-item" style="text-decoration:none;color:inherit;">
-        <span>${it.icon} ${it.text}</span>
+        <span>${it.icon} ${esc(it.text)}</span>
         <span style="color:var(--green-deep);font-weight:700;">←</span>
       </a>
     `).join('')}</div>`;
@@ -358,9 +358,9 @@ function greetingByHour() {
     }
     host.innerHTML = `<div class="table-wrap"><table><tbody>${merged.map(m => `
       <tr>
-        <td style="white-space:nowrap;color:var(--steel);font-size:12px;">${m.label}</td>
-        <td>${m.fmt(m.row) || '—'}</td>
-        <td style="white-space:nowrap;">${fmtDate(m.row[m.dateField])}</td>
+        <td style="white-space:nowrap;color:var(--steel);font-size:12px;">${esc(m.label)}</td>
+        <td>${esc(m.fmt(m.row) || '—')}</td>
+        <td style="white-space:nowrap;">${esc(fmtDate(m.row[m.dateField]))}</td>
         <td><a href="${m.href}" class="btn btn-sm btn-outline">פתח</a></td>
       </tr>
     `).join('')}</tbody></table></div>`;

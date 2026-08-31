@@ -14,7 +14,7 @@ const DOC_TYPE_OPTIONS = [
   { value: 'photo', label: 'תמונה' },
   { value: 'delivery_note', label: 'תעודת משלוח' },
   { value: 'order', label: 'הזמנה' },
-  { value: 'lab_report', label: 'דוח / אישור מעבדה' },
+  { value: 'lab_test', label: 'דוח / אישור מעבדה' },
   { value: 'drawing', label: 'תוכנית / שרטוט' },
   { value: 'other', label: 'אחר' },
 ];
@@ -73,7 +73,7 @@ function createAttachWidget(container, options = {}) {
 
     list.innerHTML = entries.map((entry, i) => {
       const f = entry.file;
-      const shortName = f.name.length > 30 ? f.name.slice(0, 27) + '…' : f.name;
+      const shortName = esc(f.name.length > 30 ? f.name.slice(0, 27) + '…' : f.name);
       const typeSelect = fixedDocType ? '' : `
         <select class="attach-type-select" data-i="${i}" style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--sheet);">
           ${DOC_TYPE_OPTIONS.map(o => `<option value="${o.value}" ${o.value === entry.docType ? 'selected' : ''}>${o.label}</option>`).join('')}

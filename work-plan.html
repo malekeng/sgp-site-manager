@@ -124,7 +124,7 @@
     members = Array.from(seen.values());
     const select = document.querySelector('select[name=assignee_id]');
     select.innerHTML = '<option value="">ללא</option>' +
-      members.map(m => `<option value="${m.id}">${m.full_name || m.username}</option>`).join('');
+      members.map(m => `<option value="${m.id}">${esc(m.full_name || m.username)}</option>`).join('');
   }
   function memberName(id) {
     const m = members.find(x => x.id === id);
@@ -146,8 +146,8 @@
     if (!plans.length) { body.innerHTML = `<tr class="empty-row"><td colspan="4">אין תכניות עבודה עדיין</td></tr>`; return; }
     body.innerHTML = plans.map(p => `
       <tr>
-        <td>${fmtDate(p.week_start)}${p.week_end ? ' – ' + fmtDate(p.week_end) : ''}</td>
-        <td>${p.notes ? (p.notes.length > 50 ? p.notes.slice(0, 47) + '…' : p.notes) : '—'}</td>
+        <td>${esc(fmtDate(p.week_start))}${p.week_end ? ' – ' + esc(fmtDate(p.week_end)) : ''}</td>
+        <td>${esc(p.notes ? (p.notes.length > 50 ? p.notes.slice(0, 47) + '…' : p.notes) : '—')}</td>
         <td>${counts[p.id] || 0}</td>
         <td class="row-actions"><div class="row-actions-inner">
           <button class="btn btn-sm btn-outline" data-open="${p.id}">פתיחה</button>
@@ -219,11 +219,11 @@
     if (!planTasks.length) { body.innerHTML = `<tr class="empty-row"><td colspan="6">אין משימות בתכנית זו עדיין</td></tr>`; return; }
     body.innerHTML = planTasks.map(t => `
       <tr>
-        <td>${t.title}</td>
-        <td>${t.location || '—'}</td>
-        <td>${memberName(t.assignee_id)}</td>
-        <td>${t.due_date ? fmtDate(t.due_date) : '—'}</td>
-        <td>${STATUS_LABELS[t.status] || t.status}</td>
+        <td>${esc(t.title)}</td>
+        <td>${esc(t.location || '—')}</td>
+        <td>${esc(memberName(t.assignee_id))}</td>
+        <td>${esc(t.due_date ? fmtDate(t.due_date) : '—')}</td>
+        <td>${esc(STATUS_LABELS[t.status] || t.status)}</td>
         <td class="row-actions"><div class="row-actions-inner">
           <button class="icon-btn" data-edit="${t.id}" title="עריכה">✏️</button>
           <button class="icon-btn danger" data-del="${t.id}" title="מחיקה">🗑️</button>
