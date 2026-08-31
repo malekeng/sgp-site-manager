@@ -1,4 +1,44 @@
 // ===== Generic CRUD page engine =====
+
+// Styled "add note" modal, built dynamically so any page can use it without
+// needing its own static HTML. Replaces the native prompt() dialog.
+function openAppendNoteModal(textarea) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop open';
+  backdrop.innerHTML = `
+    <div class="modal">
+      <h3>הוספת הערה</h3>
+      <form id="appendNoteForm">
+        <div class="field full">
+          <label>הערה חדשה</label>
+          <textarea name="note" rows="4" autofocus required placeholder="כתבו את ההערה כאן..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary">הוספה</button>
+          <button type="button" class="btn btn-outline" id="cancelAppendNoteBtn">ביטול</button>
+        </div>
+      </form>
+      <button type="button" class="icon-btn" id="closeAppendNoteBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('textarea').focus();
+
+  function close() { backdrop.remove(); }
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('#cancelAppendNoteBtn').addEventListener('click', close);
+  backdrop.querySelector('#closeAppendNoteBtn').addEventListener('click', close);
+  backdrop.querySelector('#appendNoteForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const newNote = new FormData(e.target).get('note');
+    if (!newNote || !newNote.trim()) return;
+    const dateStr = new Date().toLocaleDateString('he-IL');
+    const entry = `[${dateStr}] ${newNote.trim()}`;
+    textarea.value = textarea.value ? `${entry}\n${textarea.value}` : entry;
+    close();
+  });
+}
+
 async function initCrudPage(config) {
   const auth = await requireAuth(config.activePage);
   if (!auth) return;
@@ -271,14 +311,7 @@ async function initCrudPage(config) {
     }).join('');
 
     grid.querySelectorAll('[data-append-note]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const textarea = btn.parentElement.querySelector('textarea');
-        const newNote = prompt('הערה חדשה:');
-        if (!newNote || !newNote.trim()) return;
-        const dateStr = new Date().toLocaleDateString('he-IL');
-        const entry = `[${dateStr}] ${newNote.trim()}`;
-        textarea.value = textarea.value ? `${entry}\n${textarea.value}` : entry;
-      });
+      btn.addEventListener('click', () => openAppendNoteModal(btn.parentElement.querySelector('textarea')));
     });
 
     grid.querySelectorAll('select[data-has-other]').forEach(sel => {
