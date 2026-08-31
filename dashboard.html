@@ -125,6 +125,7 @@ function greetingByHour() {
   if (!auth) return;
   const { user, profile, site } = auth;
   const canEditSite = profile.role === 'owner' || profile.role === 'admin';
+  const canEditCover = true; // any internal role reaching this dashboard (owner/admin/site_user) can set the site cover photo
 
   // ===== Notice board: anyone on this site can post; owner/admin or the author can delete =====
   const TOPIC_COLORS = {
@@ -239,7 +240,7 @@ function greetingByHour() {
   }
   await applyCover(site.cover_path);
 
-  if (canEditSite) {
+  if (canEditCover) {
     heroActions.innerHTML = `
       <label class="btn btn-sm site-cover-btn" style="cursor:pointer;">
         📷 ${site.cover_path ? 'החלפת תמונת אתר' : 'העלאת תמונת אתר'}
