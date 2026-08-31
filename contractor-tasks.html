@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>המשימות שלי | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.ct-header {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-deep) 100%);
+  color: #fff; padding: 20px 20px 24px; display: flex; justify-content: space-between; align-items: center;
+}
+.ct-header h1 { font-size: 18px; font-weight: 800; margin: 0; }
+.ct-logout { background: rgba(255,255,255,0.12); color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+.ct-page { max-width: 640px; margin: 0 auto; padding: 20px 16px 60px; }
+.ct-card {
+  background: var(--sheet); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 16px 18px; margin-bottom: 14px;
+}
+.ct-card.done { opacity: 0.65; }
+.ct-title { font-size: 16px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
+.ct-desc { font-size: 13.5px; color: var(--steel); line-height: 1.5; margin-bottom: 10px; }
+.ct-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ct-badge { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--bg); color: var(--steel); }
+.ct-badge.priority-high { background: rgba(255,71,87,0.14); color: var(--danger); }
+.ct-badge.priority-medium { background: rgba(255,157,66,0.16); color: #b5651d; }
+.ct-badge.priority-low { background: rgba(0,214,143,0.14); color: var(--green-deep); }
+.ct-badge.overdue { background: rgba(255,71,87,0.14); color: var(--danger); }
+.ct-done-badge { background: rgba(0,214,143,0.14); color: var(--green-deep); }
+.ct-photo-thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ct-photo-thumbs img { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; }
+.ct-empty { text-align: center; color: var(--steel); padding: 60px 20px; }
+</style>
+</head>
+<body>
+
+<div class="ct-header">
+  <h1 id="greeting">המשימות שלי</h1>
+  <button class="ct-logout" id="logoutBtn">יציאה</button>
+</div>
+
+<div class="ct-page" id="tasksList">
+  <div class="loading-overlay"><div class="spinner"></div></div>
+</div>
+
+<div class="modal-backdrop" id="completeModalBackdrop">
+  <div class="modal">
+    <h3>סימון ביצוע</h3>
+    <div id="completeFormMsg" class="msg"></div>
+    <form id="completeForm">
+      <div class="field full">
+        <label>תמונה של הביצוע (אופציונלי אך מומלץ)</label>
+        <input type="file" id="completePhotoInput" accept="image/*" capture="environment">
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">אישור ביצוע</button>
+        <button type="button" class="btn btn-outline" id="cancelCompleteBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+(async function () {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'contractor-login.html'; return; }
+
+  const { data: profile, error: profErr } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
+  if (profErr || !profile || profile.role !== 'contractor') {
+    await sb.auth.signOut();
+    window.location.href = 'contractor-login.html';
+    return;
+  }
+
+  document.getElementById('greeting').textContent = `שלום ${profile.full_name || ''}`;
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+    window.location.href = 'contractor-login.html';
+  });
+
+  const PRIORITY_LABELS = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
+  let completingTaskId = null;
+
+  function fmtDate(d) {
+    if (!d) return '';
+    const dt = new Date(d + 'T00:00:00');
+    return dt.toLocaleDateString('he-IL');
+  }
+  function isOverdue(dueDate, status) {
+    if (!dueDate || status === 'done') return false;
+    return new Date(dueDate) < new Date(new Date().toDateString());
+  }
+
+  async function loadTasks() {
+    const { data: tasks, error } = await sb.from('tasks')
+      .select('*')
+      .eq('assignee_id', session.user.id)
+      .order('status', { ascending: true })
+      .order('due_date', { ascending: true, nullsFirst: false });
+
+    const host = document.getElementById('tasksList');
+    if (error) { host.innerHTML = `<p style="color:var(--danger);text-align:center;">שגיאה: ${error.message}</p>`; return; }
+    if (!tasks || !tasks.length) { host.innerHTML = '<div class="ct-empty">אין לך משימות כרגע</div>'; return; }
+
+    const ids = tasks.map(t => t.id);
+    const { data: docs } = await sb.from('documents').select('*').eq('linked_table', 'tasks').in('linked_record_id', ids);
+    const docsByTask = {};
+    (docs || []).forEach(d => { (docsByTask[d.linked_record_id] ||= []).push(d); });
+
+    const cardsHtml = await Promise.all(tasks.map(async t => {
+      const overdue = isOverdue(t.due_date, t.status);
+      const priorityBadge = t.priority ? `<span class="ct-badge priority-${t.priority}">${PRIORITY_LABELS[t.priority]}</span>` : '';
+      const dueBadge = t.due_date ? `<span class="ct-badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠️ ' : '📅 '}${fmtDate(t.due_date)}</span>` : '';
+      const doneBadge = t.status === 'done' ? `<span class="ct-badge ct-done-badge">✅ בוצע</span>` : '';
+      const locationBadge = t.location ? `<span class="ct-badge">📍 ${t.location}</span>` : '';
+
+      const taskDocs = docsByTask[t.id] || [];
+      let thumbsHtml = '';
+      if (taskDocs.length) {
+        const urls = await Promise.all(taskDocs.map(async d => {
+          const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
+          return signed?.signedUrl;
+        }));
+        thumbsHtml = `<div class="ct-photo-thumbs">${urls.filter(Boolean).map(u => `<img src="${u}">`).join('')}</div>`;
+      }
+
+      return `
+        <div class="ct-card ${t.status === 'done' ? 'done' : ''}">
+          <div class="ct-title">${t.title}</div>
+          ${t.description ? `<div class="ct-desc">${t.description}</div>` : ''}
+          <div class="ct-meta">${locationBadge}${priorityBadge}${dueBadge}${doneBadge}</div>
+          ${thumbsHtml}
+          ${t.status !== 'done' ? `<button type="button" class="btn btn-primary btn-sm" data-complete="${t.id}">✅ סימון כבוצע</button>` : ''}
+        </div>`;
+    }));
+
+    host.innerHTML = cardsHtml.join('');
+    host.querySelectorAll('[data-complete]').forEach(btn => {
+      btn.addEventListener('click', () => openCompleteModal(btn.dataset.complete));
+    });
+  }
+
+  function openCompleteModal(taskId) {
+    completingTaskId = taskId;
+    document.getElementById('completeForm').reset();
+    document.getElementById('completeFormMsg').className = 'msg';
+    document.getElementById('completeModalBackdrop').classList.add('open');
+  }
+  document.getElementById('cancelCompleteBtn').addEventListener('click', () => {
+    document.getElementById('completeModalBackdrop').classList.remove('open');
+  });
+  document.getElementById('completeModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'completeModalBackdrop') e.target.classList.remove('open');
+  });
+
+  document.getElementById('completeForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('completeFormMsg');
+    msgEl.className = 'msg';
+    const submitBtn = e.target.querySelector('[type=submit]');
+    submitBtn.disabled = true;
+
+    try {
+      const { data: task, error: taskErr } = await sb.from('tasks').select('site_id').eq('id', completingTaskId).single();
+      if (taskErr) throw taskErr;
+
+      const { error: updateErr } = await sb.from('tasks')
+        .update({ status: 'done', completed_at: new Date().toISOString() })
+        .eq('id', completingTaskId);
+      if (updateErr) throw updateErr;
+
+      const photoFile = document.getElementById('completePhotoInput').files[0];
+      if (photoFile) {
+        const ext = photoFile.name.split('.').pop();
+        const path = `${task.site_id}/tasks/${completingTaskId}/${Date.now()}.${ext}`;
+        const { error: upErr } = await sb.storage.from('documents').upload(path, photoFile);
+        if (upErr) throw upErr;
+
+        const { error: dbErr } = await sb.from('documents').insert({
+          site_id: task.site_id,
+          doc_type: 'photo',
+          title: photoFile.name,
+          file_path: path,
+          file_name: photoFile.name,
+          file_size: photoFile.size,
+          linked_table: 'tasks',
+          linked_record_id: completingTaskId,
+          uploaded_by: session.user.id,
+        });
+        if (dbErr) throw dbErr;
+      }
+
+      toast('המשימה סומנה כבוצעה', 'success');
+      document.getElementById('completeModalBackdrop').classList.remove('open');
+      await loadTasks();
+    } catch (err) {
+      msgEl.textContent = 'שגיאה: ' + err.message;
+      msgEl.className = 'msg show error';
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  function toast(text, type) {
+    const el = document.createElement('div');
+    el.textContent = text;
+    el.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${type === 'error' ? 'var(--danger)' : 'var(--navy)'};color:#fff;padding:12px 22px;border-radius:999px;font-size:14px;font-weight:600;z-index:400;box-shadow:var(--shadow-lg);`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  await loadTasks();
+})();
+</script>
+</body>
+</html>

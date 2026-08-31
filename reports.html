@@ -43,6 +43,14 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2>ייצוא מלא של המערכת</h2></div>
+    <p style="font-size:12.5px;color:var(--steel);margin-bottom:14px;">
+      קובץ אחד מרוכז הכולל את כל המודולים שיש בהם נתונים בטווח שנבחר: בטון, ברזל, לוח״דים, השוואת מחירים, חריגים, יועצים ומתכננים, משימות, וסיכומי ישיבות.
+    </p>
+    <button class="btn btn-primary" id="exportFullSystemBtn">📦 ייצוא קובץ מלא</button>
+  </div>
+
+  <div class="card">
     <div class="card-header">
       <h2>מסמכים מצורפים</h2>
       <button class="btn btn-primary btn-sm" id="downloadAllDocs" style="display:none;">⬇️ הורד הכל</button>
@@ -242,6 +250,112 @@
       subtitle: subtitleOverride || '',
     });
   }
+
+  document.getElementById('exportFullSystemBtn').addEventListener('click', async () => {
+    if (!filterState.siteIds.length) { toast('בחרו לפחות אתר אחד', 'error'); return; }
+    const btn = document.getElementById('exportFullSystemBtn');
+    btn.disabled = true;
+    btn.textContent = 'מכין קובץ...';
+
+    try {
+      const dateRange = (q, field) => {
+        if (filterState.from) q = q.gte(field, filterState.from);
+        if (filterState.to) q = q.lte(field, filterState.to);
+        return q;
+      };
+
+      const sections = [];
+
+      // Reuse the same per-module column definitions already used for individual exports
+      for (const key of ['concrete_pours', 'rebar_deliveries', 'prestressed_slabs', 'price_quotes']) {
+        const cfg = REPORTS[key];
+        let q = sb.from(key).select('*').in('site_id', filterState.siteIds);
+        q = dateRange(q, cfg.dateField).order(cfg.dateField, { ascending: false });
+        const { data } = await q;
+        sections.push({ title: cfg.title, columns: cfg.columns, rows: data || [] });
+      }
+
+      // Exceptions
+      {
+        const { data } = await dateRange(sb.from('exceptions').select('*').in('site_id', filterState.siteIds), 'exception_date').order('exception_date', { ascending: false });
+        sections.push({
+          title: 'חריגים',
+          columns: [
+            { key: 'exception_date', label: 'תאריך', type: 'date' },
+            { key: 'category', label: 'קטגוריה', type: 'text' },
+            { key: 'location', label: 'מיקום', type: 'text' },
+            { key: 'status', label: 'סטטוס', type: 'text' },
+            { key: 'description', label: 'תיאור', type: 'text' },
+            { key: 'notes', label: 'הערות', type: 'text' },
+          ],
+          rows: data || [],
+        });
+      }
+
+      // Correspondence (consultants/planners)
+      {
+        const { data } = await dateRange(sb.from('correspondence').select('*').in('site_id', filterState.siteIds), 'entry_date').order('entry_date', { ascending: false });
+        sections.push({
+          title: 'אישורי ועדכוני יועצים ומתכננים',
+          columns: [
+            { key: 'entry_date', label: 'תאריך', type: 'date' },
+            { key: 'party', label: 'גורם מקצועי', type: 'text' },
+            { key: 'category', label: 'קטגוריה', type: 'text' },
+            { key: 'subject', label: 'נושא', type: 'text' },
+            { key: 'body', label: 'תוכן', type: 'text' },
+          ],
+          rows: data || [],
+        });
+      }
+
+      // Weekly meetings
+      {
+        const { data } = await dateRange(sb.from('weekly_meetings').select('*').in('site_id', filterState.siteIds), 'meeting_date').order('meeting_date', { ascending: false });
+        sections.push({
+          title: 'סיכומי ישיבות שבועיות',
+          columns: [
+            { key: 'meeting_date', label: 'תאריך', type: 'date' },
+            { key: 'attendees', label: 'משתתפים', type: 'text' },
+            { key: 'summary', label: 'סיכום', type: 'text' },
+          ],
+          rows: data || [],
+        });
+      }
+
+      // Tasks (with assignee names resolved)
+      {
+        const { data: taskRows } = await sb.from('tasks').select('*').in('site_id', filterState.siteIds).order('sort_order', { ascending: true });
+        const assigneeIds = [...new Set((taskRows || []).map(t => t.assignee_id).filter(Boolean))];
+        let names = {};
+        if (assigneeIds.length) {
+          const { data: people } = await sb.from('profiles').select('id, full_name, username').in('id', assigneeIds);
+          (people || []).forEach(p => { names[p.id] = p.full_name || p.username; });
+        }
+        const STATUS_LABELS = { todo: 'לביצוע', in_progress: 'בתהליך', done: 'הושלם' };
+        const rows = (taskRows || []).map(t => ({ ...t, assignee_name: names[t.assignee_id] || '—', status_label: STATUS_LABELS[t.status] || t.status }));
+        sections.push({
+          title: 'משימות',
+          columns: [
+            { key: 'title', label: 'כותרת', type: 'text' },
+            { key: 'location', label: 'מיקום', type: 'text' },
+            { key: 'assignee_name', label: 'אחראי', type: 'text' },
+            { key: 'due_date', label: 'תאריך יעד', type: 'date' },
+            { key: 'status_label', label: 'סטטוס', type: 'text' },
+            { key: 'description', label: 'תיאור', type: 'text' },
+          ],
+          rows,
+        });
+      }
+
+      const siteNames = sitesCache.filter(s => filterState.siteIds.includes(s.id)).map(s => s.name);
+      await sgpExportFullSystem({ sections, siteNames, fileTitle: 'דוח מערכת מלא' });
+    } catch (err) {
+      toast('שגיאה: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '📦 ייצוא קובץ מלא';
+    }
+  });
 
   document.querySelectorAll('[data-export]').forEach(btn => {
     btn.addEventListener('click', async () => {

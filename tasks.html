@@ -86,6 +86,7 @@
       <div class="form-grid">
         <div class="field full"><label>כותרת *</label><input type="text" name="title" required></div>
         <div class="field full"><label>תיאור</label><textarea name="description" rows="3"></textarea></div>
+        <div class="field full"><label>מיקום / אלמנט</label><input type="text" name="location" placeholder="לדוגמה: הכנת צנרת ומעברי אינסטלציה - גרעין 4, קומת מרתף -1"></div>
         <div class="field">
           <label>עמודה</label>
           <select name="status">
@@ -136,8 +137,18 @@
 
   let tasks = [];
   let members = [];
+  let taskDocs = {};
   let editingId = null;
   let draggedId = null;
+
+  function isImageFile(name) { return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || ''); }
+  function openLightbox(url) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(6,15,53,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
+    overlay.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:8px;">`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
 
   async function loadMembers() {
     const { data, error } = await sb.from('profile_sites')
@@ -161,6 +172,14 @@
     const { data, error } = await sb.from('tasks').select('*').eq('site_id', site.id).order('sort_order', { ascending: true });
     if (error) { toast('שגיאה בטעינת משימות: ' + error.message, 'error'); return; }
     tasks = data || [];
+
+    taskDocs = {};
+    if (tasks.length) {
+      const ids = tasks.map(t => t.id);
+      const { data: docs } = await sb.from('documents').select('*').eq('linked_table', 'tasks').in('linked_record_id', ids);
+      (docs || []).forEach(d => { (taskDocs[d.linked_record_id] ||= []).push(d); });
+    }
+
     renderBoard();
   }
 
@@ -169,10 +188,11 @@
     return new Date(dueDate) < new Date(new Date().toDateString());
   }
 
-  function renderBoard() {
+  async function renderBoard() {
     const board = document.getElementById('kanbanBoard');
-    board.innerHTML = COLUMNS.map(col => {
+    const colsHtml = await Promise.all(COLUMNS.map(async col => {
       const colTasks = tasks.filter(t => t.status === col.status);
+      const cardsHtml = await Promise.all(colTasks.map(t => renderCard(t)));
       return `
         <div class="kanban-col" data-status="${col.status}">
           <div class="kanban-col-header">
@@ -180,22 +200,36 @@
             <span class="kanban-count">${colTasks.length}</span>
           </div>
           <div class="kanban-cards" data-status="${col.status}">
-            ${colTasks.map(t => renderCard(t)).join('') || '<p style="color:var(--steel);font-size:12.5px;text-align:center;padding:10px;">אין משימות</p>'}
+            ${cardsHtml.join('') || '<p style="color:var(--steel);font-size:12.5px;text-align:center;padding:10px;">אין משימות</p>'}
           </div>
         </div>
       `;
-    }).join('');
+    }));
+    board.innerHTML = colsHtml.join('');
 
     wireCardEvents();
     wireColumnDropZones();
   }
 
-  function renderCard(t) {
+  async function renderCard(t) {
     const priorityBadge = t.priority ? `<span class="priority-badge ${t.priority}">${PRIORITY_LABELS[t.priority]}</span>` : '<span></span>';
     const overdue = isOverdue(t.due_date, t.status);
     const dueBadge = t.due_date ? `<span class="due-badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠️ ' : '📅 '}${fmtDate(t.due_date)}</span>` : '';
     const assigneeName = memberName(t.assignee_id);
     const assigneePill = assigneeName ? `<span class="assignee-pill">👤 ${assigneeName}</span>` : '';
+    const locationPill = t.location ? `<div style="font-size:11.5px;color:var(--steel);margin-top:4px;">📍 ${t.location}</div>` : '';
+
+    const docs = (taskDocs[t.id] || []).filter(d => isImageFile(d.file_name));
+    let photosHtml = '';
+    if (docs.length) {
+      const urls = await Promise.all(docs.map(async d => {
+        const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
+        return signed?.signedUrl;
+      }));
+      photosHtml = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        ${urls.filter(Boolean).map(u => `<img src="${u}" data-lightbox-url="${u}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;cursor:pointer;">`).join('')}
+      </div>`;
+    }
 
     const currentIdx = COLUMNS.findIndex(c => c.status === t.status);
     const prevCol = COLUMNS[currentIdx - 1];
@@ -205,11 +239,13 @@
       <div class="kanban-card" draggable="true" data-id="${t.id}">
         <div class="kanban-card-title">${t.title}</div>
         ${t.description ? `<div class="kanban-card-desc">${t.description}</div>` : ''}
+        ${locationPill}
         <div class="kanban-card-meta">
           ${priorityBadge}
           ${dueBadge}
         </div>
         ${assigneePill ? `<div style="margin-top:6px;">${assigneePill}</div>` : ''}
+        ${photosHtml}
         <div class="kanban-card-actions">
           ${prevCol ? `<button type="button" class="icon-btn" data-move="${t.id}" data-to="${prevCol.status}" title="העבר ל${prevCol.title}">◀</button>` : '<span></span>'}
           <button type="button" class="icon-btn" data-edit="${t.id}" title="עריכה" style="flex:1;">✏️ עריכה</button>
@@ -222,6 +258,7 @@
   function wireCardEvents() {
     document.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openModal(btn.dataset.edit)));
     document.querySelectorAll('[data-move]').forEach(btn => btn.addEventListener('click', () => moveTask(btn.dataset.move, btn.dataset.to)));
+    document.querySelectorAll('[data-lightbox-url]').forEach(img => img.addEventListener('click', () => openLightbox(img.dataset.lightboxUrl)));
 
     document.querySelectorAll('.kanban-card').forEach(card => {
       card.addEventListener('dragstart', e => {
@@ -267,6 +304,7 @@
       const t = tasks.find(x => x.id === id);
       form.title.value = t.title || '';
       form.description.value = t.description || '';
+      form.location.value = t.location || '';
       form.status.value = t.status;
       form.priority.value = t.priority || '';
       form.due_date.value = t.due_date || '';
@@ -290,6 +328,7 @@
       site_id: site.id,
       title: fd.get('title'),
       description: fd.get('description') || null,
+      location: fd.get('location') || null,
       status: fd.get('status'),
       priority: fd.get('priority') || null,
       due_date: fd.get('due_date') || null,

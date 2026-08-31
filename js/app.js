@@ -16,6 +16,8 @@ const NAV_ITEMS = [
   { href: 'slabs.html',     label: 'לוח״דים', icon: '🏗️' },
   { href: 'exceptions.html', label: 'חריגים', icon: '⚠️' },
   { href: 'tasks.html', label: 'משימות', icon: '📋' },
+  { href: 'work-plan.html', label: 'תכנית עבודה שבועית', icon: '🗓️' },
+  { href: 'weekly-meeting.html', label: 'סיכומי ישיבות', icon: '📝' },
   { href: 'correspondence.html', label: 'יועצים ומתכננים', icon: '✉️' },
   { href: 'quantity.html',  label: 'כתבי כמויות', icon: '📐' },
   { href: 'prices.html',    label: 'השוואת מחירים', icon: '💰' },

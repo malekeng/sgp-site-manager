@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>כניסת קבלנים | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.password-wrap { position: relative; }
+.password-wrap input { padding-left: 42px; }
+.password-toggle {
+  position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; font-size: 15px; color: var(--steel); cursor: pointer;
+}
+.btn:disabled { opacity: 0.6; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div class="auth-wrap" style="padding-bottom:max(20px, env(safe-area-inset-bottom));">
+  <div class="auth-card">
+    <img src="icons/logo.svg" alt="SGP">
+    <div class="tagline">כניסת קבלנים</div>
+
+    <div id="msg" class="msg" aria-live="polite" role="status"></div>
+
+    <form id="loginForm">
+      <div class="field">
+        <label for="phoneInput">מספר טלפון</label>
+        <input id="phoneInput" type="tel" name="phone" required autocomplete="tel" placeholder="050-1234567">
+      </div>
+      <div class="field">
+        <label for="passwordInput">סיסמה</label>
+        <div class="password-wrap">
+          <input id="passwordInput" type="password" name="password" required autocomplete="current-password">
+          <span class="password-toggle" id="pwToggle" role="button" tabindex="0" aria-label="הצג סיסמה">👁</span>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" id="loginBtn">
+        <span id="loginBtnText">כניסה</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+const msgEl = document.getElementById('msg');
+function hideMsg() { msgEl.className = 'msg'; }
+function showErr(text) { msgEl.textContent = text; msgEl.className = 'msg show error'; }
+
+document.getElementById('pwToggle').addEventListener('click', () => {
+  const input = document.getElementById('passwordInput');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+});
+
+function phoneToSyntheticEmail(phone) {
+  const digits = phone.replace(/\D/g, '');
+  return `c${digits}@contractor.sgp.internal`;
+}
+
+document.getElementById('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  hideMsg();
+  const btn = document.getElementById('loginBtn');
+  const btnText = document.getElementById('loginBtnText');
+  btn.disabled = true;
+  btnText.textContent = 'מתחבר...';
+
+  const fd = new FormData(e.target);
+  const email = phoneToSyntheticEmail(fd.get('phone'));
+  const { error } = await sb.auth.signInWithPassword({ email, password: fd.get('password') });
+
+  if (error) {
+    showErr('מספר טלפון או סיסמה שגויים');
+    btn.disabled = false;
+    btnText.textContent = 'כניסה';
+    return;
+  }
+  window.location.href = 'contractor-tasks.html';
+});
+
+(async function () {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) window.location.href = 'contractor-tasks.html';
+})();
+</script>
+</body>
+</html>

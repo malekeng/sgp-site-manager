@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>סיכומי ישיבות | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="js/pdf-report.js"></script>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">סיכומי ישיבות שבועיות</h1>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>יומן ישיבות</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="addBtn">+ סיכום ישיבה</button>
+        <button class="btn btn-outline" id="exportAllBtn">📄 ייצוא PDF</button>
+      </div>
+    </div>
+    <div id="meetingsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 id="modalTitle">סיכום ישיבה</h3>
+    <div id="formMsg" class="msg"></div>
+    <form id="recordForm">
+      <div class="form-grid">
+        <div class="field"><label>תאריך *</label><input type="date" name="meeting_date" required></div>
+        <div class="field"><label>משתתפים</label><input type="text" name="attendees" placeholder="שמות המשתתפים, מופרדים בפסיק"></div>
+        <div class="field full"><label>סיכום *</label><textarea name="summary" rows="6" required placeholder="נושאים שנדונו, החלטות, משימות שנקבעו..."></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">שמירה</button>
+        <button type="button" class="btn btn-outline" id="cancelBtn">ביטול</button>
+        <button type="button" class="btn btn-danger" id="deleteBtn" style="display:none;margin-right:auto;">מחיקה</button>
+      </div>
+    </form>
+    <button class="icon-btn" id="closeModalBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('weekly-meeting.html');
+  if (!auth) return;
+  const { user, site } = auth;
+
+  let meetings = [];
+  let editingId = null;
+
+  async function loadMeetings() {
+    const { data, error } = await sb.from('weekly_meetings')
+      .select('*').eq('site_id', site.id)
+      .order('meeting_date', { ascending: false }).order('created_at', { ascending: false });
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    meetings = data || [];
+    renderList();
+  }
+
+  function renderList() {
+    const host = document.getElementById('meetingsList');
+    if (!meetings.length) { host.innerHTML = '<p style="color:var(--steel);">אין סיכומי ישיבות עדיין</p>'; return; }
+    host.innerHTML = `<div class="attach-list">${meetings.map(m => `
+      <div class="attach-item" style="align-items:flex-start;flex-direction:column;gap:6px;">
+        <div style="display:flex;justify-content:space-between;width:100%;align-items:flex-start;gap:8px;">
+          <div>
+            <strong style="font-size:14px;">${fmtDate(m.meeting_date)}</strong>
+            ${m.attendees ? `<span style="color:var(--steel);font-size:12px;"> · ${m.attendees}</span>` : ''}
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button type="button" class="icon-btn" data-edit="${m.id}" title="עריכה">✏️</button>
+            <button type="button" class="icon-btn danger" data-del="${m.id}" title="מחיקה">🗑️</button>
+          </div>
+        </div>
+        <div style="font-size:13.5px;color:var(--ink);white-space:pre-wrap;line-height:1.5;">${m.summary}</div>
+      </div>
+    `).join('')}</div>`;
+
+    host.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openModal(meetings.find(m => m.id === b.dataset.edit))));
+    host.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deleteMeeting(b.dataset.del)));
+  }
+
+  function openModal(m) {
+    editingId = m ? m.id : null;
+    const form = document.getElementById('recordForm');
+    form.reset();
+    hideMsg(document.getElementById('formMsg'));
+    document.getElementById('modalTitle').textContent = m ? 'עריכת סיכום ישיבה' : 'סיכום ישיבה חדש';
+    document.getElementById('deleteBtn').style.display = m ? 'inline-flex' : 'none';
+    form.meeting_date.value = m ? m.meeting_date : new Date().toISOString().slice(0, 10);
+    if (m) {
+      form.attendees.value = m.attendees || '';
+      form.summary.value = m.summary || '';
+    }
+    document.getElementById('modalBackdrop').classList.add('open');
+  }
+  function closeModal() { document.getElementById('modalBackdrop').classList.remove('open'); }
+
+  document.getElementById('addBtn').addEventListener('click', () => openModal(null));
+  document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+  document.getElementById('cancelBtn').addEventListener('click', closeModal);
+  document.getElementById('modalBackdrop').addEventListener('click', e => { if (e.target.id === 'modalBackdrop') closeModal(); });
+
+  document.getElementById('recordForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('formMsg');
+    hideMsg(msgEl);
+    const fd = new FormData(e.target);
+    const payload = {
+      meeting_date: fd.get('meeting_date'),
+      attendees: fd.get('attendees') || null,
+      summary: fd.get('summary'),
+    };
+
+    const submitBtn = e.target.querySelector('[type=submit]');
+    submitBtn.disabled = true;
+    try {
+      if (editingId) {
+        payload.updated_by = user.id;
+        payload.updated_at = new Date().toISOString();
+        const { error } = await sb.from('weekly_meetings').update(payload).eq('id', editingId);
+        if (error) throw error;
+      } else {
+        payload.site_id = site.id;
+        payload.created_by = user.id;
+        const { error } = await sb.from('weekly_meetings').insert(payload);
+        if (error) throw error;
+      }
+      toast(editingId ? 'הסיכום עודכן' : 'הסיכום נשמר', 'success');
+      closeModal();
+      await loadMeetings();
+    } catch (err) {
+      showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('deleteBtn').addEventListener('click', async () => {
+    if (!editingId || !confirm('למחוק את הסיכום הזה?')) return;
+    const { error } = await sb.from('weekly_meetings').delete().eq('id', editingId);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    toast('הסיכום נמחק', 'success');
+    closeModal();
+    await loadMeetings();
+  });
+
+  async function deleteMeeting(id) {
+    if (!confirm('למחוק את הסיכום הזה?')) return;
+    const { error } = await sb.from('weekly_meetings').delete().eq('id', id);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    toast('הסיכום נמחק', 'success');
+    await loadMeetings();
+  }
+
+  document.getElementById('exportAllBtn').addEventListener('click', async () => {
+    if (!meetings.length) { toast('אין סיכומים לייצוא', 'error'); return; }
+    const columns = [
+      { key: 'meeting_date', label: 'תאריך', type: 'date' },
+      { key: 'attendees', label: 'משתתפים', type: 'text' },
+      { key: 'summary', label: 'סיכום', type: 'text' },
+    ];
+    await sgpExportPdf({
+      title: 'סיכומי ישיבות שבועיות',
+      columns,
+      rows: meetings,
+      siteNames: [site.name],
+      periodText: null,
+    });
+  });
+
+  await loadMeetings();
+})();
+</script>
+</body>
+</html>

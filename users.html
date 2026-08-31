@@ -25,6 +25,7 @@
     <div class="card-header">
       <h2>משתמשי המערכת</h2>
       <button class="btn btn-primary" id="inviteBtn">+ הזמנת משתמש</button>
+      <button class="btn btn-outline" id="addContractorBtn">+ קבלן חדש</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -79,6 +80,32 @@
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary" id="inviteSubmitBtn">שליחת הזמנה</button>
         <button type="button" class="btn btn-outline" id="cancelInviteBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Contractor modal -->
+<div class="modal-backdrop" id="contractorModalBackdrop">
+  <div class="modal">
+    <h3>קבלן חדש</h3>
+    <p style="font-size:12.5px;color:var(--steel);margin-bottom:14px;">
+      הקבלן יתחבר במסך נפרד (contractor-login.html) עם מספר טלפון וסיסמה, ויראה רק את המשימות המוטלות עליו.
+    </p>
+    <div id="contractorMsg" class="msg"></div>
+    <form id="contractorForm">
+      <div class="form-grid">
+        <div class="field full"><label>שם מלא *</label><input type="text" name="full_name" required></div>
+        <div class="field"><label>מספר טלפון *</label><input type="tel" name="phone" required placeholder="050-1234567"></div>
+        <div class="field"><label>סיסמה *</label><input type="text" name="password" required minlength="6" placeholder="לפחות 6 תווים"></div>
+        <div class="field full">
+          <label>אתרים (ניתן לבחור כמה) *</label>
+          <div class="site-check-list" id="contractorSiteCheckList"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="contractorSubmitBtn">יצירת קבלן</button>
+        <button type="button" class="btn btn-outline" id="cancelContractorBtn">ביטול</button>
       </div>
     </form>
   </div>
@@ -159,7 +186,7 @@
   }
 
   const isOwner = profile.role === 'owner';
-  const roleLabels = { owner: 'בעלים', admin: 'מנהל', site_user: 'משתמש אתר' };
+  const roleLabels = { owner: 'בעלים', admin: 'מנהל', site_user: 'משתמש אתר', contractor: 'קבלן' };
   let usersCache = [];
   let sitesCache = [];
 
@@ -186,7 +213,7 @@
           <div class="row-actions-inner">
             ${isOwner ? `
               <button class="icon-btn" data-edit-user="${u.id}" title="עריכה">✏️</button>
-              <button class="icon-btn" data-resend="${u.id}" title="שליחת הזמנה מחדש">📧</button>
+              ${u.role !== 'contractor' ? `<button class="icon-btn" data-resend="${u.id}" title="שליחת הזמנה מחדש">📧</button>` : ''}
               ${u.id !== user.id ? `<button class="icon-btn danger" data-del-user="${u.id}" title="מחיקה">🗑️</button>` : ''}
             ` : ''}
           </div>
@@ -235,6 +262,59 @@
   }
 
   document.getElementById('inviteBtn').addEventListener('click', () => openInviteModal(null));
+
+  // ===== Contractors =====
+  document.getElementById('addContractorBtn').addEventListener('click', () => {
+    document.getElementById('contractorForm').reset();
+    hideMsg(document.getElementById('contractorMsg'));
+    renderSiteChecks('contractorSiteCheckList', []);
+    document.getElementById('contractorModalBackdrop').classList.add('open');
+  });
+  document.getElementById('cancelContractorBtn').addEventListener('click', () => document.getElementById('contractorModalBackdrop').classList.remove('open'));
+  document.getElementById('contractorModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'contractorModalBackdrop') e.target.classList.remove('open');
+  });
+
+  document.getElementById('contractorForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('contractorMsg');
+    hideMsg(msgEl);
+    const btn = document.getElementById('contractorSubmitBtn');
+    btn.disabled = true;
+
+    const fd = new FormData(e.target);
+    const siteIds = fd.getAll('site_ids');
+    if (!siteIds.length) {
+      showMsg(msgEl, 'יש לבחור לפחות אתר אחד', 'error');
+      btn.disabled = false;
+      return;
+    }
+    const payload = {
+      full_name: fd.get('full_name'),
+      phone: fd.get('phone'),
+      password: fd.get('password'),
+      site_ids: siteIds,
+    };
+
+    const { data: { session } } = await sb.auth.getSession();
+    try {
+      const res = await fetch('https://odsxjatgebpwphzbevpu.supabase.co/functions/v1/create-contractor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'שגיאה לא ידועה');
+
+      toast('הקבלן נוצר בהצלחה', 'success');
+      document.getElementById('contractorModalBackdrop').classList.remove('open');
+      loadUsers();
+    } catch (err) {
+      showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
   document.getElementById('cancelInviteBtn').addEventListener('click', () => document.getElementById('inviteModalBackdrop').classList.remove('open'));
   document.getElementById('inviteModalBackdrop').addEventListener('click', e => {
     if (e.target.id === 'inviteModalBackdrop') e.target.classList.remove('open');

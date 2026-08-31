@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>תכנית עבודה שבועית | SGP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="js/pdf-report.js"></script>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">תכנית עבודה שבועית</h1>
+
+  <div class="card" id="plansCard">
+    <div class="card-header">
+      <h2>תכניות עבודה</h2>
+      <button class="btn btn-primary" id="addPlanBtn">+ תכנית שבועית חדשה</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>שבוע</th><th>הערות</th><th>מס' משימות</th><th></th></tr></thead>
+        <tbody id="plansBody"><tr class="empty-row"><td colspan="4"><div class="loading-overlay"><div class="spinner"></div></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" id="planTasksCard" style="display:none;">
+    <div class="card-header">
+      <h2 id="planTasksTitle">משימות התכנית</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="addPlanTaskBtn">+ משימה</button>
+        <button class="btn btn-outline" id="exportPlanPdfBtn">📄 ייצוא PDF</button>
+        <button class="btn btn-outline" id="backToPlansBtn">חזרה לתכניות</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>כותרת</th><th>מיקום</th><th>אחראי</th><th>תאריך יעד</th><th>סטטוס</th><th></th></tr></thead>
+        <tbody id="planTasksBody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Plan modal -->
+<div class="modal-backdrop" id="planModalBackdrop">
+  <div class="modal">
+    <h3>תכנית עבודה שבועית חדשה</h3>
+    <div id="planFormMsg" class="msg"></div>
+    <form id="planForm">
+      <div class="form-grid">
+        <div class="field"><label>תחילת שבוע *</label><input type="date" name="week_start" required></div>
+        <div class="field"><label>סוף שבוע</label><input type="date" name="week_end"></div>
+        <div class="field full"><label>הערות כלליות</label><textarea name="notes" rows="3"></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">יצירה</button>
+        <button type="button" class="btn btn-outline" id="cancelPlanBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Task-within-plan modal -->
+<div class="modal-backdrop" id="taskModalBackdrop">
+  <div class="modal">
+    <h3 id="taskModalTitle">משימה חדשה</h3>
+    <div id="taskFormMsg" class="msg"></div>
+    <form id="taskForm">
+      <div class="form-grid">
+        <div class="field full"><label>כותרת *</label><input type="text" name="title" required></div>
+        <div class="field full"><label>מיקום / אלמנט</label><input type="text" name="location" placeholder="לדוגמה: הכנת צנרת ומעברי אינסטלציה - גרעין 4, קומת מרתף -1"></div>
+        <div class="field full"><label>תיאור</label><textarea name="description" rows="2"></textarea></div>
+        <div class="field">
+          <label>אחראי</label>
+          <select name="assignee_id"><option value="">ללא</option></select>
+        </div>
+        <div class="field">
+          <label>עדיפות</label>
+          <select name="priority">
+            <option value="">ללא</option>
+            <option value="low">נמוכה</option>
+            <option value="medium">בינונית</option>
+            <option value="high">גבוהה</option>
+          </select>
+        </div>
+        <div class="field"><label>תאריך יעד</label><input type="date" name="due_date"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="taskSubmitBtn">הוספה</button>
+        <button type="button" class="btn btn-outline" id="cancelTaskBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('work-plan.html');
+  if (!auth) return;
+  const { user, site } = auth;
+
+  const STATUS_LABELS = { todo: 'לביצוע', in_progress: 'בתהליך', done: 'הושלם' };
+  let plans = [];
+  let currentPlan = null;
+  let planTasks = [];
+  let members = [];
+  let editingTaskId = null;
+
+  async function loadMembers() {
+    const { data } = await sb.from('profile_sites').select('profiles(id, full_name, username)').eq('site_id', site.id);
+    const seen = new Map();
+    (data || []).forEach(r => { if (r.profiles) seen.set(r.profiles.id, r.profiles); });
+    members = Array.from(seen.values());
+    const select = document.querySelector('select[name=assignee_id]');
+    select.innerHTML = '<option value="">ללא</option>' +
+      members.map(m => `<option value="${m.id}">${m.full_name || m.username}</option>`).join('');
+  }
+  function memberName(id) {
+    const m = members.find(x => x.id === id);
+    return m ? (m.full_name || m.username) : '—';
+  }
+
+  async function loadPlans() {
+    const { data, error } = await sb.from('weekly_work_plans').select('*').eq('site_id', site.id).order('week_start', { ascending: false });
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    plans = data || [];
+
+    const counts = {};
+    if (plans.length) {
+      const { data: taskCounts } = await sb.from('tasks').select('work_plan_id').in('work_plan_id', plans.map(p => p.id));
+      (taskCounts || []).forEach(t => { counts[t.work_plan_id] = (counts[t.work_plan_id] || 0) + 1; });
+    }
+
+    const body = document.getElementById('plansBody');
+    if (!plans.length) { body.innerHTML = `<tr class="empty-row"><td colspan="4">אין תכניות עבודה עדיין</td></tr>`; return; }
+    body.innerHTML = plans.map(p => `
+      <tr>
+        <td>${fmtDate(p.week_start)}${p.week_end ? ' – ' + fmtDate(p.week_end) : ''}</td>
+        <td>${p.notes ? (p.notes.length > 50 ? p.notes.slice(0, 47) + '…' : p.notes) : '—'}</td>
+        <td>${counts[p.id] || 0}</td>
+        <td class="row-actions"><div class="row-actions-inner">
+          <button class="btn btn-sm btn-outline" data-open="${p.id}">פתיחה</button>
+          <button class="icon-btn danger" data-del="${p.id}" title="מחיקה">🗑️</button>
+        </div></td>
+      </tr>
+    `).join('');
+    body.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openPlan(plans.find(p => p.id === b.dataset.open))));
+    body.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deletePlan(b.dataset.del)));
+  }
+
+  async function deletePlan(id) {
+    if (!confirm('למחוק את התכנית? המשימות שנוצרו ממנה יישארו אך יתנתקו ממנה.')) return;
+    const { error } = await sb.from('weekly_work_plans').delete().eq('id', id);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    toast('התכנית נמחקה', 'success');
+    await loadPlans();
+  }
+
+  document.getElementById('addPlanBtn').addEventListener('click', () => {
+    document.getElementById('planForm').reset();
+    hideMsg(document.getElementById('planFormMsg'));
+    document.getElementById('planModalBackdrop').classList.add('open');
+  });
+  document.getElementById('cancelPlanBtn').addEventListener('click', () => document.getElementById('planModalBackdrop').classList.remove('open'));
+  document.getElementById('planModalBackdrop').addEventListener('click', e => { if (e.target.id === 'planModalBackdrop') e.target.classList.remove('open'); });
+
+  document.getElementById('planForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('planFormMsg');
+    hideMsg(msgEl);
+    const fd = new FormData(e.target);
+    const payload = {
+      site_id: site.id,
+      week_start: fd.get('week_start'),
+      week_end: fd.get('week_end') || null,
+      notes: fd.get('notes') || null,
+      created_by: user.id,
+    };
+    const { data, error } = await sb.from('weekly_work_plans').insert(payload).select().single();
+    if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); return; }
+    toast('התכנית נוצרה — הוסיפו לה משימות', 'success');
+    document.getElementById('planModalBackdrop').classList.remove('open');
+    await loadPlans();
+    openPlan(data);
+  });
+
+  // ===== Plan tasks =====
+  function openPlan(plan) {
+    currentPlan = plan;
+    document.getElementById('plansCard').style.display = 'none';
+    document.getElementById('planTasksCard').style.display = 'block';
+    document.getElementById('planTasksTitle').textContent =
+      `משימות — שבוע ${fmtDate(plan.week_start)}${plan.week_end ? ' עד ' + fmtDate(plan.week_end) : ''}`;
+    loadPlanTasks();
+  }
+
+  document.getElementById('backToPlansBtn').addEventListener('click', () => {
+    document.getElementById('planTasksCard').style.display = 'none';
+    document.getElementById('plansCard').style.display = 'block';
+    loadPlans();
+  });
+
+  async function loadPlanTasks() {
+    const { data, error } = await sb.from('tasks').select('*').eq('work_plan_id', currentPlan.id).order('sort_order', { ascending: true });
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    planTasks = data || [];
+    const body = document.getElementById('planTasksBody');
+    if (!planTasks.length) { body.innerHTML = `<tr class="empty-row"><td colspan="6">אין משימות בתכנית זו עדיין</td></tr>`; return; }
+    body.innerHTML = planTasks.map(t => `
+      <tr>
+        <td>${t.title}</td>
+        <td>${t.location || '—'}</td>
+        <td>${memberName(t.assignee_id)}</td>
+        <td>${t.due_date ? fmtDate(t.due_date) : '—'}</td>
+        <td>${STATUS_LABELS[t.status] || t.status}</td>
+        <td class="row-actions"><div class="row-actions-inner">
+          <button class="icon-btn" data-edit="${t.id}" title="עריכה">✏️</button>
+          <button class="icon-btn danger" data-del="${t.id}" title="מחיקה">🗑️</button>
+        </div></td>
+      </tr>
+    `).join('');
+    body.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openTaskModal(planTasks.find(t => t.id === b.dataset.edit))));
+    body.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deletePlanTask(b.dataset.del)));
+  }
+
+  async function deletePlanTask(id) {
+    if (!confirm('למחוק את המשימה?')) return;
+    const { error } = await sb.from('tasks').delete().eq('id', id);
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    toast('המשימה נמחקה', 'success');
+    await loadPlanTasks();
+  }
+
+  function openTaskModal(t) {
+    editingTaskId = t ? t.id : null;
+    const form = document.getElementById('taskForm');
+    form.reset();
+    hideMsg(document.getElementById('taskFormMsg'));
+    document.getElementById('taskModalTitle').textContent = t ? 'עריכת משימה' : 'משימה חדשה';
+    document.getElementById('taskSubmitBtn').textContent = t ? 'שמירה' : 'הוספה';
+    if (t) {
+      form.title.value = t.title || '';
+      form.location.value = t.location || '';
+      form.description.value = t.description || '';
+      form.assignee_id.value = t.assignee_id || '';
+      form.priority.value = t.priority || '';
+      form.due_date.value = t.due_date || '';
+    }
+    document.getElementById('taskModalBackdrop').classList.add('open');
+  }
+
+  document.getElementById('addPlanTaskBtn').addEventListener('click', () => openTaskModal(null));
+  document.getElementById('cancelTaskBtn').addEventListener('click', () => document.getElementById('taskModalBackdrop').classList.remove('open'));
+  document.getElementById('taskModalBackdrop').addEventListener('click', e => { if (e.target.id === 'taskModalBackdrop') e.target.classList.remove('open'); });
+
+  document.getElementById('taskForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('taskFormMsg');
+    hideMsg(msgEl);
+    const fd = new FormData(e.target);
+    const payload = {
+      title: fd.get('title'),
+      location: fd.get('location') || null,
+      description: fd.get('description') || null,
+      assignee_id: fd.get('assignee_id') || null,
+      priority: fd.get('priority') || null,
+      due_date: fd.get('due_date') || null,
+    };
+
+    const submitBtn = e.target.querySelector('[type=submit]');
+    submitBtn.disabled = true;
+    try {
+      if (editingTaskId) {
+        payload.updated_by = user.id;
+        payload.updated_at = new Date().toISOString();
+        const { error } = await sb.from('tasks').update(payload).eq('id', editingTaskId);
+        if (error) throw error;
+      } else {
+        payload.site_id = site.id;
+        payload.status = 'todo';
+        payload.work_plan_id = currentPlan.id;
+        payload.created_by = user.id;
+        payload.sort_order = planTasks.length;
+        const { error } = await sb.from('tasks').insert(payload);
+        if (error) throw error;
+      }
+      toast(editingTaskId ? 'המשימה עודכנה' : 'המשימה נוספה לתכנית', 'success');
+      document.getElementById('taskModalBackdrop').classList.remove('open');
+      await loadPlanTasks();
+    } catch (err) {
+      showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('exportPlanPdfBtn').addEventListener('click', async () => {
+    if (!planTasks.length) { toast('אין משימות לייצוא', 'error'); return; }
+    const rows = planTasks.map(t => ({ ...t, assignee_name: memberName(t.assignee_id), status_label: STATUS_LABELS[t.status] || t.status }));
+    const columns = [
+      { key: 'title', label: 'כותרת', type: 'text' },
+      { key: 'location', label: 'מיקום', type: 'text' },
+      { key: 'assignee_name', label: 'אחראי', type: 'text' },
+      { key: 'due_date', label: 'תאריך יעד', type: 'date' },
+      { key: 'status_label', label: 'סטטוס', type: 'text' },
+      { key: 'description', label: 'תיאור', type: 'text' },
+    ];
+    await sgpExportPdf({
+      title: `תכנית עבודה שבועית — ${fmtDate(currentPlan.week_start)}`,
+      columns,
+      rows,
+      siteNames: [site.name],
+      periodText: currentPlan.week_end ? `${fmtDate(currentPlan.week_start)} – ${fmtDate(currentPlan.week_end)}` : null,
+    });
+  });
+
+  await loadMembers();
+  await loadPlans();
+})();
+</script>
+</body>
+</html>
