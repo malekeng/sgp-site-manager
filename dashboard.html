@@ -73,21 +73,6 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>דורש תשומת לב</h2></div>
-    <div id="attentionList"><div class="loading-overlay"><div class="spinner"></div></div></div>
-  </div>
-
-  <div class="card">
-    <div class="card-header"><h2>פעילות אחרונה</h2></div>
-    <div id="recentList"><div class="loading-overlay"><div class="spinner"></div></div></div>
-  </div>
-
-  <div class="card">
-    <div class="card-header"><h2>📷 תמונות אחרונות</h2></div>
-    <div id="photoGallery"><div class="loading-overlay"><div class="spinner"></div></div></div>
-  </div>
-
-  <div class="card">
     <div class="card-header">
       <h2>🏗️ גלריית ביצוע</h2>
       <button class="btn btn-primary btn-sm" id="addProgressPhotoBtn">+ הוספת תמונה</button>
@@ -118,6 +103,16 @@
         </div>
       </form>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>דורש תשומת לב</h2></div>
+    <div id="attentionList"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>פעילות אחרונה</h2></div>
+    <div id="recentList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
 
   <div class="card">
@@ -433,34 +428,6 @@ function greetingByHour() {
     document.body.appendChild(overlay);
   }
 
-  async function loadPhotoGallery() {
-    const host = document.getElementById('photoGallery');
-    const { data, error } = await sb.from('documents')
-      .select('file_path, file_name, created_at')
-      .eq('site_id', site.id)
-      .order('created_at', { ascending: false })
-      .limit(24);
-    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; return; }
-    const images = (data || []).filter(d => isImageFile(d.file_name)).slice(0, 8);
-    if (!images.length) { host.innerHTML = '<p style="color:var(--steel);">אין תמונות מצורפות עדיין באתר זה</p>'; return; }
-
-    const resolved = await Promise.all(images.map(async d => {
-      const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
-      return { ...d, url: signed?.signedUrl || null };
-    }));
-
-    host.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;">
-      ${resolved.filter(d => d.url).map((d, i) => `
-        <div data-photo="${i}" style="cursor:pointer;aspect-ratio:1;border-radius:12px;overflow:hidden;box-shadow:var(--shadow);">
-          <img src="${d.url}" style="width:100%;height:100%;object-fit:cover;">
-        </div>
-      `).join('')}
-    </div>`;
-    host.querySelectorAll('[data-photo]').forEach(el => {
-      el.addEventListener('click', () => openLightbox(resolved.filter(d => d.url)[Number(el.dataset.photo)].url));
-    });
-  }
-
   async function loadProgressGallery() {
     const host = document.getElementById('progressGallery');
     const { data, error } = await sb.from('documents')
@@ -546,7 +513,7 @@ function greetingByHour() {
     }
   });
 
-  await Promise.all([loadAttention(), loadRecent(), loadStats(), loadPhotoGallery(), loadProgressGallery()]);
+  await Promise.all([loadAttention(), loadRecent(), loadStats(), loadProgressGallery()]);
 })();
 </script>
 </body>
