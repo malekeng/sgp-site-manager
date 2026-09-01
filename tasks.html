@@ -19,11 +19,24 @@
   .kanban-board { grid-template-columns: 1fr; }
 }
 .kanban-col {
+  position: relative;
   background: var(--bg);
   border-radius: var(--radius);
   padding: 14px;
+  padding-top: 18px;
   min-height: 120px;
+  overflow: hidden;
+  transition: background 0.25s var(--ease-out), outline-color 0.25s var(--ease-out);
 }
+.kanban-col::before {
+  content: '';
+  position: absolute; top: 0; right: 0; left: 0; height: 3px;
+  background: var(--col-accent, var(--steel-light));
+}
+.kanban-col[data-status="todo"] { --col-accent: linear-gradient(90deg, var(--blue) 0%, var(--steel-light) 100%); }
+.kanban-col[data-status="todo"]::before { background: var(--col-accent); }
+.kanban-col[data-status="in_progress"]::before { background: linear-gradient(90deg, var(--orange) 0%, #ffcb8a 100%); }
+.kanban-col[data-status="done"]::before { background: linear-gradient(90deg, var(--green) 0%, var(--green-deep) 100%); }
 .kanban-col.dragover { background: rgba(0,214,143,0.08); outline: 2px dashed var(--green); }
 .kanban-col-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -36,12 +49,21 @@
 }
 .kanban-card {
   background: var(--sheet);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   padding: 12px 14px;
   margin-bottom: 10px;
   box-shadow: var(--shadow);
   cursor: grab;
+  animation: rise-in 0.4s var(--ease-spring) both;
+  transition: transform 0.25s var(--ease-spring), box-shadow 0.25s var(--ease-out), border-color 0.25s var(--ease-out);
 }
+.kanban-cards .kanban-card:nth-child(1) { animation-delay: 0.02s; }
+.kanban-cards .kanban-card:nth-child(2) { animation-delay: 0.06s; }
+.kanban-cards .kanban-card:nth-child(3) { animation-delay: 0.1s; }
+.kanban-cards .kanban-card:nth-child(4) { animation-delay: 0.14s; }
+.kanban-cards .kanban-card:nth-child(5) { animation-delay: 0.18s; }
+.kanban-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--border); }
 .kanban-card:active { cursor: grabbing; }
 .kanban-card.dragging { opacity: 0.4; }
 .kanban-card-title { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 6px; line-height: 1.4; }

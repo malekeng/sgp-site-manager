@@ -8,6 +8,10 @@
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.dashboard-grid { display: grid; grid-template-columns: 1.7fr 1fr; column-gap: 24px; align-items: start; }
+@media (max-width: 1000px) { .dashboard-grid { grid-template-columns: 1fr; } }
+</style>
 </head>
 <body>
 
@@ -33,6 +37,9 @@
     </div>
     <a href="profile.html" class="btn btn-outline btn-sm">עריכת פרופיל</a>
   </div>
+
+  <div class="dashboard-grid">
+  <div class="dashboard-main">
 
   <div class="card">
     <div class="card-header">
@@ -105,27 +112,34 @@
     </div>
   </div>
 
+  </div>
+
+  <div class="dashboard-side">
+
   <div class="card">
     <div class="card-header"><h2>דורש תשומת לב</h2></div>
     <div id="attentionList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>פעילות אחרונה</h2></div>
-    <div id="recentList"><div class="loading-overlay"><div class="spinner"></div></div></div>
+    <div class="card-header"><h2>גישה מהירה</h2></div>
+    <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+      <a href="concrete.html" class="btn btn-outline" style="justify-content:flex-start;">יומני יציקות בטון</a>
+      <a href="rebar.html" class="btn btn-outline" style="justify-content:flex-start;">משלוחי ברזל</a>
+      <a href="slabs.html" class="btn btn-outline" style="justify-content:flex-start;">לוח״דים</a>
+      <a href="exceptions.html" class="btn btn-outline" style="justify-content:flex-start;">חריגים</a>
+      <a href="quantity.html" class="btn btn-outline" style="justify-content:flex-start;">כתבי כמויות</a>
+      <a href="prices.html" class="btn btn-outline" style="justify-content:flex-start;">השוואת מחירים</a>
+      <a href="reports.html" class="btn btn-outline" style="justify-content:flex-start;">דוחות</a>
+    </div>
+  </div>
+
+  </div>
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>גישה מהירה</h2></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
-      <a href="concrete.html" class="btn btn-outline" style="justify-content:center;">יומני יציקות בטון</a>
-      <a href="rebar.html" class="btn btn-outline" style="justify-content:center;">משלוחי ברזל</a>
-      <a href="slabs.html" class="btn btn-outline" style="justify-content:center;">לוח״דים</a>
-      <a href="exceptions.html" class="btn btn-outline" style="justify-content:center;">חריגים</a>
-      <a href="quantity.html" class="btn btn-outline" style="justify-content:center;">כתבי כמויות</a>
-      <a href="prices.html" class="btn btn-outline" style="justify-content:center;">השוואת מחירים</a>
-      <a href="reports.html" class="btn btn-outline" style="justify-content:center;">דוחות</a>
-    </div>
+    <div class="card-header"><h2>פעילות אחרונה</h2></div>
+    <div id="recentList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
 
   <div class="stats-row" id="statsRow">
@@ -437,7 +451,7 @@ function greetingByHour() {
       .order('document_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(24);
-    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${error.message}</p>`; return; }
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; return; }
     if (!data || !data.length) { host.innerHTML = '<p style="color:var(--steel);">אין תמונות ביצוע עדיין — היו הראשונים להוסיף</p>'; return; }
 
     const resolved = await Promise.all(data.map(async d => {
@@ -451,8 +465,8 @@ function greetingByHour() {
           <div data-photo="${i}" style="cursor:pointer;aspect-ratio:1;border-radius:12px;overflow:hidden;box-shadow:var(--shadow);">
             <img src="${d.url}" style="width:100%;height:100%;object-fit:cover;">
           </div>
-          <div style="font-size:11.5px;color:var(--steel);margin-top:6px;font-weight:600;">${fmtDate(d.document_date)}</div>
-          ${d.notes ? `<div style="font-size:12.5px;color:var(--ink);margin-top:2px;line-height:1.4;">${d.notes}</div>` : ''}
+          <div style="font-size:11.5px;color:var(--steel);margin-top:6px;font-weight:600;">${esc(fmtDate(d.document_date))}</div>
+          ${d.notes ? `<div style="font-size:12.5px;color:var(--ink);margin-top:2px;line-height:1.4;">${esc(d.notes)}</div>` : ''}
         </div>
       `).join('')}
     </div>`;
