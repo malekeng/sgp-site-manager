@@ -113,7 +113,7 @@
 }
 
 /* ===== Profile page ===== */
-.profile-card { max-width: 560px; }
+.profile-card { max-width: 680px; }
 .profile-avatar-block {
   display: flex;
   align-items: center;
@@ -125,4 +125,15 @@
   font-size: 12px;
   color: var(--steel);
   margin-top: 6px;
+}
+@media (min-width: 640px) {
+  .profile-card { display: grid; grid-template-columns: 176px 1fr; column-gap: 30px; }
+  .profile-avatar-block {
+    grid-column: 1; grid-row: 1 / -1;
+    flex-direction: column; align-items: center; text-align: center;
+    margin-bottom: 0; gap: 14px;
+    padding-left: 30px; border-left: 1px solid var(--border);
+  }
+  #formMsg { grid-column: 2; }
+  #profileForm { grid-column: 2; }
 }
