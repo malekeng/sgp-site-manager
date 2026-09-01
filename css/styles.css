@@ -385,6 +385,12 @@ input, select, textarea {
   border-radius: 999px;
   min-width: 150px;
   background: var(--sheet);
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+.filter-field input:focus, .filter-field select:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 4px rgba(0, 214, 143, 0.12);
 }
 
 /* ===== Table ===== */
@@ -417,8 +423,21 @@ tbody td.num-cell {
   font-size: 13.5px;
 }
 tbody tr:last-child td { border-bottom: none; }
+tbody tr {
+  animation: rise-in 0.3s var(--ease-out) both;
+  transition: background 0.15s var(--ease-out);
+}
+tbody tr:nth-child(1) { animation-delay: 0.01s; }
+tbody tr:nth-child(2) { animation-delay: 0.03s; }
+tbody tr:nth-child(3) { animation-delay: 0.05s; }
+tbody tr:nth-child(4) { animation-delay: 0.07s; }
+tbody tr:nth-child(5) { animation-delay: 0.09s; }
+tbody tr:nth-child(6) { animation-delay: 0.11s; }
+tbody tr:nth-child(7) { animation-delay: 0.13s; }
+tbody tr:nth-child(8) { animation-delay: 0.15s; }
+tbody tr.empty-row { animation: none; }
 tbody tr:hover {
-  background: linear-gradient(90deg, rgba(0, 214, 143, 0.04) 0%, transparent 70%);
+  background: linear-gradient(90deg, rgba(0, 214, 143, 0.05) 0%, transparent 70%);
 }
 .empty-row td { text-align: center; color: var(--steel-light); padding: 48px 14px; font-size: 13.5px; font-weight: 600; }
 .empty-row td::before {
@@ -439,9 +458,10 @@ tbody tr:hover {
   border-radius: 999px;
   color: var(--steel);
   font-size: 14px;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.18s var(--ease-out), color 0.18s var(--ease-out), transform 0.18s var(--ease-spring);
 }
-.icon-btn:hover { background: rgba(18, 26, 107, 0.07); color: var(--navy); }
+.icon-btn:hover { background: rgba(18, 26, 107, 0.07); color: var(--navy); transform: translateY(-1px); }
+.icon-btn:active { transform: translateY(0) scale(0.92); }
 .icon-btn.danger:hover { background: rgba(255, 71, 87, 0.1); color: var(--danger); }
 
 .site-check-list { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -492,7 +512,10 @@ tbody tr:hover {
   padding: 4px 11px;
   font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s var(--ease-spring), box-shadow 0.18s var(--ease-out);
 }
+.doc-badge:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
 
 /* ===== Modal / Form ===== */
 .modal-backdrop {
