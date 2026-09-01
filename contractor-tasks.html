@@ -17,10 +17,23 @@
 .ct-logout { background: rgba(255,255,255,0.12); color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 700; }
 .ct-page { max-width: 640px; margin: 0 auto; padding: 20px 16px 60px; }
 .ct-card {
+  position: relative;
   background: var(--sheet); border-radius: var(--radius); box-shadow: var(--shadow);
-  padding: 16px 18px; margin-bottom: 14px;
+  padding: 16px 18px 16px 18px; margin-bottom: 14px;
+  border-right: 3px solid var(--border);
+  animation: rise-in 0.35s var(--ease-spring) both;
+  transition: transform 0.2s var(--ease-spring), box-shadow 0.2s var(--ease-out), opacity 0.3s var(--ease-out);
 }
-.ct-card.done { opacity: 0.65; }
+#tasksList .ct-card:nth-child(1) { animation-delay: 0.02s; }
+#tasksList .ct-card:nth-child(2) { animation-delay: 0.06s; }
+#tasksList .ct-card:nth-child(3) { animation-delay: 0.1s; }
+#tasksList .ct-card:nth-child(4) { animation-delay: 0.14s; }
+#tasksList .ct-card:nth-child(5) { animation-delay: 0.18s; }
+.ct-card:has(.priority-high) { border-right-color: var(--danger); }
+.ct-card:has(.priority-medium) { border-right-color: var(--orange); }
+.ct-card:has(.priority-low) { border-right-color: var(--green); }
+.ct-card:active { transform: scale(0.99); }
+.ct-card.done { opacity: 0.65; border-right-color: var(--green); }
 .ct-title { font-size: 16px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
 .ct-desc { font-size: 13.5px; color: var(--steel); line-height: 1.5; margin-bottom: 10px; }
 .ct-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
