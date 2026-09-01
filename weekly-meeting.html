@@ -11,6 +11,29 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
+<style>
+#meetingsList .attach-list { position: relative; gap: 14px; }
+#meetingsList .attach-list::before {
+  content: '';
+  position: absolute; top: 6px; bottom: 6px; right: 15px;
+  width: 2px;
+  background: linear-gradient(var(--green) 0%, var(--border) 12%, var(--border) 88%, transparent 100%);
+}
+#meetingsList .attach-item {
+  position: relative;
+  margin-right: 34px;
+  background: var(--sheet);
+  border: 1px solid var(--border);
+}
+#meetingsList .attach-item::before {
+  content: '';
+  position: absolute; top: 16px; right: -26px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--sheet);
+  border: 2.5px solid var(--green);
+  box-shadow: 0 0 0 4px var(--bg);
+}
+</style>
 </head>
 <body>
 
