@@ -8,6 +8,10 @@
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.users-grid { display: grid; grid-template-columns: 1.7fr 1fr; column-gap: 24px; align-items: start; }
+@media (max-width: 1000px) { .users-grid { grid-template-columns: 1fr; } }
+</style>
 </head>
 <body>
 
@@ -16,11 +20,7 @@
 <main class="page">
   <h1 class="page-title">משתמשים</h1>
 
-  <div class="card">
-    <div class="card-header"><h2>בקשות גישה ממתינות</h2></div>
-    <div id="requestsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
-  </div>
-
+  <div class="users-grid">
   <div class="card">
     <div class="card-header">
       <h2>משתמשי המערכת</h2>
@@ -37,6 +37,13 @@
     </div>
   </div>
 
+  <div class="users-side">
+
+  <div class="card">
+    <div class="card-header"><h2>בקשות גישה ממתינות</h2></div>
+    <div id="requestsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+
   <div class="card">
     <div class="card-header">
       <h2>ניהול אתרים</h2>
@@ -51,6 +58,9 @@
         </tbody>
       </table>
     </div>
+  </div>
+
+  </div>
   </div>
 </main>
 
