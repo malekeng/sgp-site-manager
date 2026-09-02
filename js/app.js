@@ -166,12 +166,19 @@ async function renderHeader(activePage, profile, site) {
     });
   }
 
+  const SIDEBAR_COLLAPSE_KEY = 'sgp_sidebar_collapsed';
+  if (window.innerWidth > 900 && localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === '1') {
+    host.classList.add('desktop-hidden');
+    document.body.classList.add('sidebar-collapsed');
+  }
+
   let toggle = document.getElementById('menuToggle');
   if (!toggle) {
     toggle = document.createElement('button');
     toggle.id = 'menuToggle';
     toggle.className = 'header-menu-btn';
     toggle.textContent = '☰';
+    toggle.title = 'הצגה/הסתרה של התפריט';
     document.body.appendChild(toggle);
   }
   let backdrop = document.getElementById('sidebarBackdrop');
@@ -183,8 +190,14 @@ async function renderHeader(activePage, profile, site) {
   }
 
   toggle.onclick = () => {
-    host.classList.toggle('open');
-    backdrop.classList.toggle('open');
+    if (window.innerWidth > 900) {
+      const collapsed = host.classList.toggle('desktop-hidden');
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+      localStorage.setItem(SIDEBAR_COLLAPSE_KEY, collapsed ? '1' : '0');
+    } else {
+      host.classList.toggle('open');
+      backdrop.classList.toggle('open');
+    }
   };
   backdrop.onclick = () => {
     host.classList.remove('open');

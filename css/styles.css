@@ -189,7 +189,7 @@ input, select, textarea {
   background: var(--navy); color: #fff; font-size: 19px;
   align-items: center; justify-content: center;
   box-shadow: var(--shadow-lg);
-  transition: transform 0.15s;
+  transition: transform 0.15s, right 0.28s var(--ease-out);
 }
 .header-menu-btn:active { transform: scale(0.94); }
 
@@ -211,6 +211,19 @@ input, select, textarea {
   .page-title { padding-right: 62px; }
 }
 
+/* ===== Desktop sidebar collapse ===== */
+@media (min-width: 901px) {
+  .header-menu-btn {
+    display: flex;
+    top: 20px;
+    right: 250px;
+  }
+  .app-header.desktop-hidden { transform: translateX(100%); box-shadow: none; }
+  body.sidebar-collapsed .page,
+  body.sidebar-collapsed footer.app-footer { margin-right: 0; }
+  body.sidebar-collapsed .header-menu-btn { right: 20px; }
+}
+
 /* ===== Layout ===== */
 .page {
   flex: 1;
@@ -218,6 +231,7 @@ input, select, textarea {
   max-width: 1280px;
   margin-right: 236px;
   padding: 32px 24px 64px;
+  transition: margin-right 0.28s var(--ease-out);
 }
 
 .page-title {
@@ -928,6 +942,7 @@ footer.app-footer {
   font-size: 12px;
   padding: 20px;
   margin-right: 236px;
+  transition: margin-right 0.28s var(--ease-out);
 }
 
 /* ===== Welcome block (dashboard) ===== */
