@@ -356,12 +356,38 @@ function greetingByHour() {
       });
     });
 
+    const VENDOR_TYPE_HREF = { contractor: 'vendor-contractors.html', supplier: 'vendor-suppliers.html', equipment: 'vendor-equipment.html', material: 'vendor-materials.html' };
+    const VENDOR_TYPE_LABEL = { contractor: 'קבלן', supplier: 'ספק', equipment: 'ציוד', material: 'חומר' };
+    const soonThreshold = new Date(); soonThreshold.setDate(soonThreshold.getDate() + 30);
+    const { data: expiring } = await sb.from('vendor_submissions')
+      .select('id, submission_type, name, valid_until')
+      .eq('site_id', site.id).not('valid_until', 'is', null).lte('valid_until', soonThreshold.toISOString().slice(0, 10))
+      .order('valid_until', { ascending: true });
+    (expiring || []).forEach(v => {
+      const expired = new Date(v.valid_until) < new Date(new Date().toDateString());
+      items.push({
+        icon: expired ? '🔴' : '🟠',
+        text: `${VENDOR_TYPE_LABEL[v.submission_type] || ''} "${v.name}" — תוקף ${expired ? 'פג ב' : 'עומד לפוג ב'}-${fmtDate(v.valid_until)}`,
+        href: VENDOR_TYPE_HREF[v.submission_type] || 'reports.html',
+      });
+    });
+
+    const { data: failedQc } = await sb.from('quality_controls')
+      .select('id, stage, subject, control_date')
+      .eq('site_id', site.id).eq('result', 'לא תקין')
+      .order('control_date', { ascending: false });
+    (failedQc || []).forEach(q => items.push({
+      icon: '❌',
+      text: `בקרה ${q.stage === 'preliminary' ? 'מקדימה' : 'בתהליך'} ל"${q.subject}" מ-${fmtDate(q.control_date)} — לא תקין`,
+      href: q.stage === 'preliminary' ? 'qc-preliminary.html' : 'qc-inprocess.html',
+    }));
+
     const host = document.getElementById('attentionList');
     if (!items.length) {
       host.innerHTML = '<p style="color:var(--steel);font-size:14px;">אין פריטים שדורשים תשומת לב כרגע 👍</p>';
       return;
     }
-    host.innerHTML = `<div class="attach-list">${items.slice(0, 8).map(it => `
+    host.innerHTML = `<div class="attach-list">${items.slice(0, 10).map(it => `
       <a href="${it.href}" class="attach-item" style="text-decoration:none;color:inherit;">
         <span>${it.icon} ${esc(it.text)}</span>
         <span style="color:var(--green-deep);font-weight:700;">←</span>
@@ -381,6 +407,11 @@ function greetingByHour() {
         }, dateField: 'delivery_date' },
       { table: 'price_quotes', label: 'הצעת מחיר', href: 'prices.html', fmt: r => r.material, dateField: 'quote_date' },
       { table: 'exceptions', label: 'חריג', href: 'exceptions.html', fmt: r => r.description || r.category, dateField: 'exception_date' },
+      { table: 'vendor_submissions', label: 'הגשה', fmt: r => r.name, dateField: 'submission_date',
+        hrefFn: r => ({ contractor: 'vendor-contractors.html', supplier: 'vendor-suppliers.html', equipment: 'vendor-equipment.html', material: 'vendor-materials.html' }[r.submission_type] || 'reports.html') },
+      { table: 'quality_controls', label: 'בקרת איכות', fmt: r => r.subject, dateField: 'control_date',
+        hrefFn: r => r.stage === 'preliminary' ? 'qc-preliminary.html' : 'qc-inprocess.html' },
+      { table: 'facility_file_items', label: 'תיק מתקן', href: 'facility-file.html', fmt: r => r.item_name, dateField: 'due_date' },
     ];
 
     const results = await Promise.all(sources.map(s =>
@@ -392,7 +423,7 @@ function greetingByHour() {
       (res.data || []).forEach(row => merged.push({ ...sources[i], row }));
     });
     merged.sort((a, b) => new Date(b.row.created_at || 0) - new Date(a.row.created_at || 0));
-    merged = merged.slice(0, 8);
+    merged = merged.slice(0, 10);
 
     const host = document.getElementById('recentList');
     if (!merged.length) {
@@ -404,7 +435,7 @@ function greetingByHour() {
         <td style="white-space:nowrap;color:var(--steel);font-size:12px;">${esc(m.label)}</td>
         <td>${esc(m.fmt(m.row) || '—')}</td>
         <td style="white-space:nowrap;">${esc(fmtDate(m.row[m.dateField]))}</td>
-        <td><a href="${m.href}" class="btn btn-sm btn-outline">פתח</a></td>
+        <td><a href="${m.hrefFn ? m.hrefFn(m.row) : m.href}" class="btn btn-sm btn-outline">פתח</a></td>
       </tr>
     `).join('')}</tbody></table></div>`;
   }
@@ -417,6 +448,9 @@ function greetingByHour() {
       { key: 'exceptions', label: 'חריגים', icon: '⚠️' },
       { key: 'quantity_sheets', label: 'גיליונות כמויות', icon: '📐' },
       { key: 'price_quotes', label: 'הצעות מחיר', icon: '💰' },
+      { key: 'vendor_submissions', label: 'הגשות קבלנים/ספקים/ציוד/חומר', icon: '📥' },
+      { key: 'quality_controls', label: 'בקרות איכות', icon: '✅' },
+      { key: 'facility_file_items', label: 'תיק מתקן', icon: '📜' },
       { key: 'documents', label: 'מסמכים מצורפים', icon: '📎' },
     ];
     const results = await Promise.all(tables.map(t =>

@@ -47,13 +47,20 @@
       <button class="btn btn-outline" data-export="rebar_deliveries" style="justify-content:flex-start;">📄 משלוחי ברזל</button>
       <button class="btn btn-outline" data-export="prestressed_slabs" style="justify-content:flex-start;">📄 לוח״דים</button>
       <button class="btn btn-outline" data-export="price_quotes" style="justify-content:flex-start;">📄 השוואת מחירים</button>
+      <button class="btn btn-outline" data-export="vendor_contractors" style="justify-content:flex-start;">📄 קבלנים</button>
+      <button class="btn btn-outline" data-export="vendor_suppliers" style="justify-content:flex-start;">📄 ספקים</button>
+      <button class="btn btn-outline" data-export="vendor_equipment" style="justify-content:flex-start;">📄 ציוד</button>
+      <button class="btn btn-outline" data-export="vendor_materials" style="justify-content:flex-start;">📄 חומר</button>
+      <button class="btn btn-outline" data-export="qc_preliminary" style="justify-content:flex-start;">📄 בקרה מקדימה</button>
+      <button class="btn btn-outline" data-export="qc_inprocess" style="justify-content:flex-start;">📄 בקרה בתהליך</button>
+      <button class="btn btn-outline" data-export="facility_file" style="justify-content:flex-start;">📄 תיק מתקן / טופס 4</button>
     </div>
   </div>
 
   <div class="card">
     <div class="card-header"><h2>ייצוא מלא של המערכת</h2></div>
     <p style="font-size:12.5px;color:var(--steel);margin-bottom:14px;">
-      קובץ אחד מרוכז הכולל את כל המודולים שיש בהם נתונים בטווח שנבחר: בטון, ברזל, לוח״דים, השוואת מחירים, חריגים, יועצים ומתכננים, משימות, וסיכומי ישיבות.
+      קובץ אחד מרוכז הכולל את כל המודולים שיש בהם נתונים בטווח שנבחר: בטון, ברזל, לוח״דים, השוואת מחירים, קבלנים/ספקים/ציוד/חומר, בקרת איכות, תיק מתקן, חריגים, יועצים ומתכננים, משימות, וסיכומי ישיבות.
     </p>
     <button class="btn btn-primary" id="exportFullSystemBtn">📦 ייצוא קובץ מלא</button>
   </div>
@@ -171,6 +178,101 @@
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
+    vendor_contractors: {
+      title: 'קבלנים', table: 'vendor_submissions',
+      staticFilter: { column: 'submission_type', value: 'contractor' },
+      dateField: 'submission_date',
+      columns: [
+        { key: 'name', label: 'שם קבלן / חברה', type: 'text' },
+        { key: 'category', label: 'תחום עבודה', type: 'text' },
+        { key: 'contact_person', label: 'איש קשר', type: 'text' },
+        { key: 'phone', label: 'טלפון', type: 'text' },
+        { key: 'approval_status', label: 'סטטוס אישור', type: 'text' },
+        { key: 'valid_until', label: 'ביטוח בתוקף עד', type: 'date' },
+        { key: 'submission_date', label: 'תאריך הגשה', type: 'date' },
+        { key: 'notes', label: 'הערות', type: 'text' },
+      ],
+    },
+    vendor_suppliers: {
+      title: 'ספקים', table: 'vendor_submissions',
+      staticFilter: { column: 'submission_type', value: 'supplier' },
+      dateField: 'submission_date',
+      columns: [
+        { key: 'name', label: 'שם ספק', type: 'text' },
+        { key: 'category', label: 'תחום אספקה', type: 'text' },
+        { key: 'contact_person', label: 'איש קשר', type: 'text' },
+        { key: 'phone', label: 'טלפון', type: 'text' },
+        { key: 'approval_status', label: 'סטטוס אישור', type: 'text' },
+        { key: 'valid_until', label: 'תוקף תעודת תקן', type: 'date' },
+        { key: 'submission_date', label: 'תאריך הגשה', type: 'date' },
+        { key: 'notes', label: 'הערות', type: 'text' },
+      ],
+    },
+    vendor_equipment: {
+      title: 'ציוד', table: 'vendor_submissions',
+      staticFilter: { column: 'submission_type', value: 'equipment' },
+      dateField: 'submission_date',
+      columns: [
+        { key: 'name', label: 'שם / סוג ציוד', type: 'text' },
+        { key: 'category', label: 'קטגוריה', type: 'text' },
+        { key: 'reg_number', label: 'מס\' רישוי / סידורי', type: 'text' },
+        { key: 'approval_status', label: 'סטטוס אישור', type: 'text' },
+        { key: 'valid_until', label: 'תוקף בדיקה תקופתית', type: 'date' },
+        { key: 'submission_date', label: 'תאריך הגשה', type: 'date' },
+        { key: 'notes', label: 'הערות', type: 'text' },
+      ],
+    },
+    vendor_materials: {
+      title: 'חומר', table: 'vendor_submissions',
+      staticFilter: { column: 'submission_type', value: 'material' },
+      dateField: 'submission_date',
+      columns: [
+        { key: 'name', label: 'שם חומר / מוצר', type: 'text' },
+        { key: 'category', label: 'קטגוריה', type: 'text' },
+        { key: 'contact_person', label: 'יצרן / ספק', type: 'text' },
+        { key: 'approval_status', label: 'סטטוס אישור', type: 'text' },
+        { key: 'valid_until', label: 'תוקף אישור / תו תקן', type: 'date' },
+        { key: 'submission_date', label: 'תאריך הגשה', type: 'date' },
+        { key: 'notes', label: 'הערות', type: 'text' },
+      ],
+    },
+    qc_preliminary: {
+      title: 'בקרה מקדימה', table: 'quality_controls',
+      staticFilter: { column: 'stage', value: 'preliminary' },
+      dateField: 'control_date',
+      columns: [
+        { key: 'control_date', label: 'תאריך בקרה', type: 'date' },
+        { key: 'subject', label: 'בקרה מקדימה ל', type: 'text' },
+        { key: 'inspector', label: 'בודק / מבצע הבקרה', type: 'text' },
+        { key: 'result', label: 'תוצאה', type: 'text' },
+        { key: 'notes', label: 'הערות', type: 'text' },
+      ],
+    },
+    qc_inprocess: {
+      title: 'בקרה בתהליך', table: 'quality_controls',
+      staticFilter: { column: 'stage', value: 'in_process' },
+      dateField: 'control_date',
+      columns: [
+        { key: 'control_date', label: 'תאריך בקרה', type: 'date' },
+        { key: 'subject', label: 'בקרה בתהליך ל', type: 'text' },
+        { key: 'inspector', label: 'בודק / מבצע הבקרה', type: 'text' },
+        { key: 'result', label: 'תוצאה', type: 'text' },
+        { key: 'notes', label: 'הערות', type: 'text' },
+      ],
+    },
+    facility_file: {
+      title: 'תיק מתקן / טופס 4', table: 'facility_file_items',
+      dateField: 'due_date',
+      columns: [
+        { key: 'item_name', label: 'שם הפריט / אישור נדרש', type: 'text' },
+        { key: 'category', label: 'קטגוריה', type: 'text' },
+        { key: 'responsible', label: 'גורם אחראי', type: 'text' },
+        { key: 'status', label: 'סטטוס', type: 'text' },
+        { key: 'due_date', label: 'תאריך יעד', type: 'date' },
+        { key: 'completed_date', label: 'תאריך השלמה', type: 'date' },
+        { key: 'notes', label: 'הערות', type: 'text' },
+      ],
+    },
   };
 
   function fmtCell(v, col) {
@@ -283,9 +385,12 @@
       const sections = [];
 
       // Reuse the same per-module column definitions already used for individual exports
-      for (const key of ['concrete_pours', 'rebar_deliveries', 'prestressed_slabs', 'price_quotes']) {
+      for (const key of ['concrete_pours', 'rebar_deliveries', 'prestressed_slabs', 'price_quotes',
+                          'vendor_contractors', 'vendor_suppliers', 'vendor_equipment', 'vendor_materials',
+                          'qc_preliminary', 'qc_inprocess', 'facility_file']) {
         const cfg = REPORTS[key];
-        let q = sb.from(key).select('*').in('site_id', filterState.siteIds);
+        let q = sb.from(cfg.table || key).select('*').in('site_id', filterState.siteIds);
+        if (cfg.staticFilter) q = q.eq(cfg.staticFilter.column, cfg.staticFilter.value);
         q = dateRange(q, cfg.dateField).order(cfg.dateField, { ascending: false });
         const { data } = await q;
         sections.push({ title: cfg.title, columns: cfg.columns, rows: data || [] });
@@ -379,7 +484,9 @@
       btn.disabled = true;
       const key = btn.dataset.export;
       const cfg = REPORTS[key];
-      let q = sb.from(key).select('*').in('site_id', filterState.siteIds);
+      const table = cfg.table || key;
+      let q = sb.from(table).select('*').in('site_id', filterState.siteIds);
+      if (cfg.staticFilter) q = q.eq(cfg.staticFilter.column, cfg.staticFilter.value);
       if (filterState.from) q = q.gte(cfg.dateField, filterState.from);
       if (filterState.to) q = q.lte(cfg.dateField, filterState.to);
       q = q.order(cfg.dateField, { ascending: false });
@@ -397,7 +504,7 @@
         const ids = rows.map(r => r.id);
         const { data: docs } = await sb.from('documents')
           .select('linked_record_id, file_path, file_name, document_date, doc_type')
-          .eq('linked_table', key)
+          .eq('linked_table', table)
           .in('linked_record_id', ids);
 
         const byRecord = {};
@@ -490,6 +597,9 @@
     rebar_deliveries: 'משלוח ברזל',
     prestressed_slabs: 'לוח״ד',
     price_quotes: 'הצעת מחיר',
+    vendor_submissions: 'הגשת קבלן/ספק/ציוד/חומר',
+    quality_controls: 'בקרת איכות',
+    facility_file_items: 'תיק מתקן',
   };
   const DOC_TYPE_LABELS = {
     photo: 'תמונה', delivery_note: 'תעודת משלוח', order: 'הזמנה',
@@ -585,10 +695,13 @@
     }
 
     // Group by source category so files of the same type sit together, instead of one interleaved feed
-    const GROUP_ORDER = ['concrete_pours', 'rebar_deliveries', 'prestressed_slabs', 'price_quotes', '__none__'];
+    const GROUP_ORDER = ['concrete_pours', 'rebar_deliveries', 'prestressed_slabs', 'price_quotes',
+      'vendor_submissions', 'quality_controls', 'facility_file_items', '__none__'];
     const GROUP_ICONS = {
       concrete_pours: '🧱 בטון', rebar_deliveries: '🔩 ברזל',
-      prestressed_slabs: '🏗️ לוח״דים', price_quotes: '💰 השוואת מחירים', __none__: '📎 כללי / לא משויך',
+      prestressed_slabs: '🏗️ לוח״דים', price_quotes: '💰 השוואת מחירים',
+      vendor_submissions: '📥 הגשות קבלנים/ספקים/ציוד/חומר', quality_controls: '✅ בקרת איכות',
+      facility_file_items: '📜 תיק מתקן', __none__: '📎 כללי / לא משויך',
     };
     const groups = {};
     resolved.forEach((d, i) => {
