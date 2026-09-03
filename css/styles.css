@@ -133,6 +133,45 @@ input, select, textarea {
   font-weight: 700;
 }
 
+/* ===== Sidebar nav groups (accordion) ===== */
+.nav-group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.82);
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.nav-group-header:hover { color: #fff; background: rgba(255,255,255,0.09); }
+.nav-group-header .nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+.nav-chevron {
+  margin-right: auto;
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  transition: transform 0.22s var(--ease-out);
+}
+.nav-group.expanded .nav-chevron { transform: rotate(180deg); }
+.nav-group-items {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s var(--ease-out);
+}
+.nav-group-items-inner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.nav-group.expanded .nav-group-items { grid-template-rows: 1fr; }
+.app-header nav a.nav-sub {
+  padding-right: 34px;
+  font-size: 13px;
+}
+
 .app-header .sidebar-footer {
   padding: 14px 14px 20px;
   border-top: 1px solid rgba(255,255,255,0.08);

@@ -104,6 +104,7 @@ async function initCrudPage(config) {
 
   async function loadData() {
     let q = sb.from(config.table).select('*').eq('site_id', site.id);
+    if (config.staticFilter) q = q.eq(config.staticFilter.column, config.staticFilter.value);
     if (state.filters.from) q = q.gte(config.dateField, state.filters.from);
     if (state.filters.to) q = q.lte(config.dateField, state.filters.to);
     q = q.order((config.orderBy && config.orderBy.column) || config.dateField, {
@@ -406,6 +407,7 @@ async function initCrudPage(config) {
     hideMsg(formMsg);
     const fd = new FormData(formEl);
     const payload = { site_id: site.id };
+    if (config.staticFilter) payload[config.staticFilter.column] = config.staticFilter.value;
 
     config.formFields.forEach(f => {
       let v = fd.get(f.key);

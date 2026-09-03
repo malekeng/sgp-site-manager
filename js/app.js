@@ -11,9 +11,22 @@
 
 const NAV_ITEMS = [
   { href: 'dashboard.html', label: 'לוח בקרה', icon: '🏠' },
-  { href: 'concrete.html',  label: 'יומני יציקות בטון', icon: '🧱' },
-  { href: 'rebar.html',     label: 'משלוחי ברזל', icon: '🔩' },
-  { href: 'slabs.html',     label: 'לוח״דים', icon: '🏗️' },
+  { group: 'מעקב ציוד/חומר', icon: '📦', items: [
+    { href: 'concrete.html', label: 'בטון', icon: '🧱' },
+    { href: 'rebar.html',    label: 'ברזל', icon: '🔩' },
+    { href: 'slabs.html',    label: 'לוח״דים', icon: '🏗️' },
+  ]},
+  { group: 'הגשת קבלנים/ספקים/ציוד/חומר', icon: '📥', items: [
+    { href: 'vendor-contractors.html', label: 'קבלנים', icon: '👷' },
+    { href: 'vendor-suppliers.html',   label: 'ספקים', icon: '🚚' },
+    { href: 'vendor-equipment.html',   label: 'ציוד', icon: '🛠️' },
+    { href: 'vendor-materials.html',   label: 'חומר', icon: '🧰' },
+  ]},
+  { group: 'בקרת איכות', icon: '✅', items: [
+    { href: 'qc-preliminary.html', label: 'בקרה מקדימה', icon: '🔍' },
+    { href: 'qc-inprocess.html',   label: 'בקרה בתהליך', icon: '🔄' },
+  ]},
+  { href: 'facility-file.html', label: 'תיק מתקן / טופס 4', icon: '📜' },
   { href: 'exceptions.html', label: 'חריגים', icon: '⚠️' },
   { href: 'tasks.html', label: 'משימות', icon: '📋' },
   { href: 'work-plan.html', label: 'תכנית עבודה שבועית', icon: '🗓️' },
@@ -123,9 +136,24 @@ async function renderHeader(activePage, profile, site) {
   }
   items.push(PROFILE_NAV_ITEM);
 
-  const navHtml = items.map(item =>
-    `<a href="${item.href}" class="${item.href === activePage ? 'active' : ''}"><span class="nav-icon">${item.icon}</span>${item.label}</a>`
-  ).join('');
+  const NAV_GROUP_KEY_PREFIX = 'sgp_navgroup_';
+  function navLinkHtml(item, extraClass) {
+    return `<a href="${item.href}" class="${extraClass || ''} ${item.href === activePage ? 'active' : ''}"><span class="nav-icon">${item.icon}</span>${item.label}</a>`;
+  }
+  const navHtml = items.map(item => {
+    if (item.group) {
+      const groupActive = item.items.some(sub => sub.href === activePage);
+      const stored = localStorage.getItem(NAV_GROUP_KEY_PREFIX + item.group);
+      const expanded = stored !== null ? stored === '1' : groupActive;
+      const subHtml = item.items.map(sub => navLinkHtml(sub, 'nav-sub')).join('');
+      return `
+        <div class="nav-group${expanded ? ' expanded' : ''}" data-group="${item.group}">
+          <button type="button" class="nav-group-header"><span class="nav-icon">${item.icon}</span>${item.group}<span class="nav-chevron">▾</span></button>
+          <div class="nav-group-items"><div class="nav-group-items-inner">${subHtml}</div></div>
+        </div>`;
+    }
+    return navLinkHtml(item);
+  }).join('');
 
   const allSites = site?.__allSites;
   const siteControl = (allSites && allSites.length > 1)
@@ -207,6 +235,14 @@ async function renderHeader(activePage, profile, site) {
     host.classList.remove('open');
     backdrop.classList.remove('open');
   }));
+
+  host.querySelectorAll('.nav-group-header').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const group = btn.closest('.nav-group');
+      const expanded = group.classList.toggle('expanded');
+      localStorage.setItem(NAV_GROUP_KEY_PREFIX + group.dataset.group, expanded ? '1' : '0');
+    });
+  });
 
   document.getElementById('siteSwitcher')?.addEventListener('change', e => {
     sessionStorage.setItem('sgp_active_site_id', e.target.value);
