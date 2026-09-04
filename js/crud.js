@@ -18,7 +18,7 @@ function openAppendNoteModal(textarea) {
           <button type="button" class="btn btn-outline" id="cancelAppendNoteBtn">ביטול</button>
         </div>
       </form>
-      <button type="button" class="icon-btn" id="closeAppendNoteBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+      <button type="button" class="icon-btn modal-close" id="closeAppendNoteBtn">✕</button>
     </div>
   `;
   document.body.appendChild(backdrop);
@@ -179,12 +179,12 @@ async function initCrudPage(config) {
       const docCount = state.docCounts[row.id] || 0;
       const docCell = docCount
         ? `<td><span class="doc-badge" data-docs="${row.id}">📎 ${docCount}</span></td>`
-        : `<td style="color:var(--steel-light);">—</td>`;
+        : `<td class="cell-muted">—</td>`;
       const whoId = row.updated_by || row.created_by;
       const when = row.updated_at || row.created_at;
       const auditCell = whoId || when
         ? `<td class="audit-cell"><div class="audit-who">${esc(whoId ? (state.profileNames[whoId] || 'משתמש') : '—')}</div><div class="audit-when">${esc(fmtDateTime(when))}</div></td>`
-        : `<td style="color:var(--steel-light);">—</td>`;
+        : `<td class="cell-muted">—</td>`;
       const qt = config.quickToggle;
       const toggleBtn = qt
         ? `<button class="icon-btn" data-toggle="${row.id}" title="${row[qt.key] ? qt.trueAction : qt.falseAction}">${row[qt.key] ? qt.trueLabel : qt.falseLabel}</button>`
@@ -221,8 +221,8 @@ async function initCrudPage(config) {
 
   function openLightbox(url) {
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(6,15,53,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
-    overlay.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">`;
+    overlay.className = 'lightbox-overlay';
+    overlay.innerHTML = `<img src="${url}" alt="תמונה מצורפת">`;
     overlay.addEventListener('click', () => overlay.remove());
     document.body.appendChild(overlay);
   }
@@ -238,7 +238,7 @@ async function initCrudPage(config) {
       if (isImageFile(d.file_name)) {
         return `<div class="attach-item" data-lightbox="${i}" style="cursor:pointer;">
           <span style="display:flex;align-items:center;gap:8px;">
-            <img src="${esc(d.url)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
+            <img src="${esc(d.url)}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
             ${fileName}${dateLabel}
           </span>
           <span class="btn btn-sm btn-outline">הצגה</span>

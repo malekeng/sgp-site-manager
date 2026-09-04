@@ -53,6 +53,7 @@
         <span id="loginBtnText">כניסה</span>
       </button>
     </form>
+    <a href="index.html" style="display:block;text-align:center;margin-top:14px;font-size:13px;color:var(--steel);">חזרה למסך הכניסה הראשי</a>
   </div>
   </div>
 </div>
@@ -63,11 +64,18 @@ const msgEl = document.getElementById('msg');
 function hideMsg() { msgEl.className = 'msg'; }
 function showErr(text) { msgEl.textContent = text; msgEl.className = 'msg show error'; }
 
-document.getElementById('pwToggle').addEventListener('click', () => {
-  const input = document.getElementById('passwordInput');
-  const showing = input.type === 'text';
-  input.type = showing ? 'password' : 'text';
-});
+(function () {
+  const toggle = document.getElementById('pwToggle');
+  function flip() {
+    const input = document.getElementById('passwordInput');
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    toggle.textContent = showing ? '👁' : '🙈';
+    toggle.setAttribute('aria-label', showing ? 'הצג סיסמה' : 'הסתר סיסמה');
+  }
+  toggle.addEventListener('click', flip);
+  toggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+})();
 
 function phoneToSyntheticEmail(phone) {
   const digits = phone.replace(/\D/g, '');

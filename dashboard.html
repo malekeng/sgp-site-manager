@@ -171,7 +171,7 @@ function greetingByHour() {
       .order('created_at', { ascending: false })
       .limit(20);
     if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; return; }
-    if (!data || !data.length) { host.innerHTML = '<p style="color:var(--steel);">אין הודעות עדיין — היו הראשונים לכתוב אחת</p>'; return; }
+    if (!data || !data.length) { host.innerHTML = '<p class="empty-state">אין הודעות עדיין — היו הראשונים לכתוב אחת</p>'; return; }
 
     host.innerHTML = `<div class="attach-list">${data.map(n => {
       const authorName = esc(n.profiles?.full_name || n.profiles?.username || 'משתמש');
@@ -414,7 +414,7 @@ function greetingByHour() {
 
     const host = document.getElementById('recentList');
     if (!merged.length) {
-      host.innerHTML = '<p style="color:var(--steel);font-size:14px;">אין פעילות עדיין באתר הזה</p>';
+      host.innerHTML = '<p class="empty-state">אין פעילות עדיין באתר הזה</p>';
       return;
     }
     host.innerHTML = `<div class="table-wrap"><table><tbody>${merged.map(m => `
@@ -457,8 +457,8 @@ function greetingByHour() {
   }
   function openLightbox(url) {
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(6,15,53,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
-    overlay.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">`;
+    overlay.className = 'lightbox-overlay';
+    overlay.innerHTML = `<img src="${url}" alt="תמונה מצורפת">`;
     overlay.addEventListener('click', () => overlay.remove());
     document.body.appendChild(overlay);
   }
@@ -473,7 +473,7 @@ function greetingByHour() {
       .order('created_at', { ascending: false })
       .limit(24);
     if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; return; }
-    if (!data || !data.length) { host.innerHTML = '<p style="color:var(--steel);">אין תמונות ביצוע עדיין — היו הראשונים להוסיף</p>'; return; }
+    if (!data || !data.length) { host.innerHTML = '<p class="empty-state">אין תמונות ביצוע עדיין — היו הראשונים להוסיף</p>'; return; }
 
     const resolved = await Promise.all(data.map(async d => {
       const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);

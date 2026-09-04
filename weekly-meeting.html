@@ -45,7 +45,7 @@
   <div class="card">
     <div class="card-header">
       <h2>יומן ישיבות</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="header-actions">
         <button class="btn btn-primary" id="addBtn">+ סיכום ישיבה</button>
         <button class="btn btn-outline" id="exportAllBtn">📄 ייצוא PDF</button>
       </div>
@@ -70,7 +70,7 @@
         <button type="button" class="btn btn-danger" id="deleteBtn" style="display:none;margin-right:auto;">מחיקה</button>
       </div>
     </form>
-    <button class="icon-btn" id="closeModalBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+    <button class="icon-btn modal-close" id="closeModalBtn">✕</button>
   </div>
 </div>
 
@@ -96,7 +96,7 @@
 
   function renderList() {
     const host = document.getElementById('meetingsList');
-    if (!meetings.length) { host.innerHTML = '<p style="color:var(--steel);">אין סיכומי ישיבות עדיין</p>'; return; }
+    if (!meetings.length) { host.innerHTML = '<p class="empty-state">אין סיכומי ישיבות עדיין</p>'; return; }
     host.innerHTML = `<div class="attach-list">${meetings.map(m => `
       <div class="attach-item" style="align-items:flex-start;flex-direction:column;gap:6px;">
         <div style="display:flex;justify-content:space-between;width:100%;align-items:flex-start;gap:8px;">

@@ -558,7 +558,7 @@
       ? `<div class="table-wrap"><table><thead><tr><th>חודש</th><th>נפח כולל (מ\"ק)</th></tr></thead><tbody>${
           months.map(m => `<tr><td>${m}</td><td>${fmtNum(byMonth[m])}</td></tr>`).join('')
         }</tbody></table></div>`
-      : '<p style="color:var(--steel);">אין נתונים תואמים לסינון</p>';
+      : '<p class="empty-state">אין נתונים תואמים לסינון</p>';
 
     document.getElementById('exportConcreteSummary').onclick = () => {
       exportPdf(
@@ -581,7 +581,7 @@
       ? `<div class="table-wrap"><table><thead><tr><th>ספק</th><th>משקל כולל (ק\"ג)</th></tr></thead><tbody>${
           suppliers.map(s => `<tr><td>${esc(s)}</td><td>${fmtNum(bySupplier[s], 0)}</td></tr>`).join('')
         }</tbody></table></div>`
-      : '<p style="color:var(--steel);">אין נתונים תואמים לסינון</p>';
+      : '<p class="empty-state">אין נתונים תואמים לסינון</p>';
 
     document.getElementById('exportRebarSummary').onclick = () => {
       exportPdf(
@@ -612,8 +612,8 @@
 
   function openLightbox(url) {
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(6,15,53,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
-    overlay.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">`;
+    overlay.className = 'lightbox-overlay';
+    overlay.innerHTML = `<img src="${url}" alt="תמונה מצורפת">`;
     overlay.addEventListener('click', () => overlay.remove());
     document.body.appendChild(overlay);
   }
@@ -650,7 +650,7 @@
     const { data, error } = await q;
     if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; downloadAllBtn.style.display = 'none'; return; }
     if (!data || !data.length) {
-      host.innerHTML = '<p style="color:var(--steel);">אין מסמכים מצורפים בטווח שנבחר</p>';
+      host.innerHTML = '<p class="empty-state">אין מסמכים מצורפים בטווח שנבחר</p>';
       downloadAllBtn.style.display = 'none';
       return;
     }

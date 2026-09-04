@@ -11,6 +11,16 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
+<style>
+.priority-badge { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+.priority-badge.high { background: rgba(255,71,87,0.14); color: var(--danger); }
+.priority-badge.medium { background: rgba(255,157,66,0.16); color: #b5651d; }
+.priority-badge.low { background: rgba(0,214,143,0.14); color: var(--green-deep); }
+.status-badge { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+.status-badge.todo { background: var(--bg); color: var(--steel); }
+.status-badge.in_progress { background: rgba(61,158,255,0.14); color: var(--blue); }
+.status-badge.done { background: rgba(0,214,143,0.14); color: var(--green-deep); }
+</style>
 </head>
 <body>
 
@@ -35,7 +45,7 @@
   <div class="card" id="planTasksCard" style="display:none;">
     <div class="card-header">
       <h2 id="planTasksTitle">משימות התכנית</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="header-actions">
         <button class="btn btn-primary" id="addPlanTaskBtn">+ משימה</button>
         <button class="btn btn-outline" id="exportPlanPdfBtn">📄 ייצוא PDF</button>
         <button class="btn btn-outline" id="backToPlansBtn">חזרה לתכניות</button>
@@ -43,7 +53,7 @@
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>כותרת</th><th>מיקום</th><th>אחראי</th><th>תאריך יעד</th><th>סטטוס</th><th></th></tr></thead>
+        <thead><tr><th>כותרת</th><th>מיקום</th><th>אחראי</th><th>עדיפות</th><th>תאריך יעד</th><th>סטטוס</th><th></th></tr></thead>
         <tbody id="planTasksBody"></tbody>
       </table>
     </div>
@@ -111,11 +121,19 @@
   const { user, site } = auth;
 
   const STATUS_LABELS = { todo: 'לביצוע', in_progress: 'בתהליך', done: 'הושלם' };
+  const PRIORITY_LABELS = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
   let plans = [];
   let currentPlan = null;
   let planTasks = [];
   let members = [];
   let editingTaskId = null;
+
+  function truncateAtWord(text, max) {
+    if (text.length <= max) return text;
+    const cut = text.slice(0, max);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut) + '…';
+  }
 
   async function loadMembers() {
     const { data } = await sb.from('profile_sites').select('profiles(id, full_name, username)').eq('site_id', site.id);
@@ -147,8 +165,8 @@
     body.innerHTML = plans.map(p => `
       <tr>
         <td>${esc(fmtDate(p.week_start))}${p.week_end ? ' – ' + esc(fmtDate(p.week_end)) : ''}</td>
-        <td>${esc(p.notes ? (p.notes.length > 50 ? p.notes.slice(0, 47) + '…' : p.notes) : '—')}</td>
-        <td>${counts[p.id] || 0}</td>
+        <td>${esc(p.notes ? truncateAtWord(p.notes, 50) : '—')}</td>
+        <td class="num-cell">${counts[p.id] || 0}</td>
         <td class="row-actions"><div class="row-actions-inner">
           <button class="btn btn-sm btn-outline" data-open="${p.id}">פתיחה</button>
           <button class="icon-btn danger" data-del="${p.id}" title="מחיקה">🗑️</button>
@@ -216,14 +234,15 @@
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
     planTasks = data || [];
     const body = document.getElementById('planTasksBody');
-    if (!planTasks.length) { body.innerHTML = `<tr class="empty-row"><td colspan="6">אין משימות בתכנית זו עדיין</td></tr>`; return; }
+    if (!planTasks.length) { body.innerHTML = `<tr class="empty-row"><td colspan="7">אין משימות בתכנית זו עדיין</td></tr>`; return; }
     body.innerHTML = planTasks.map(t => `
       <tr>
         <td>${esc(t.title)}</td>
         <td>${esc(t.location || '—')}</td>
         <td>${esc(memberName(t.assignee_id))}</td>
+        <td>${t.priority ? `<span class="priority-badge ${esc(t.priority)}">${esc(PRIORITY_LABELS[t.priority] || t.priority)}</span>` : '—'}</td>
         <td>${esc(t.due_date ? fmtDate(t.due_date) : '—')}</td>
-        <td>${esc(STATUS_LABELS[t.status] || t.status)}</td>
+        <td><span class="status-badge ${esc(t.status)}">${esc(STATUS_LABELS[t.status] || t.status)}</span></td>
         <td class="row-actions"><div class="row-actions-inner">
           <button class="icon-btn" data-edit="${t.id}" title="עריכה">✏️</button>
           <button class="icon-btn danger" data-del="${t.id}" title="מחיקה">🗑️</button>

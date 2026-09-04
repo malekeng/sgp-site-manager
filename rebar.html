@@ -29,7 +29,7 @@
   <div class="card">
     <div class="card-header">
       <h2>מעקב אספקת ברזל זיון</h2>
-      <div style="display:flex;gap:8px;">
+      <div class="header-actions">
         <button class="btn btn-primary" id="addBtn">+ הוספת רשומה</button>
         <button class="btn btn-outline" id="filterToggle">סינון</button>
       </div>
@@ -69,7 +69,7 @@
     </details>
     <div id="ocrAttachChoice" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;">
       <div style="font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:8px;">לאיזה סוג מסמך שייך הקובץ שנסרק?</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="header-actions">
         <button type="button" class="btn btn-sm btn-outline" id="ocrAttachAsOrder">📎 קובץ הזמנה</button>
         <button type="button" class="btn btn-sm btn-outline" id="ocrAttachAsDeliveryNote">📎 תעודת משלוח</button>
         <button type="button" class="btn btn-sm btn-ghost" id="ocrAttachSkip">לא לצרף</button>
@@ -85,7 +85,7 @@
         <button type="button" class="btn btn-outline" id="cancelBtn">ביטול</button>
       </div>
     </form>
-    <button class="icon-btn" id="closeModalBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+    <button class="icon-btn modal-close" id="closeModalBtn">✕</button>
   </div>
 </div>
 

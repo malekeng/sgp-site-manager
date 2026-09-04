@@ -14,8 +14,6 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
 <style>
-.ocr-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center; cursor: pointer; margin-bottom: 16px; }
-.ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(0,214,143,0.06); }
 .ocr-progress { display: none; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 13px; color: var(--steel); }
 .ocr-progress.show { display: flex; }
 .ocr-preview-row { display: grid; grid-template-columns: 1fr 100px 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
@@ -48,7 +46,7 @@
   <div class="card" id="itemsCard" style="display:none;">
     <div class="card-header">
       <h2 id="itemsTitle">שורות כמויות</h2>
-      <div style="display:flex;gap:8px;">
+      <div class="header-actions">
         <button class="btn btn-primary" id="addItemBtn">+ הוספת שורה</button>
         <button class="btn btn-outline" id="exportSheetPdfBtn">📄 ייצוא PDF</button>
         <button class="btn btn-outline" id="backToSheets">חזרה לגיליונות</button>
@@ -58,7 +56,7 @@
       <table>
         <thead><tr><th>מס'</th><th>תיאור</th><th>מכפיל</th><th>גובה</th><th>רוחב</th><th>אורך</th><th>סה"כ</th><th></th></tr></thead>
         <tbody id="itemsBody"></tbody>
-        <tfoot><tr><td colspan="6" style="text-align:left;font-weight:800;">סה"כ כללי</td><td id="itemsGrandTotal" style="font-weight:800;"></td><td></td></tr></tfoot>
+        <tfoot><tr><td colspan="6" style="text-align:left;font-weight:800;">סה"כ כללי</td><td id="itemsGrandTotal" class="num-cell" style="font-weight:800;"></td><td></td></tr></tfoot>
       </table>
     </div>
   </div>
@@ -100,7 +98,7 @@
         <div class="field"><label>תאריך תוכנית</label><input type="date" name="plan_date"></div>
       </div>
 
-      <div class="ocr-zone" id="ocrZone" style="margin-top:14px;">
+      <div class="attach-zone" id="ocrZone" style="margin-top:14px;margin-bottom:16px;">
         <div>📄 גררו לכאן קובץ (תמונה או PDF) של כתב הכמויות, או לחצו לבחירה</div>
         <div style="font-size:11px;color:var(--steel);margin-top:4px;">זיהוי טקסט אוטומטי — בדקו את התוצאה לפני ייבוא</div>
         <input type="file" id="ocrInput" accept="image/*,.pdf" style="display:none;">

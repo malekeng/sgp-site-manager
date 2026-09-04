@@ -28,7 +28,7 @@
   <div class="card">
     <div class="card-header">
       <h2>יומן אישורים ועדכונים</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="header-actions">
         <button class="btn btn-primary" id="addBtn">+ רישום אישור/עדכון</button>
         <button class="btn btn-outline" id="filterToggle">סינון</button>
         <button class="btn btn-outline" id="exportRangeBtn">📄 ייצוא PDF לטווח</button>
@@ -127,7 +127,7 @@
         <button type="button" class="btn btn-outline" id="cancelBtn">ביטול</button>
       </div>
     </form>
-    <button class="icon-btn" id="closeModalBtn" style="position:absolute;top:18px;left:18px;">✕</button>
+    <button class="icon-btn modal-close" id="closeModalBtn">✕</button>
   </div>
 </div>
 
@@ -234,8 +234,8 @@
   function isImageFile(name) { return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || ''); }
   function openLightbox(url) {
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(6,15,53,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
-    overlay.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:8px;">`;
+    overlay.className = 'lightbox-overlay';
+    overlay.innerHTML = `<img src="${url}" alt="תמונה מצורפת">`;
     overlay.addEventListener('click', () => overlay.remove());
     document.body.appendChild(overlay);
   }

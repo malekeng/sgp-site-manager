@@ -29,7 +29,7 @@
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>שם מלא</th><th>שם משתמש</th><th>אימייל</th><th>תפקיד מערכת</th><th>תפקיד בשטח</th><th>אתר</th><th></th></tr></thead>
+        <thead><tr><th>שם מלא</th><th>שם משתמש</th><th>אימייל</th><th>תפקיד מערכת</th><th>תפקיד בשטח</th><th>אתר</th><th><span class="sr-only">פעולות</span></th></tr></thead>
         <tbody id="usersBody">
           <tr class="empty-row"><td colspan="7"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
         </tbody>
@@ -207,6 +207,7 @@
     const body = document.getElementById('usersBody');
     if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="7">שגיאה: ${esc(error.message)}</td></tr>`; return; }
     usersCache = data || [];
+    if (!usersCache.length) { body.innerHTML = `<tr class="empty-row"><td colspan="7">אין משתמשים עדיין</td></tr>`; return; }
     body.innerHTML = usersCache.map(u => {
       const siteNames = u.role === 'owner'
         ? 'כל האתרים'
@@ -222,9 +223,9 @@
         <td class="row-actions">
           <div class="row-actions-inner">
             ${isOwner ? `
-              <button class="icon-btn" data-edit-user="${u.id}" title="עריכה">✏️</button>
-              ${u.role !== 'contractor' ? `<button class="icon-btn" data-resend="${u.id}" title="שליחת הזמנה מחדש">📧</button>` : ''}
-              ${u.id !== user.id ? `<button class="icon-btn danger" data-del-user="${u.id}" title="מחיקה">🗑️</button>` : ''}
+              <button class="icon-btn" data-edit-user="${u.id}" title="עריכה" aria-label="עריכת ${esc(u.full_name || u.username)}">✏️</button>
+              ${u.role !== 'contractor' ? `<button class="icon-btn" data-resend="${u.id}" title="שליחת הזמנה מחדש" aria-label="שליחת הזמנה מחדש ל-${esc(u.full_name || u.username)}">📧</button>` : ''}
+              ${u.id !== user.id ? `<button class="icon-btn danger" data-del-user="${u.id}" title="מחיקה" aria-label="מחיקת ${esc(u.full_name || u.username)}">🗑️</button>` : ''}
             ` : ''}
           </div>
         </td>
