@@ -184,7 +184,12 @@ function createAttachWidget(container, options = {}) {
           linked_record_id: recordId,
           uploaded_by: userId,
         });
-        if (dbErr) throw dbErr;
+        if (dbErr) {
+          // Storage upload already succeeded but the DB row failed — remove the
+          // orphaned file so it doesn't sit in storage with no record pointing to it.
+          await sb.storage.from('documents').remove([path]).catch(() => {});
+          throw dbErr;
+        }
 
         setProgress(((i + 1) / total) * 100, i + 1 === total ? 'ההעלאה הושלמה' : `הועלה ${i + 1} מתוך ${total}`);
       }

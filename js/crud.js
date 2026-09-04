@@ -88,7 +88,8 @@ async function initCrudPage(config) {
     });
     const missing = [...ids].filter(id => !state.profileNames[id]);
     if (!missing.length) return;
-    const { data } = await sb.from('profiles').select('id, full_name, username, email').in('id', missing);
+    const { data, error } = await sb.from('profiles').select('id, full_name, username, email').in('id', missing);
+    if (error) { console.error('resolveProfileNames failed:', error); return; }
     (data || []).forEach(p => { state.profileNames[p.id] = displayName(p); });
   }
 
@@ -308,7 +309,7 @@ async function initCrudPage(config) {
           <textarea name="${f.key}" rows="2" ${f.required ? 'required' : ''}></textarea></div>`;
       }
       return `<div class="field${full}"><label>${f.label}${f.required ? ' *' : ''}</label>
-        <input type="${f.type}" name="${f.key}" ${f.step ? `step="${f.step}"` : ''} ${f.required ? 'required' : ''}></div>`;
+        <input type="${f.type}" name="${f.key}" ${f.step ? `step="${f.step}"` : ''} ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''} ${f.required ? 'required' : ''}></div>`;
     }).join('');
 
     grid.querySelectorAll('[data-append-note]').forEach(btn => {
