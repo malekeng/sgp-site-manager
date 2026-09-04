@@ -11,18 +11,18 @@
 
 const NAV_ITEMS = [
   { href: 'dashboard.html', label: 'לוח בקרה', icon: '🏠' },
-  { group: 'מעקב ציוד/חומר', icon: '📦', items: [
+  { group: 'מעקב ציוד/חומר', key: 'materials', icon: '📦', items: [
     { href: 'concrete.html', label: 'בטון', icon: '🧱' },
     { href: 'rebar.html',    label: 'ברזל', icon: '🔩' },
     { href: 'slabs.html',    label: 'לוח״דים', icon: '🏗️' },
   ]},
-  { group: 'הגשת קבלנים/ספקים/ציוד/חומר', icon: '📥', items: [
+  { group: 'הגשת קבלנים/ספקים/ציוד/חומר', key: 'vendor-submissions', icon: '📥', items: [
     { href: 'vendor-contractors.html', label: 'קבלנים', icon: '👷' },
     { href: 'vendor-suppliers.html',   label: 'ספקים', icon: '🚚' },
     { href: 'vendor-equipment.html',   label: 'ציוד', icon: '🛠️' },
     { href: 'vendor-materials.html',   label: 'חומר', icon: '🧰' },
   ]},
-  { group: 'בקרת איכות', icon: '✅', items: [
+  { group: 'בקרת איכות', key: 'quality-control', icon: '✅', items: [
     { href: 'qc-preliminary.html', label: 'בקרה מקדימה', icon: '🔍' },
     { href: 'qc-inprocess.html',   label: 'בקרה בתהליך', icon: '🔄' },
   ]},
@@ -143,11 +143,14 @@ async function renderHeader(activePage, profile, site) {
   const navHtml = items.map(item => {
     if (item.group) {
       const groupActive = item.items.some(sub => sub.href === activePage);
-      const stored = localStorage.getItem(NAV_GROUP_KEY_PREFIX + item.group);
-      const expanded = stored !== null ? stored === '1' : groupActive;
+      const stored = localStorage.getItem(NAV_GROUP_KEY_PREFIX + item.key);
+      // The group containing the active page always shows expanded, even if the
+      // user had previously collapsed it — otherwise the current page can end up
+      // hidden inside a collapsed group with no visual trace of where you are.
+      const expanded = groupActive || stored === '1';
       const subHtml = item.items.map(sub => navLinkHtml(sub, 'nav-sub')).join('');
       return `
-        <div class="nav-group${expanded ? ' expanded' : ''}" data-group="${item.group}">
+        <div class="nav-group${expanded ? ' expanded' : ''}" data-group="${item.key}">
           <button type="button" class="nav-group-header"><span class="nav-icon">${item.icon}</span>${item.group}<span class="nav-chevron">▾</span></button>
           <div class="nav-group-items"><div class="nav-group-items-inner">${subHtml}</div></div>
         </div>`;
@@ -231,6 +234,22 @@ async function renderHeader(activePage, profile, site) {
     host.classList.remove('open');
     backdrop.classList.remove('open');
   };
+
+  // Re-sync desktop-collapse vs mobile-open state when crossing the 900px
+  // breakpoint via window resize (not just page reload), so the two states
+  // (host.desktop-hidden / host.open) don't drift out of sync with each other.
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) {
+      host.classList.remove('open');
+      backdrop.classList.remove('open');
+      const collapsed = localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === '1';
+      host.classList.toggle('desktop-hidden', collapsed);
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+    } else {
+      host.classList.remove('desktop-hidden');
+      document.body.classList.remove('sidebar-collapsed');
+    }
+  });
   host.querySelectorAll('nav a').forEach(a => a.addEventListener('click', () => {
     host.classList.remove('open');
     backdrop.classList.remove('open');
