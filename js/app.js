@@ -11,30 +11,30 @@
 
 const NAV_ITEMS = [
   { href: 'dashboard.html', label: 'לוח בקרה', icon: '🏠' },
-  { group: 'מעקב ציוד/חומר', key: 'materials', icon: '📦', items: [
+  { group: 'מעקב ציוד וחומר', key: 'materials', icon: '📦', items: [
     { href: 'concrete.html', label: 'בטון', icon: '🧱' },
     { href: 'rebar.html',    label: 'ברזל', icon: '🔩' },
     { href: 'slabs.html',    label: 'לוח״דים', icon: '🏗️' },
   ]},
-  { group: 'הגשת קבלנים/ספקים/ציוד/חומר', key: 'vendor-submissions', icon: '📥', items: [
+  { group: 'הגשות לאישור', key: 'vendor-submissions', icon: '📥', items: [
     { href: 'vendor-contractors.html', label: 'קבלנים', icon: '👷' },
     { href: 'vendor-suppliers.html',   label: 'ספקים', icon: '🚚' },
     { href: 'vendor-equipment.html',   label: 'ציוד', icon: '🛠️' },
     { href: 'vendor-materials.html',   label: 'חומר', icon: '🧰' },
   ]},
-  { group: 'בקרת איכות ותיעוד', key: 'quality-control', icon: '✅', items: [
+  { group: 'בקרת איכות', key: 'quality-control', icon: '✅', items: [
     { href: 'qc-preliminary.html', label: 'בקרה מקדימה', icon: '🔍' },
     { href: 'qc-inprocess.html',   label: 'בקרה בתהליך', icon: '🔄' },
     { href: 'facility-file.html',  label: 'תיק מתקן / טופס 4', icon: '📜' },
     { href: 'exceptions.html',     label: 'חריגים', icon: '⚠️' },
   ]},
-  { group: 'תכנון וניהול משימות', key: 'planning', icon: '🗂️', items: [
+  { group: 'תכנון וניהול', key: 'planning', icon: '🗂️', items: [
     { href: 'tasks.html', label: 'משימות', icon: '📋' },
     { href: 'work-plan.html', label: 'תכנית עבודה שבועית', icon: '🗓️' },
     { href: 'weekly-meeting.html', label: 'סיכומי ישיבות', icon: '📝' },
     { href: 'correspondence.html', label: 'יועצים ומתכננים', icon: '✉️' },
   ]},
-  { group: 'כלכלה וכמויות', key: 'cost', icon: '📐', items: [
+  { group: 'כמויות ותמחור', key: 'cost', icon: '📐', items: [
     { href: 'quantity.html', label: 'כתבי כמויות', icon: '📐' },
     { href: 'prices.html',   label: 'השוואת מחירים', icon: '💰' },
   ]},
