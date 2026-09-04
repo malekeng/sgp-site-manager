@@ -97,7 +97,12 @@ document.getElementById('loginForm').addEventListener('submit', async e => {
 
 (async function () {
   const { data: { session } } = await sb.auth.getSession();
-  if (session) window.location.href = 'contractor-tasks.html';
+  if (!session) return;
+  const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single();
+  // Only auto-redirect an already-logged-in contractor session. A non-contractor
+  // (owner/admin/site_user) landing here should just see the login form, not get
+  // silently bounced or signed out of their existing session.
+  if (profile && profile.role === 'contractor') window.location.href = 'contractor-tasks.html';
 })();
 </script>
 </body>

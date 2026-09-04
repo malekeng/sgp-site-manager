@@ -84,8 +84,17 @@
 
   const { data: profile, error: profErr } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
   if (profErr || !profile || profile.role !== 'contractor') {
-    await sb.auth.signOut();
-    window.location.href = 'contractor-login.html';
+    document.getElementById('tasksList').innerHTML = `
+      <div class="ct-empty">
+        <p style="margin-bottom:16px;">דף זה מיועד לחשבונות קבלן בלבד. החשבון המחובר כרגע אינו חשבון קבלן.</p>
+        <a class="btn btn-primary" href="dashboard.html" style="margin-left:8px;">חזרה למערכת הראשית</a>
+        <button class="btn btn-outline" id="ctWrongRoleSignOut">התנתקות והתחברות כקבלן</button>
+      </div>`;
+    document.getElementById('ctWrongRoleSignOut').addEventListener('click', async () => {
+      if (!confirm('להתנתק מהחשבון הנוכחי ולעבור להתחברות כקבלן?')) return;
+      await sb.auth.signOut();
+      window.location.href = 'contractor-login.html';
+    });
     return;
   }
 

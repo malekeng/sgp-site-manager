@@ -44,7 +44,7 @@ async function initCrudPage(config) {
   if (!auth) return;
   const { user, profile, site } = auth;
 
-  const state = { rows: [], docCounts: {}, editingId: null, filters: {}, profileNames: {} };
+  const state = { rows: [], docCounts: {}, editingId: null, editingUpdatedAt: undefined, filters: {}, profileNames: {} };
 
   document.getElementById('pageTitle').textContent = config.title;
 
@@ -359,6 +359,7 @@ async function initCrudPage(config) {
     const auditEl = ensureAuditEl();
     if (id) {
       const row = state.rows.find(r => r.id === id);
+      state.editingUpdatedAt = row ? (row.updated_at || null) : null;
       auditEl.textContent = auditLine(row);
       auditEl.hidden = !auditEl.textContent;
 
@@ -435,23 +436,40 @@ async function initCrudPage(config) {
 
     try {
       let recordId = state.editingId;
+      const isNew = !state.editingId;
       if (state.editingId) {
-        const { error } = await sb.from(config.table).update(payload).eq('id', state.editingId);
+        let uq = sb.from(config.table).update(payload).eq('id', state.editingId).select('id');
+        uq = state.editingUpdatedAt ? uq.eq('updated_at', state.editingUpdatedAt) : uq.is('updated_at', null);
+        const { data, error } = await uq;
         if (error) throw error;
+        if (!data || !data.length) {
+          throw new Error('הרשומה עודכנה בינתיים על ידי משתמש אחר. יש לסגור, לרענן ולנסות שוב כדי לא לדרוס את השינויים שלו.');
+        }
       } else {
         payload.created_by = user.id;
         const { data, error } = await sb.from(config.table).insert(payload).select().single();
         if (error) throw error;
         recordId = data.id;
+        // Lock in editingId immediately so a retry after a failed attachment upload below
+        // updates this same record instead of inserting a duplicate.
+        state.editingId = recordId;
       }
 
-      for (const w of attachWidgets) {
-        if (w.getFiles().length) {
-          await w.upload({ siteId: site.id, table: config.table, recordId, userId: user.id });
+      try {
+        for (const w of attachWidgets) {
+          if (w.getFiles().length) {
+            await w.upload({ siteId: site.id, table: config.table, recordId, userId: user.id });
+          }
         }
+      } catch (attachErr) {
+        console.error(attachErr);
+        toast('הרשומה נשמרה בהצלחה, אך אירעה שגיאה בהעלאת קובץ מצורף: ' + attachErr.message, 'error');
+        closeModal();
+        await loadData();
+        return;
       }
 
-      toast(state.editingId ? 'הרשומה עודכנה' : 'הרשומה נוספה', 'success');
+      toast(isNew ? 'הרשומה נוספה' : 'הרשומה עודכנה', 'success');
       closeModal();
       await loadData();
     } catch (err) {
