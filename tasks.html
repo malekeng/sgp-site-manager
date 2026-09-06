@@ -249,7 +249,7 @@
         return signed?.signedUrl;
       }));
       photosHtml = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-        ${urls.filter(Boolean).map(u => `<img src="${u}" data-lightbox-url="${u}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;cursor:pointer;">`).join('')}
+        ${urls.filter(Boolean).map(u => `<img src="${u}" data-lightbox-url="${u}" alt="תמונת ביצוע — לחצו להגדלה" style="width:44px;height:44px;object-fit:cover;border-radius:8px;cursor:pointer;">`).join('')}
       </div>`;
     }
 

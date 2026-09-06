@@ -151,13 +151,16 @@
     const { error: upErr } = await sb.storage.from('documents').upload(path, file, { upsert: true, contentType: file.type });
     if (upErr) { toast('שגיאה בהעלאה: ' + upErr.message, 'error'); return; }
 
-    // delete old if different
-    if (profile.avatar_path && profile.avatar_path !== path) {
-      await sb.storage.from('documents').remove([profile.avatar_path]).catch(() => {});
-    }
-
     const { error } = await sb.from('profiles').update({ avatar_path: path }).eq('id', user.id);
     if (error) { toast('שגיאה בשמירה: ' + error.message, 'error'); return; }
+
+    // Delete the old avatar only after the new path is saved. Removing it first meant
+    // a failed update left avatar_path pointing at a deleted file, original lost.
+    const oldAvatarPath = profile.avatar_path;
+    if (oldAvatarPath && oldAvatarPath !== path) {
+      const { error: rmErr } = await sb.storage.from('documents').remove([oldAvatarPath]);
+      if (rmErr) console.warn('התמונה הישנה לא נמחקה:', rmErr.message);
+    }
     profile.avatar_path = path;
     await showAvatar(path);
     toast('התמונה עודכנה', 'success');

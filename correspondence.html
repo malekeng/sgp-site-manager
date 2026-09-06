@@ -153,7 +153,7 @@
     exceptions: { dateField: 'exception_date', labelFn: r => `${r.exception_date || ''} · ${r.description ? r.description.slice(0, 30) : ''}` },
   };
 
-  const state = { rows: [], docCounts: {}, editingId: null, filters: {} };
+  const state = { rows: [], docCounts: {}, editingId: null, editingUpdatedAt: undefined, filters: {} };
   const attachHost = document.getElementById('attachHost');
   const attachWidget = createAttachWidget(attachHost);
 
@@ -293,6 +293,7 @@
 
     if (id) {
       const row = state.rows.find(r => r.id === id);
+      state.editingUpdatedAt = row ? (row.updated_at || null) : null;
       const form = document.getElementById('recordForm');
       form.entry_date.value = row.entry_date || '';
       form.direction.value = row.direction || 'outgoing';
@@ -336,21 +337,40 @@
     submitBtn.disabled = true;
     try {
       let recordId = state.editingId;
+      const isNew = !state.editingId;
       if (state.editingId) {
         payload.updated_by = user.id;
         payload.updated_at = new Date().toISOString();
-        const { error } = await sb.from('correspondence').update(payload).eq('id', state.editingId);
+        // Optimistic lock: refuse to write if someone else changed the row since this
+        // form was opened, instead of silently overwriting their edit.
+        let uq = sb.from('correspondence').update(payload).eq('id', state.editingId).select('id');
+        uq = state.editingUpdatedAt ? uq.eq('updated_at', state.editingUpdatedAt) : uq.is('updated_at', null);
+        const { data, error } = await uq;
         if (error) throw error;
+        if (!data || !data.length) {
+          throw new Error('הרשומה עודכנה בינתיים על ידי משתמש אחר. יש לסגור, לרענן ולנסות שוב כדי לא לדרוס את השינויים שלו.');
+        }
       } else {
         payload.created_by = user.id;
         const { data, error } = await sb.from('correspondence').insert(payload).select().single();
         if (error) throw error;
         recordId = data.id;
+        // Lock in editingId so a retry after a failed attachment upload updates this
+        // same record instead of inserting a duplicate.
+        state.editingId = recordId;
       }
       if (attachWidget.getFiles().length) {
-        await attachWidget.upload({ siteId: site.id, table: 'correspondence', recordId, userId: user.id });
+        try {
+          await attachWidget.upload({ siteId: site.id, table: 'correspondence', recordId, userId: user.id });
+        } catch (attachErr) {
+          console.error(attachErr);
+          toast('הרשומה נשמרה בהצלחה, אך אירעה שגיאה בהעלאת קובץ מצורף: ' + attachErr.message, 'error');
+          closeModal();
+          await loadData();
+          return;
+        }
       }
-      toast(state.editingId ? 'הרשומה עודכנה' : 'הרשומה נרשמה', 'success');
+      toast(isNew ? 'הרשומה נרשמה' : 'הרשומה עודכנה', 'success');
       closeModal();
       await loadData();
     } catch (err) {

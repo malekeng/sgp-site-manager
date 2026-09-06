@@ -187,12 +187,22 @@ function createAttachWidget(container, options = {}) {
         if (dbErr) {
           // Storage upload already succeeded but the DB row failed — remove the
           // orphaned file so it doesn't sit in storage with no record pointing to it.
-          await sb.storage.from('documents').remove([path]).catch(() => {});
+          // remove() resolves with { error } rather than rejecting, so check it:
+          // a silent cleanup failure would leave an invisible stray file behind.
+          const { error: rmErr } = await sb.storage.from('documents').remove([path]);
+          if (rmErr) console.warn('ניקוי קובץ יתום נכשל:', path, rmErr.message);
           throw dbErr;
         }
 
+        // Drop the finished file from the pending list straight away. Leaving it in
+        // meant that if a LATER file threw, pressing Save again re-uploaded the ones
+        // that had already succeeded — duplicate storage objects and duplicate rows.
+        const doneIndex = entries.indexOf(toUpload[i]);
+        if (doneIndex !== -1) entries.splice(doneIndex, 1);
+
         setProgress(((i + 1) / total) * 100, i + 1 === total ? 'ההעלאה הושלמה' : `הועלה ${i + 1} מתוך ${total}`);
       }
+      render();
 
       await new Promise(r => setTimeout(r, 350));
       hideProgress();

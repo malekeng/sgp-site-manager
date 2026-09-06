@@ -440,10 +440,20 @@
     const { error } = await sb.from('profiles').update(payload).eq('id', id);
     if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); btn.disabled = false; return; }
 
+    // Keep the current assignments so a failed insert can be rolled back. Without this,
+    // the delete succeeded and the insert failing left the user with NO sites at all.
+    const { data: prevSites } = await sb.from('profile_sites').select('site_id').eq('profile_id', id);
     await sb.from('profile_sites').delete().eq('profile_id', id);
     if (role !== 'owner' && siteIds.length) {
       const { error: sitesErr } = await sb.from('profile_sites').insert(siteIds.map(site_id => ({ profile_id: id, site_id })));
-      if (sitesErr) { showMsg(msgEl, 'שגיאה בשמירת אתרים: ' + sitesErr.message, 'error'); btn.disabled = false; return; }
+      if (sitesErr) {
+        if (prevSites && prevSites.length) {
+          await sb.from('profile_sites').insert(prevSites.map(s => ({ profile_id: id, site_id: s.site_id })));
+        }
+        showMsg(msgEl, 'שגיאה בשמירת אתרים: ' + sitesErr.message + ' — שיוך האתרים הקודם שוחזר', 'error');
+        btn.disabled = false;
+        return;
+      }
     }
 
     btn.disabled = false;

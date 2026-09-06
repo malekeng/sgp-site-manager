@@ -642,7 +642,21 @@
     }
   }
 
+  // Wrapper so that ANY unexpected throw inside surfaces as a visible error instead of
+  // leaving #docsList on its initial spinner with every document invisible.
   async function loadDocuments() {
+    try {
+      await loadDocumentsInner();
+    } catch (err) {
+      console.error('loadDocuments failed:', err);
+      const host = document.getElementById('docsList');
+      const btn = document.getElementById('downloadAllDocs');
+      if (host) host.innerHTML = `<p style="color:var(--danger);">שגיאה בטעינת המסמכים: ${esc(err.message)}. נסו לרענן את העמוד.</p>`;
+      if (btn) btn.style.display = 'none';
+    }
+  }
+
+  async function loadDocumentsInner() {
     const host = document.getElementById('docsList');
     const downloadAllBtn = document.getElementById('downloadAllDocs');
     currentDocs = [];
@@ -652,17 +666,24 @@
       downloadAllBtn.style.display = 'none';
       return;
     }
-    let q = sb.from('documents').select('*').in('site_id', filterState.siteIds).order('created_at', { ascending: false }).limit(DOCS_QUERY_LIMIT);
+    // count:'exact' returns the true total the filter matches, independent of the row
+    // cap — so a cap imposed anywhere (here or server-side) is always detectable.
+    let q = sb.from('documents').select('*', { count: 'exact' }).in('site_id', filterState.siteIds).order('created_at', { ascending: false }).limit(DOCS_QUERY_LIMIT);
     // Filter on the date written ON the document (e.g. the delivery-note date), falling
     // back to the upload time only when the document has no date of its own. Filtering
     // purely on created_at used to hide notes dated inside the range but uploaded later.
+    // The created_at bounds are converted from the viewer's local day to UTC instants:
+    // a bare date is read as UTC midnight, which hid files uploaded just after midnight
+    // local time on the first day of the range.
     if (filterState.from) {
-      q = q.or(`document_date.gte.${filterState.from},and(document_date.is.null,created_at.gte.${filterState.from})`);
+      const fromTs = new Date(`${filterState.from}T00:00:00`).toISOString();
+      q = q.or(`document_date.gte.${filterState.from},and(document_date.is.null,created_at.gte.${fromTs})`);
     }
     if (filterState.to) {
-      q = q.or(`document_date.lte.${filterState.to},and(document_date.is.null,created_at.lte.${filterState.to}T23:59:59)`);
+      const toTs = new Date(`${filterState.to}T23:59:59.999`).toISOString();
+      q = q.or(`document_date.lte.${filterState.to},and(document_date.is.null,created_at.lte.${toTs})`);
     }
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; downloadAllBtn.style.display = 'none'; return; }
     if (!data || !data.length) {
       host.innerHTML = '<p class="empty-state">אין מסמכים מצורפים בטווח שנבחר</p>';
@@ -670,9 +691,18 @@
       return;
     }
 
+    // Each signed-URL call is wrapped: createSignedUrl can REJECT (network blip, 429
+    // under concurrency), and one rejection inside Promise.all used to reject this whole
+    // function — leaving the panel stuck on its spinner with every document hidden and
+    // no error shown. A failure now costs one row, which renders with an error label.
     const resolved = await Promise.all(data.map(async d => {
-      const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
-      return { ...d, url: signed?.signedUrl || null };
+      try {
+        const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
+        return { ...d, url: signed?.signedUrl || null };
+      } catch (e) {
+        console.error('signed URL failed for', d.file_path, e);
+        return { ...d, url: null };
+      }
     }));
     currentDocs = resolved.filter(d => d.url);
 
@@ -691,7 +721,7 @@
       if (isImageFile(d.file_name)) {
         return `<div class="attach-item">
           <span style="display:flex;align-items:center;gap:8px;min-width:0;">
-            <img src="${esc(d.url)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+            <img src="${esc(d.url)}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">
             <span style="overflow:hidden;text-overflow:ellipsis;">${fileName}<br><span style="color:var(--steel);font-size:12px;">${metaLabel ? esc(metaLabel) + ' · ' : ''}${displayDate}</span></span>
           </span>
           <span style="display:flex;gap:6px;flex-shrink:0;">
@@ -725,7 +755,9 @@
       correspondence: '✉️ יועצים ומתכננים', tasks: '📋 משימות',
       __none__: '📎 כללי / לא משויך',
     };
-    const groups = {};
+    // Null-prototype map: a linked_table literally named 'constructor' or '__proto__'
+    // would otherwise hit an inherited property and throw, taking the panel down.
+    const groups = Object.create(null);
     resolved.forEach((d, i) => {
       const key = d.linked_table || '__none__';
       (groups[key] ||= []).push(i);
@@ -740,11 +772,21 @@
     ];
 
     const shownCount = renderOrder.reduce((n, key) => n + groups[key].length, 0);
-    const capNotice = data.length >= DOCS_QUERY_LIMIT
-      ? `<p class="empty-state" style="padding:14px;">מוצגים ${shownCount} המסמכים האחרונים בלבד (תקרת טעינה). צמצמו את טווח התאריכים כדי לראות את השאר.</p>`
+    const notices = [];
+    // `count` is the true number of matching rows, so this catches truncation by our own
+    // cap AND by any server-side row limit.
+    if (typeof count === 'number' && count > shownCount) {
+      notices.push(`מוצגים ${shownCount} מתוך ${count} מסמכים תואמים. צמצמו את טווח התאריכים כדי לראות את השאר.`);
+    }
+    const unresolved = shownCount - currentDocs.length;
+    if (unresolved > 0) {
+      notices.push(`${unresolved} קבצים מוצגים אך לא ניתן לפתוח אותם כרגע, ולכן אינם נכללים בכפתור "הורד הכל".`);
+    }
+    const noticeHtml = notices.length
+      ? `<p style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;font-size:12.5px;color:var(--steel);margin:0 0 14px;">${notices.map(esc).join('<br>')}</p>`
       : '';
 
-    host.innerHTML = capNotice + renderOrder.map(key => `
+    host.innerHTML = noticeHtml + renderOrder.map(key => `
       <div style="margin-bottom:18px;">
         <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:8px;">${GROUP_ICONS[key] || '📎 ' + esc(key)} (${groups[key].length})</div>
         <div class="attach-list">${groups[key].map(i => renderDocItem(resolved[i], i)).join('')}</div>

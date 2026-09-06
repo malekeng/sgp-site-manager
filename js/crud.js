@@ -114,18 +114,32 @@ async function initCrudPage(config) {
     });
     q = q.order('created_at', { ascending: false }); // stable tie-breaker when the primary date repeats
     const { data, error } = await q;
-    if (error) { toast('שגיאה בטעינת נתונים: ' + error.message, 'error'); return; }
+    if (error) {
+      toast('שגיאה בטעינת נתונים: ' + error.message, 'error');
+      // Drop the previous result set rather than leaving it on screen — stale rows
+      // here also feed the delete-confirmation attachment count.
+      state.rows = [];
+      state.docCounts = {};
+      state.docCountsKnown = false;
+      renderStats();
+      renderTable();
+      return;
+    }
     state.rows = data || [];
 
     await resolveProfileNames(state.rows);
 
     if (state.rows.length) {
       const ids = state.rows.map(r => r.id);
-      const { data: docs } = await sb
+      const { data: docs, error: docsErr } = await sb
         .from('documents')
         .select('linked_record_id')
         .eq('linked_table', config.table)
         .in('linked_record_id', ids);
+      // If this fails the counts are unknown, not zero — the delete warning must not
+      // quietly claim a record has no attachments when we simply could not check.
+      state.docCountsKnown = !docsErr;
+      if (docsErr) console.error('doc counts failed:', docsErr);
       state.docCounts = {};
       (docs || []).forEach(d => {
         state.docCounts[d.linked_record_id] = (state.docCounts[d.linked_record_id] || 0) + 1;
@@ -411,6 +425,10 @@ async function initCrudPage(config) {
     const payload = { site_id: site.id };
     if (config.staticFilter) payload[config.staticFilter.column] = config.staticFilter.value;
 
+    // Collect validation problems instead of throwing: this runs OUTSIDE the try below,
+    // so a throw here escaped the handler as an unhandled rejection and its catch branch
+    // was never reachable.
+    let validationError = null;
     config.formFields.forEach(f => {
       let v = fd.get(f.key);
       if (f.type === 'boolean') { payload[f.key] = (v === (f.trueLabel || 'כן')); return; }
@@ -418,8 +436,8 @@ async function initCrudPage(config) {
       if (f.type === 'select' && v === 'אחר') {
         v = fd.get(f.key + '__other');
         if (!v || !String(v).trim()) {
-          showMsg(formMsg, 'יש להזין ערך בשדה "' + f.label + '"', 'error');
-          throw new Error('missing other value');
+          if (!validationError) validationError = 'יש להזין ערך בשדה "' + f.label + '"';
+          return;
         }
         v = String(v).trim();
       }
@@ -428,6 +446,7 @@ async function initCrudPage(config) {
       if (v !== null && (f.type === 'number' || f.numeric)) v = Number(v);
       payload[f.key] = v;
     });
+    if (validationError) { showMsg(formMsg, validationError, 'error'); return; }
 
     payload.updated_by = user.id;
     payload.updated_at = new Date().toISOString();
@@ -474,10 +493,6 @@ async function initCrudPage(config) {
       closeModal();
       await loadData();
     } catch (err) {
-      if (err.message === 'missing other value') {
-        submitBtn.disabled = false;
-        return;
-      }
       console.error(err);
       showMsg(formMsg, 'שגיאה: ' + err.message, 'error');
     } finally {
@@ -489,9 +504,14 @@ async function initCrudPage(config) {
     // Warn when the record still carries attachments: deleting it leaves those
     // files in the system but detached, with no record to reach them from.
     const docCount = state.docCounts[id] || 0;
-    const question = docCount
-      ? `לרשומה זו מצורפים ${docCount} מסמכים.\n\nמחיקת הרשומה תנתק אותם — הקבצים יישארו במערכת (ויופיעו בעמוד הדוחות), אך לא ניתן יהיה להגיע אליהם דרך שום רשומה.\n\nלמחוק בכל זאת? הפעולה אינה הפיכה.`
-      : 'למחוק את הרשומה? הפעולה אינה הפיכה.';
+    let question;
+    if (docCount) {
+      question = `לרשומה זו מצורפים ${docCount} מסמכים.\n\nמחיקת הרשומה תנתק אותם — הקבצים יישארו במערכת (ויופיעו בעמוד הדוחות), אך לא ניתן יהיה להגיע אליהם דרך שום רשומה.\n\nלמחוק בכל זאת? הפעולה אינה הפיכה.`;
+    } else if (state.docCountsKnown === false) {
+      question = 'לא ניתן היה לבדוק אם מצורפים לרשומה מסמכים.\n\nאם יש כאלה, מחיקת הרשומה תנתק אותם.\n\nלמחוק בכל זאת? הפעולה אינה הפיכה.';
+    } else {
+      question = 'למחוק את הרשומה? הפעולה אינה הפיכה.';
+    }
     if (!confirm(question)) return;
     const { error } = await sb.from(config.table).delete().eq('id', id);
     if (error) { toast('שגיאה במחיקה: ' + error.message, 'error'); return; }
@@ -505,10 +525,19 @@ async function initCrudPage(config) {
     const row = state.rows.find(r => r.id === id);
     if (!row) return;
     const newValue = !row[qt.key];
-    const { error } = await sb.from(config.table)
+    // Same optimistic lock as the edit form: `row` comes from the last load and may be
+    // stale, so only flip the value if nobody else has touched the record since.
+    let tq = sb.from(config.table)
       .update({ [qt.key]: newValue, updated_by: user.id, updated_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('id', id).select('id');
+    tq = row.updated_at ? tq.eq('updated_at', row.updated_at) : tq.is('updated_at', null);
+    const { data: toggled, error } = await tq;
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    if (!toggled || !toggled.length) {
+      toast('הרשומה עודכנה בינתיים על ידי משתמש אחר — רועננו הנתונים, נסו שוב', 'error');
+      await loadData();
+      return;
+    }
     toast(newValue ? qt.trueToast : qt.falseToast, 'success');
     await loadData();
   }

@@ -157,7 +157,7 @@
           const { data: signed } = await sb.storage.from('documents').createSignedUrl(d.file_path, 3600);
           return signed?.signedUrl;
         }));
-        thumbsHtml = `<div class="ct-photo-thumbs">${urls.filter(Boolean).map(u => `<img src="${u}">`).join('')}</div>`;
+        thumbsHtml = `<div class="ct-photo-thumbs">${urls.filter(Boolean).map(u => `<img src="${u}" alt="תמונת ביצוע">`).join('')}</div>`;
       }
 
       return `
@@ -207,23 +207,38 @@
 
       const photoFile = document.getElementById('completePhotoInput').files[0];
       if (photoFile) {
-        const ext = photoFile.name.split('.').pop();
-        const path = `${task.site_id}/tasks/${completingTaskId}/${Date.now()}.${ext}`;
-        const { error: upErr } = await sb.storage.from('documents').upload(path, photoFile);
-        if (upErr) throw upErr;
+        // The task is already marked done above. If only the photo fails, say exactly
+        // that — a generic error made it look like nothing saved, so contractors would
+        // submit again and upload the same photo twice.
+        try {
+          const ext = photoFile.name.split('.').pop();
+          const path = `${task.site_id}/tasks/${completingTaskId}/${Date.now()}.${ext}`;
+          const { error: upErr } = await sb.storage.from('documents').upload(path, photoFile);
+          if (upErr) throw upErr;
 
-        const { error: dbErr } = await sb.from('documents').insert({
-          site_id: task.site_id,
-          doc_type: 'photo',
-          title: photoFile.name,
-          file_path: path,
-          file_name: photoFile.name,
-          file_size: photoFile.size,
-          linked_table: 'tasks',
-          linked_record_id: completingTaskId,
-          uploaded_by: session.user.id,
-        });
-        if (dbErr) throw dbErr;
+          const { error: dbErr } = await sb.from('documents').insert({
+            site_id: task.site_id,
+            doc_type: 'photo',
+            title: photoFile.name,
+            file_path: path,
+            file_name: photoFile.name,
+            file_size: photoFile.size,
+            linked_table: 'tasks',
+            linked_record_id: completingTaskId,
+            uploaded_by: session.user.id,
+          });
+          if (dbErr) {
+            // Remove the just-uploaded file so it isn't stranded with no record.
+            const { error: rmErr } = await sb.storage.from('documents').remove([path]);
+            if (rmErr) console.warn('ניקוי קובץ יתום נכשל:', path, rmErr.message);
+            throw dbErr;
+          }
+        } catch (photoErr) {
+          msgEl.textContent = 'המשימה סומנה כבוצעה, אך העלאת התמונה נכשלה: ' + photoErr.message;
+          msgEl.className = 'msg show error';
+          await loadTasks();
+          return;
+        }
       }
 
       toast('המשימה סומנה כבוצעה', 'success');
