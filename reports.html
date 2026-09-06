@@ -592,6 +592,11 @@
     };
   }
 
+  // Cap on how many documents the attachments panel loads at once (each one costs a
+  // signed-URL round trip). When the cap is reached the UI says so rather than
+  // silently showing a truncated list.
+  const DOCS_QUERY_LIMIT = 300;
+
   const LINKED_TABLE_LABELS = {
     concrete_pours: 'יציקת בטון',
     rebar_deliveries: 'משלוח ברזל',
@@ -600,6 +605,9 @@
     vendor_submissions: 'הגשת קבלן/ספק/ציוד/חומר',
     quality_controls: 'בקרת איכות',
     facility_file_items: 'תיק מתקן',
+    progress_gallery: 'גלריית ביצוע',
+    correspondence: 'יועצים ומתכננים',
+    tasks: 'משימה',
   };
   const DOC_TYPE_LABELS = {
     photo: 'תמונה', delivery_note: 'תעודת משלוח', order: 'הזמנה',
@@ -644,9 +652,16 @@
       downloadAllBtn.style.display = 'none';
       return;
     }
-    let q = sb.from('documents').select('*').in('site_id', filterState.siteIds).order('created_at', { ascending: false }).limit(80);
-    if (filterState.from) q = q.gte('created_at', filterState.from);
-    if (filterState.to) q = q.lte('created_at', filterState.to + 'T23:59:59');
+    let q = sb.from('documents').select('*').in('site_id', filterState.siteIds).order('created_at', { ascending: false }).limit(DOCS_QUERY_LIMIT);
+    // Filter on the date written ON the document (e.g. the delivery-note date), falling
+    // back to the upload time only when the document has no date of its own. Filtering
+    // purely on created_at used to hide notes dated inside the range but uploaded later.
+    if (filterState.from) {
+      q = q.or(`document_date.gte.${filterState.from},and(document_date.is.null,created_at.gte.${filterState.from})`);
+    }
+    if (filterState.to) {
+      q = q.or(`document_date.lte.${filterState.to},and(document_date.is.null,created_at.lte.${filterState.to}T23:59:59)`);
+    }
     const { data, error } = await q;
     if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; downloadAllBtn.style.display = 'none'; return; }
     if (!data || !data.length) {
@@ -695,13 +710,20 @@
     }
 
     // Group by source category so files of the same type sit together, instead of one interleaved feed
+    // GROUP_ORDER only controls ORDER, never membership: any linked_table not listed
+    // here still gets rendered (appended after the known ones). A hardcoded whitelist
+    // used to silently drop whole categories — that is how 'progress_gallery' files
+    // were counted in the total but never shown.
     const GROUP_ORDER = ['concrete_pours', 'rebar_deliveries', 'prestressed_slabs', 'price_quotes',
-      'vendor_submissions', 'quality_controls', 'facility_file_items', '__none__'];
+      'vendor_submissions', 'quality_controls', 'facility_file_items',
+      'progress_gallery', 'correspondence', 'tasks', '__none__'];
     const GROUP_ICONS = {
       concrete_pours: '🧱 בטון', rebar_deliveries: '🔩 ברזל',
       prestressed_slabs: '🏗️ לוח״דים', price_quotes: '💰 השוואת מחירים',
       vendor_submissions: '📥 הגשות קבלנים/ספקים/ציוד/חומר', quality_controls: '✅ בקרת איכות',
-      facility_file_items: '📜 תיק מתקן', __none__: '📎 כללי / לא משויך',
+      facility_file_items: '📜 תיק מתקן', progress_gallery: '🏗️ גלריית ביצוע',
+      correspondence: '✉️ יועצים ומתכננים', tasks: '📋 משימות',
+      __none__: '📎 כללי / לא משויך',
     };
     const groups = {};
     resolved.forEach((d, i) => {
@@ -709,9 +731,22 @@
       (groups[key] ||= []).push(i);
     });
 
-    host.innerHTML = GROUP_ORDER.filter(key => groups[key]?.length).map(key => `
+    // Known keys in their preferred order, then anything unrecognised, then "unassigned"
+    // last. Every key present in the data appears exactly once, so nothing can vanish.
+    const renderOrder = [
+      ...GROUP_ORDER.filter(k => k !== '__none__' && groups[k]?.length),
+      ...Object.keys(groups).filter(k => !GROUP_ORDER.includes(k)).sort(),
+      ...(groups.__none__?.length ? ['__none__'] : []),
+    ];
+
+    const shownCount = renderOrder.reduce((n, key) => n + groups[key].length, 0);
+    const capNotice = data.length >= DOCS_QUERY_LIMIT
+      ? `<p class="empty-state" style="padding:14px;">מוצגים ${shownCount} המסמכים האחרונים בלבד (תקרת טעינה). צמצמו את טווח התאריכים כדי לראות את השאר.</p>`
+      : '';
+
+    host.innerHTML = capNotice + renderOrder.map(key => `
       <div style="margin-bottom:18px;">
-        <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:8px;">${GROUP_ICONS[key]} (${groups[key].length})</div>
+        <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:8px;">${GROUP_ICONS[key] || '📎 ' + esc(key)} (${groups[key].length})</div>
         <div class="attach-list">${groups[key].map(i => renderDocItem(resolved[i], i)).join('')}</div>
       </div>
     `).join('');
