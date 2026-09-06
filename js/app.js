@@ -25,20 +25,16 @@ const NAV_ITEMS = [
   { group: 'בקרת איכות', key: 'quality-control', icon: '✅', items: [
     { href: 'qc-preliminary.html', label: 'בקרה מקדימה', icon: '🔍' },
     { href: 'qc-inprocess.html',   label: 'בקרה בתהליך', icon: '🔄' },
-    { href: 'facility-file.html',  label: 'תיק מתקן / טופס 4', icon: '📜' },
-    { href: 'exceptions.html',     label: 'חריגים', icon: '⚠️' },
   ]},
-  { group: 'תכנון וניהול', key: 'planning', icon: '🗂️', items: [
-    { href: 'tasks.html', label: 'משימות', icon: '📋' },
-    { href: 'work-plan.html', label: 'תכנית עבודה שבועית', icon: '🗓️' },
-    { href: 'weekly-meeting.html', label: 'סיכומי ישיבות', icon: '📝' },
-    { href: 'correspondence.html', label: 'יועצים ומתכננים', icon: '✉️' },
-  ]},
-  { group: 'כמויות ותמחור', key: 'cost', icon: '📐', items: [
-    { href: 'quantity.html', label: 'כתבי כמויות', icon: '📐' },
-    { href: 'prices.html',   label: 'השוואת מחירים', icon: '💰' },
-  ]},
-  { href: 'reports.html', label: 'דוחות', icon: '📊' },
+  { href: 'facility-file.html', label: 'תיק מתקן / טופס 4', icon: '📜' },
+  { href: 'exceptions.html', label: 'חריגים', icon: '⚠️' },
+  { href: 'tasks.html', label: 'משימות', icon: '📋' },
+  { href: 'work-plan.html', label: 'תכנית עבודה שבועית', icon: '🗓️' },
+  { href: 'weekly-meeting.html', label: 'סיכומי ישיבות', icon: '📝' },
+  { href: 'correspondence.html', label: 'יועצים ומתכננים', icon: '✉️' },
+  { href: 'quantity.html',  label: 'כתבי כמויות', icon: '📐' },
+  { href: 'prices.html',    label: 'השוואת מחירים', icon: '💰' },
+  { href: 'reports.html',   label: 'דוחות', icon: '📊' },
 ];
 const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים', icon: '👥' };
 const PROFILE_NAV_ITEM = { href: 'profile.html', label: 'הפרופיל שלי', icon: '👤' };
