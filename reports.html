@@ -642,12 +642,19 @@
     }
   }
 
+  // Changing "from" and then "to" quickly fires two overlapping loads; without this
+  // token the slower (stale) one can finish last and paint the wrong result set.
+  let docsRequestId = 0;
+
   // Wrapper so that ANY unexpected throw inside surfaces as a visible error instead of
   // leaving #docsList on its initial spinner with every document invisible.
   async function loadDocuments() {
+    const myRequest = ++docsRequestId;
     try {
-      await loadDocumentsInner();
+      await loadDocumentsInner(() => myRequest === docsRequestId);
     } catch (err) {
+      if (myRequest !== docsRequestId) return; // superseded — let the newer load report
+
       console.error('loadDocuments failed:', err);
       const host = document.getElementById('docsList');
       const btn = document.getElementById('downloadAllDocs');
@@ -656,7 +663,7 @@
     }
   }
 
-  async function loadDocumentsInner() {
+  async function loadDocumentsInner(isCurrent = () => true) {
     const host = document.getElementById('docsList');
     const downloadAllBtn = document.getElementById('downloadAllDocs');
     currentDocs = [];
@@ -684,6 +691,7 @@
       q = q.or(`document_date.lte.${filterState.to},and(document_date.is.null,created_at.lte.${toTs})`);
     }
     const { data, error, count } = await q;
+    if (!isCurrent()) return; // a newer filter change already superseded this load
     if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; downloadAllBtn.style.display = 'none'; return; }
     if (!data || !data.length) {
       host.innerHTML = '<p class="empty-state">אין מסמכים מצורפים בטווח שנבחר</p>';
@@ -704,6 +712,7 @@
         return { ...d, url: null };
       }
     }));
+    if (!isCurrent()) return; // signed URLs are slow; bail if superseded meanwhile
     currentDocs = resolved.filter(d => d.url);
 
     downloadAllBtn.style.display = currentDocs.length ? 'inline-flex' : 'none';
