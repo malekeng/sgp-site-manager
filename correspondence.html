@@ -361,7 +361,11 @@
   });
 
   async function deleteRow(id) {
-    if (!confirm('למחוק את הרשומה הזו?')) return;
+    const docCount = state.docCounts[id] || 0;
+    const question = docCount
+      ? `לרשומה זו מצורפים ${docCount} מסמכים.\n\nמחיקת הרשומה תנתק אותם — הקבצים יישארו במערכת (ויופיעו בעמוד הדוחות), אך לא ניתן יהיה להגיע אליהם דרך שום רשומה.\n\nלמחוק בכל זאת?`
+      : 'למחוק את הרשומה הזו?';
+    if (!confirm(question)) return;
     const { error } = await sb.from('correspondence').delete().eq('id', id);
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
     toast('הרשומה נמחקה', 'success');

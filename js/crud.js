@@ -486,7 +486,13 @@ async function initCrudPage(config) {
   });
 
   async function deleteRow(id) {
-    if (!confirm('למחוק את הרשומה? הפעולה אינה הפיכה.')) return;
+    // Warn when the record still carries attachments: deleting it leaves those
+    // files in the system but detached, with no record to reach them from.
+    const docCount = state.docCounts[id] || 0;
+    const question = docCount
+      ? `לרשומה זו מצורפים ${docCount} מסמכים.\n\nמחיקת הרשומה תנתק אותם — הקבצים יישארו במערכת (ויופיעו בעמוד הדוחות), אך לא ניתן יהיה להגיע אליהם דרך שום רשומה.\n\nלמחוק בכל זאת? הפעולה אינה הפיכה.`
+      : 'למחוק את הרשומה? הפעולה אינה הפיכה.';
+    if (!confirm(question)) return;
     const { error } = await sb.from(config.table).delete().eq('id', id);
     if (error) { toast('שגיאה במחיקה: ' + error.message, 'error'); return; }
     toast('הרשומה נמחקה', 'success');
