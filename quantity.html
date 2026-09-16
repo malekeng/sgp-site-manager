@@ -18,6 +18,33 @@
 .ocr-progress.show { display: flex; }
 .ocr-preview-row { display: grid; grid-template-columns: 1fr 100px 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
 .ocr-preview-row input { padding: 8px 10px; border: 2px solid var(--border); border-radius: var(--radius-sm); }
+.calc-preview {
+  margin-top: 14px; padding: 14px 16px;
+  background: var(--green-soft); border: 1px solid rgba(0,214,143,0.3);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.calc-preview-formula { font-size: 12.5px; color: var(--steel); font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.calc-preview-result {
+  font-size: 22px; font-weight: 800; color: var(--green-deep);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.calc-preview-unit { font-size: 13px; font-weight: 700; color: var(--steel); }
+.calc-badge {
+  font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px;
+  background: var(--bg); color: var(--steel); white-space: nowrap;
+}
+.calc-badge.volume { background: rgba(61,158,255,0.14); color: var(--blue); }
+.calc-badge.area { background: rgba(0,214,143,0.14); color: var(--green-deep); }
+.calc-badge.linear { background: rgba(255,157,66,0.16); color: #b5651d; }
+.calc-badge.count { background: rgba(124,77,255,0.14); color: var(--purple); }
+.calc-badge.weight { background: rgba(255,71,87,0.14); color: var(--danger); }
+.unit-totals { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.unit-total-chip {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 12px; font-size: 12.5px; font-weight: 700; color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
 </style>
 </head>
 <body>
@@ -54,9 +81,9 @@
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>מס'</th><th>תיאור</th><th>מכפיל</th><th>גובה</th><th>רוחב</th><th>אורך</th><th>סה"כ</th><th></th></tr></thead>
+        <thead><tr><th>מס'</th><th>תיאור</th><th>סוג חישוב</th><th>מכפיל</th><th>אורך</th><th>רוחב</th><th>גובה</th><th>פחת</th><th>סה"כ</th><th><span class="sr-only">פעולות</span></th></tr></thead>
         <tbody id="itemsBody"></tbody>
-        <tfoot><tr><td colspan="6" style="text-align:left;font-weight:800;">סה"כ כללי</td><td id="itemsGrandTotal" class="num-cell" style="font-weight:800;"></td><td></td></tr></tfoot>
+        <tfoot><tr><td colspan="8" style="text-align:left;font-weight:800;">סה"כ לפי יחידת מדידה</td><td colspan="2" id="itemsGrandTotal"></td></tr></tfoot>
       </table>
     </div>
   </div>
@@ -128,12 +155,21 @@
       <div class="form-grid">
         <div class="field"><label>מס' פריט</label><input type="text" name="item_no"></div>
         <div class="field full"><label>תיאור *</label><input type="text" name="description" required></div>
-        <div class="field"><label>מכפיל</label><input type="number" step="0.01" name="multiplier" value="1"></div>
-        <div class="field"><label>גובה</label><input type="number" step="0.01" name="height"></div>
-        <div class="field"><label>רוחב</label><input type="number" step="0.01" name="width"></div>
-        <div class="field"><label>אורך</label><input type="number" step="0.01" name="length"></div>
+        <div class="field full">
+          <label>סוג חישוב *</label>
+          <select name="calc_type" id="calcTypeSelect" required></select>
+          <div id="calcFormulaHint" style="font-size:11.5px;color:var(--steel);margin-top:4px;"></div>
+        </div>
+        <div class="field" data-dim="multiplier"><label id="lblMultiplier">מכפיל</label><input type="number" step="0.01" name="multiplier" value="1"></div>
+        <div class="field" data-dim="length"><label id="lblLength">אורך</label><input type="number" step="0.01" name="length"></div>
+        <div class="field" data-dim="width"><label id="lblWidth">רוחב</label><input type="number" step="0.01" name="width"></div>
+        <div class="field" data-dim="height"><label id="lblHeight">גובה</label><input type="number" step="0.01" name="height"></div>
+        <div class="field" data-dim="waste_pct"><label>פחת (%)</label><input type="number" step="0.1" min="0" max="100" name="waste_pct" value="0"></div>
       </div>
-      <div style="margin-top:10px;font-size:14px;color:var(--steel);">סה"כ משוער: <strong id="itemLivePreview">—</strong></div>
+      <div class="calc-preview" id="calcPreview">
+        <div class="calc-preview-formula" id="calcPreviewFormula">—</div>
+        <div class="calc-preview-result"><span id="calcPreviewValue">—</span> <span class="calc-preview-unit" id="calcPreviewUnit"></span></div>
+      </div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary" id="itemSubmitBtn">הוספה</button>
         <button type="button" class="btn btn-outline" id="cancelItemBtn">ביטול</button>
@@ -149,6 +185,62 @@
   const auth = await requireAuth('quantity.html');
   if (!auth) return;
   const { user, site } = auth;
+
+  // ===== Quantity calculation engine =====
+  // Each type declares which dimension inputs it uses, what to call them, and how the
+  // total is derived. The SAME formulas are enforced in the database by the generated
+  // `total` column, so a row can never store a total that disagrees with its inputs.
+  // Waste (פחת) is applied on top of every type: total = base × (1 + פחת/100).
+  const CALC_TYPES = {
+    volume: {
+      label: 'נפח — בטון, חפירה, מילוי (מ"ק)', short: 'נפח', unit: 'מ"ק',
+      uses: ['length', 'width', 'height'],
+      labels: { length: 'אורך (מ\')', width: 'רוחב (מ\')', height: 'גובה / עובי (מ\')' },
+      formula: 'מכפיל × אורך × רוחב × גובה',
+      calc: (m, l, w, h) => m * l * w * h,
+    },
+    area: {
+      label: 'שטח — שיש, ריצוף, טיח, איטום, גבס (מ"ר)', short: 'שטח', unit: 'מ"ר',
+      uses: ['length', 'width'],
+      labels: { length: 'אורך (מ\')', width: 'רוחב (מ\')' },
+      formula: 'מכפיל × אורך × רוחב',
+      calc: (m, l, w) => m * l * w,
+    },
+    linear: {
+      label: 'אורך — פנלים, צנרת, קנטים (מ\')', short: 'אורך', unit: 'מ\'',
+      uses: ['length'],
+      labels: { length: 'אורך (מ\')' },
+      formula: 'מכפיל × אורך',
+      calc: (m, l) => m * l,
+    },
+    count: {
+      label: 'יחידות — דלתות, חלונות, נקודות (יח\')', short: 'יחידות', unit: 'יח\'',
+      uses: [],
+      labels: {},
+      formula: 'מכפיל (מספר היחידות)',
+      calc: (m) => m,
+    },
+    weight: {
+      label: 'משקל — ברזל זיון (ק"ג)', short: 'משקל', unit: 'ק"ג',
+      uses: ['length', 'width'],
+      labels: { length: 'אורך כולל (מ\')', width: 'משקל למטר (ק"ג/מ\')' },
+      formula: 'מכפיל × אורך × משקל למטר',
+      calc: (m, l, w) => m * l * w,
+    },
+  };
+  const DEFAULT_CALC = 'volume';
+  function calcTypeOf(it) { return CALC_TYPES[it.calc_type] ? it.calc_type : DEFAULT_CALC; }
+
+  // Mirrors the database expression exactly.
+  function computeItemTotal(calcType, multiplier, length, width, height, wastePct) {
+    const t = CALC_TYPES[calcType] || CALC_TYPES[DEFAULT_CALC];
+    const m = Number(multiplier) || 0;
+    const l = length === null || length === '' || length === undefined ? 1 : Number(length);
+    const w = width === null || width === '' || width === undefined ? 1 : Number(width);
+    const h = height === null || height === '' || height === undefined ? 1 : Number(height);
+    const base = t.calc(m, l, w, h);
+    return base * (1 + (Number(wastePct) || 0) / 100);
+  }
 
   let currentSheet = null;
   let itemsCache = [];
@@ -426,12 +518,25 @@
     const columns = [
       { key: 'item_no', label: 'מס\' פריט', type: 'text' },
       { key: 'description', label: 'תיאור', type: 'text' },
+      { key: '_calc_label', label: 'סוג חישוב', type: 'text' },
       { key: 'multiplier', label: 'מכפיל', type: 'number', digits: 2 },
-      { key: 'height', label: 'גובה', type: 'number', digits: 2 },
-      { key: 'width', label: 'רוחב', type: 'number', digits: 2 },
       { key: 'length', label: 'אורך', type: 'number', digits: 2 },
+      { key: 'width', label: 'רוחב', type: 'number', digits: 2 },
+      { key: 'height', label: 'גובה', type: 'number', digits: 2 },
+      { key: '_waste_label', label: 'פחת', type: 'text' },
       { key: 'total', label: 'סה"כ', type: 'number', digits: 2 },
+      { key: '_unit', label: 'יחידה', type: 'text' },
     ];
+    // Decorate rows for the PDF with the human-readable type / unit / waste.
+    const exportRows = itemsCache.map(it => {
+      const t = CALC_TYPES[calcTypeOf(it)];
+      return {
+        ...it,
+        _calc_label: t.short,
+        _unit: t.unit,
+        _waste_label: Number(it.waste_pct) ? fmtNum(it.waste_pct) + '%' : '—',
+      };
+    });
     const planLabel = currentSheet.plan_name || currentSheet.plan_number || '';
     const subtitleParts = [
       currentSheet.plan_number ? `מס' תוכנית ${currentSheet.plan_number}` : null,
@@ -442,7 +547,7 @@
     await sgpExportPdf({
       title: `כתב כמויות — ${planLabel}`,
       columns,
-      rows: itemsCache,
+      rows: exportRows,
       siteNames: [site.name],
       periodText: subtitleParts.join(' · ') || null,
       subtitle: null,
@@ -461,29 +566,40 @@
     itemsCache = data || [];
     const body = document.getElementById('itemsBody');
     if (!itemsCache.length) {
-      body.innerHTML = `<tr class="empty-row"><td colspan="8">אין שורות עדיין</td></tr>`;
-      document.getElementById('itemsGrandTotal').textContent = '0';
+      body.innerHTML = `<tr class="empty-row"><td colspan="10">אין שורות עדיין</td></tr>`;
+      document.getElementById('itemsGrandTotal').innerHTML = '<span style="color:var(--steel-light);">—</span>';
       return;
     }
-    let grand = 0;
+    // Totals are kept PER UNIT: adding מ"ק to מ"ר to יח' would be meaningless.
+    const byUnit = {};
     body.innerHTML = itemsCache.map(it => {
-      grand += Number(it.total) || 0;
+      const key = calcTypeOf(it);
+      const t = CALC_TYPES[key];
+      byUnit[t.unit] = (byUnit[t.unit] || 0) + (Number(it.total) || 0);
+      const dimCell = (field) => t.uses.includes(field) && it[field] !== null && it[field] !== undefined
+        ? `<td class="num-cell">${fmtNum(it[field])}</td>`
+        : `<td class="cell-muted">—</td>`;
+      const waste = Number(it.waste_pct) || 0;
       return `
       <tr>
         <td>${esc(it.item_no || '—')}</td>
         <td>${esc(it.description)}</td>
+        <td><span class="calc-badge ${key}">${esc(t.short)}</span></td>
         <td class="num-cell">${fmtNum(it.multiplier)}</td>
-        <td class="num-cell">${it.height !== null ? fmtNum(it.height) : '—'}</td>
-        <td class="num-cell">${it.width !== null ? fmtNum(it.width) : '—'}</td>
-        <td class="num-cell">${it.length !== null ? fmtNum(it.length) : '—'}</td>
-        <td class="num-cell" style="font-weight:700;">${fmtNum(it.total)}</td>
+        ${dimCell('length')}
+        ${dimCell('width')}
+        ${dimCell('height')}
+        <td class="num-cell">${waste ? fmtNum(waste) + '%' : '—'}</td>
+        <td class="num-cell" style="font-weight:700;">${fmtNum(it.total)} <span style="font-size:11px;font-weight:600;color:var(--steel);">${esc(t.unit)}</span></td>
         <td class="row-actions"><div class="row-actions-inner">
           <button class="icon-btn" data-edit-item="${it.id}" title="עריכה">✏️</button>
           <button class="icon-btn danger" data-del-item="${it.id}" title="מחיקה">🗑️</button>
         </div></td>
       </tr>`;
     }).join('');
-    document.getElementById('itemsGrandTotal').textContent = fmtNum(grand);
+    document.getElementById('itemsGrandTotal').innerHTML =
+      `<div class="unit-totals">${Object.entries(byUnit)
+        .map(([unit, sum]) => `<span class="unit-total-chip">${fmtNum(sum)} ${esc(unit)}</span>`).join('')}</div>`;
     body.querySelectorAll('[data-edit-item]').forEach(b => b.addEventListener('click', () => openItemModal(itemsCache.find(x => x.id === b.dataset.editItem))));
     body.querySelectorAll('[data-del-item]').forEach(b => b.addEventListener('click', () => deleteItem(b.dataset.delItem)));
   }
@@ -505,15 +621,38 @@
     if (item) {
       form.item_no.value = item.item_no || '';
       form.description.value = item.description || '';
+      form.calc_type.value = calcTypeOf(item);
       form.multiplier.value = item.multiplier ?? 1;
       form.height.value = item.height ?? '';
       form.width.value = item.width ?? '';
       form.length.value = item.length ?? '';
+      form.waste_pct.value = item.waste_pct ?? 0;
     } else {
+      form.calc_type.value = DEFAULT_CALC;
       form.multiplier.value = 1;
+      form.waste_pct.value = 0;
     }
-    updateLivePreview();
+    applyCalcType();
     document.getElementById('itemModalBackdrop').classList.add('open');
+  }
+
+  // Show only the inputs the chosen calculation type actually uses, relabelled for it.
+  function applyCalcType() {
+    const form = document.getElementById('itemForm');
+    const key = CALC_TYPES[form.calc_type.value] ? form.calc_type.value : DEFAULT_CALC;
+    const t = CALC_TYPES[key];
+    document.getElementById('calcFormulaHint').textContent = `הנוסחה: ${t.formula}${'  →  '}${t.unit}`;
+    ['length', 'width', 'height'].forEach(field => {
+      const wrap = form.querySelector(`[data-dim="${field}"]`);
+      const used = t.uses.includes(field);
+      wrap.hidden = !used;
+      if (used) {
+        wrap.querySelector('label').textContent = t.labels[field];
+      } else {
+        form[field].value = '';
+      }
+    });
+    updateLivePreview();
   }
 
   document.getElementById('addItemBtn').addEventListener('click', () => openItemModal(null));
@@ -524,15 +663,32 @@
 
   function updateLivePreview() {
     const f = document.getElementById('itemForm');
-    const m = parseFloat(f.multiplier.value) || 1;
-    const h = f.height.value !== '' ? parseFloat(f.height.value) : 1;
-    const w = f.width.value !== '' ? parseFloat(f.width.value) : 1;
-    const l = f.length.value !== '' ? parseFloat(f.length.value) : 1;
-    document.getElementById('itemLivePreview').textContent = fmtNum(m * h * w * l);
+    const key = CALC_TYPES[f.calc_type.value] ? f.calc_type.value : DEFAULT_CALC;
+    const t = CALC_TYPES[key];
+    const m = f.multiplier.value !== '' ? parseFloat(f.multiplier.value) : 1;
+    const waste = parseFloat(f.waste_pct.value) || 0;
+    const total = computeItemTotal(key, m, f.length.value, f.width.value, f.height.value, waste);
+
+    // Spell the arithmetic out with the real numbers, so the user can check it by eye.
+    const parts = [fmtNum(m)];
+    t.uses.forEach(field => parts.push(f[field].value !== '' ? fmtNum(parseFloat(f[field].value)) : '1'));
+    let expr = parts.join(' × ');
+    if (waste) expr = `(${expr}) × ${fmtNum(1 + waste / 100)}  (פחת ${fmtNum(waste)}%)`;
+
+    document.getElementById('calcPreviewFormula').textContent = expr;
+    document.getElementById('calcPreviewValue').textContent = isFinite(total) ? fmtNum(total) : '—';
+    document.getElementById('calcPreviewUnit').textContent = t.unit;
   }
-  ['multiplier', 'height', 'width', 'length'].forEach(name => {
-    document.getElementById('itemForm')[name].addEventListener('input', updateLivePreview);
-  });
+
+  (function initCalcTypeUi() {
+    const sel = document.getElementById('calcTypeSelect');
+    sel.innerHTML = Object.entries(CALC_TYPES)
+      .map(([key, t]) => `<option value="${key}">${t.label}</option>`).join('');
+    sel.addEventListener('change', applyCalcType);
+    ['multiplier', 'height', 'width', 'length', 'waste_pct'].forEach(name => {
+      document.getElementById('itemForm')[name].addEventListener('input', updateLivePreview);
+    });
+  })();
 
   document.getElementById('itemForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -540,6 +696,13 @@
     const payload = Object.fromEntries(fd.entries());
     ['multiplier', 'height', 'width', 'length'].forEach(k => {
       payload[k] = payload[k] === '' ? null : Number(payload[k]);
+    });
+    payload.waste_pct = payload.waste_pct === '' ? 0 : Number(payload.waste_pct);
+    if (!CALC_TYPES[payload.calc_type]) payload.calc_type = DEFAULT_CALC;
+    // Dimensions the chosen type does not use are stored as NULL, so the row can never
+    // carry a leftover value from a different type that would confuse a later reader.
+    ['length', 'width', 'height'].forEach(k => {
+      if (!CALC_TYPES[payload.calc_type].uses.includes(k)) payload[k] = null;
     });
 
     if (editingItemId) {
