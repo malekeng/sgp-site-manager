@@ -188,7 +188,7 @@
 (async function () {
   const auth = await requireAuth('users.html');
   if (!auth) return;
-  const { user, profile } = auth;
+  const { user, profile, org } = auth;
 
   if (profile.role !== 'owner' && profile.role !== 'admin') {
     document.querySelector('main.page').innerHTML = '<p>אין לך הרשאה לצפות בעמוד זה.</p>';
@@ -201,12 +201,19 @@
   let sitesCache = [];
 
   async function loadUsers() {
+    // Only this company's members, and only this company's site assignments.
     const { data, error } = await sb.from('profiles')
-      .select('*, sites!profiles_site_id_fkey(name), profile_sites(site_id, sites(name))')
+      .select('*, organization_members!inner(role, organization_id), profile_sites(site_id, sites(name, organization_id))')
+      .eq('organization_members.organization_id', org.id)
       .order('created_at', { ascending: true });
     const body = document.getElementById('usersBody');
     if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="7">שגיאה: ${esc(error.message)}</td></tr>`; return; }
-    usersCache = data || [];
+    usersCache = (data || []).map(u => ({
+      ...u,
+      // the role that counts is the one inside this company
+      role: u.organization_members?.[0]?.role ?? u.role,
+      profile_sites: (u.profile_sites || []).filter(ps => ps.sites?.organization_id === org.id),
+    }));
     if (!usersCache.length) { body.innerHTML = `<tr class="empty-row"><td colspan="7">אין משתמשים עדיין</td></tr>`; return; }
     body.innerHTML = usersCache.map(u => {
       const siteNames = u.role === 'owner'
@@ -301,6 +308,7 @@
       return;
     }
     const payload = {
+      organization_id: org.id,
       full_name: fd.get('full_name'),
       phone: fd.get('phone'),
       password: fd.get('password'),
@@ -309,7 +317,7 @@
 
     const { data: { session } } = await sb.auth.getSession();
     try {
-      const res = await fetch('https://odsxjatgebpwphzbevpu.supabase.co/functions/v1/create-contractor', {
+      const res = await fetch(SUPABASE_FUNCTIONS_URL + '/create-contractor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify(payload),
@@ -347,6 +355,7 @@
       return;
     }
     const payload = {
+      organization_id: org.id,
       email: fd.get('email'),
       username: fd.get('username'),
       full_name: fd.get('full_name'),
@@ -356,7 +365,7 @@
 
     const { data: { session } } = await sb.auth.getSession();
     try {
-      const res = await fetch('https://odsxjatgebpwphzbevpu.supabase.co/functions/v1/invite-user', {
+      const res = await fetch(SUPABASE_FUNCTIONS_URL + '/invite-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -400,8 +409,23 @@
     form.email.value = u.email;
     form.username.value = u.username || '';
     form.full_name.value = u.full_name || '';
-    form.role.value = u.role;
     form.job_title.value = u.job_title || '';
+
+    // A contractor has no option in this select, so it used to fall back to the first
+    // one ("site user") and saving quietly promoted them to full site access.
+    const roleSel = document.getElementById('editRoleSelect');
+    const isContractor = u.role === 'contractor';
+    roleSel.querySelector('option[value="contractor"]')?.remove();
+    if (isContractor) {
+      const opt = document.createElement('option');
+      opt.value = 'contractor';
+      opt.textContent = 'קבלן';
+      roleSel.appendChild(opt);
+    }
+    roleSel.value = u.role;
+    roleSel.disabled = isContractor;   // contractors keep their role; the DB enforces this too
+    roleSel.title = isContractor ? 'לא ניתן לשנות תפקיד של קבלן' : '';
+
     const selectedIds = (u.profile_sites || []).map(ps => ps.site_id);
     renderSiteChecks('editSiteCheckList', selectedIds);
     document.getElementById('editSiteField').style.display = u.role === 'owner' ? 'none' : 'flex';
@@ -422,28 +446,45 @@
 
     const fd = new FormData(e.target);
     const id = fd.get('id');
-    const role = fd.get('role');
+    // A disabled select submits nothing, so fall back to the role the user already has
+    // (that is the contractor case, where the role is intentionally not editable).
+    const role = fd.get('role') || usersCache.find(x => x.id === id)?.role;
     const siteIds = fd.getAll('site_ids');
+    if (!role) { showMsg(msgEl, 'לא ניתן לזהות את התפקיד', 'error'); btn.disabled = false; return; }
     if (role !== 'owner' && !siteIds.length) {
       showMsg(msgEl, 'יש לבחור לפחות אתר אחד', 'error');
       btn.disabled = false;
       return;
     }
+    // profiles holds identity only; role now lives per company in organization_members.
     const payload = {
       username: fd.get('username'),
       full_name: fd.get('full_name') || fd.get('username'),
-      role,
       job_title: fd.get('job_title') || null,
-      site_id: role === 'owner' ? null : (siteIds[0] || null),
     };
 
-    const { error } = await sb.from('profiles').update(payload).eq('id', id);
+    // .select() + length check: row security hides refusals, so a blocked update would
+    // otherwise look like success.
+    const { data: updated, error } = await sb.from('profiles').update(payload).eq('id', id).select('id');
     if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); btn.disabled = false; return; }
+    if (!updated || !updated.length) {
+      showMsg(msgEl, 'העדכון לא בוצע — אין הרשאה לערוך את המשתמש הזה', 'error'); btn.disabled = false; return;
+    }
+
+    const { data: roleRows, error: roleErr } = await sb.from('organization_members')
+      .update({ role }).eq('organization_id', org.id).eq('user_id', id).select('user_id');
+    if (roleErr) { showMsg(msgEl, 'שגיאה בעדכון התפקיד: ' + roleErr.message, 'error'); btn.disabled = false; return; }
+    if (!roleRows || !roleRows.length) {
+      showMsg(msgEl, 'התפקיד לא עודכן — אין הרשאה, או שזה הבעלים האחרון בחברה', 'error'); btn.disabled = false; return;
+    }
 
     // Keep the current assignments so a failed insert can be rolled back. Without this,
     // the delete succeeded and the insert failing left the user with NO sites at all.
-    const { data: prevSites } = await sb.from('profile_sites').select('site_id').eq('profile_id', id);
-    await sb.from('profile_sites').delete().eq('profile_id', id);
+    // Scoped to THIS company's sites so another company's assignments are never touched.
+    const orgSiteIds = sitesCache.map(s => s.id);
+    const { data: prevSites } = await sb.from('profile_sites').select('site_id')
+      .eq('profile_id', id).in('site_id', orgSiteIds);
+    await sb.from('profile_sites').delete().eq('profile_id', id).in('site_id', orgSiteIds);
     if (role !== 'owner' && siteIds.length) {
       const { error: sitesErr } = await sb.from('profile_sites').insert(siteIds.map(site_id => ({ profile_id: id, site_id })));
       if (sitesErr) {
@@ -476,17 +517,17 @@
   async function deleteUser(id) {
     const u = usersCache.find(x => x.id === id);
     if (!u) return;
-    if (!confirm(`למחוק לצמיתות את המשתמש ${u.full_name || u.username} (${u.email})? הפעולה אינה הפיכה.`)) return;
+    if (!confirm(`להסיר את ${u.full_name || u.username} מהחברה?\n\nהמשתמש יאבד גישה מיידית, אך הרשומות שהוא יצר יישארו על שמו. אם הוא אינו חבר בשום חברה אחרת, החשבון שלו יושבת.`)) return;
 
     const { data: { session } } = await sb.auth.getSession();
     try {
-      const res = await fetch('https://odsxjatgebpwphzbevpu.supabase.co/functions/v1/delete-user', {
+      const res = await fetch(SUPABASE_FUNCTIONS_URL + '/delete-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ user_id: id }),
+        body: JSON.stringify({ organization_id: org.id, user_id: id }),
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'שגיאה לא ידועה');
@@ -498,7 +539,7 @@
   }
 
   async function loadSites() {
-    const { data, error } = await sb.from('sites').select('*').order('name');
+    const { data, error } = await sb.from('sites').select('*').eq('organization_id', org.id).order('name');
     if (error) { document.getElementById('sitesBody').innerHTML = `<tr class="empty-row"><td>שגיאה: ${esc(error.message)}</td></tr>`; return; }
     sitesCache = data || [];
     const body = document.getElementById('sitesBody');
@@ -524,7 +565,7 @@
     const msgEl = document.getElementById('siteFormMsg');
     hideMsg(msgEl);
     const fd = new FormData(e.target);
-    const { error } = await sb.from('sites').insert({ name: fd.get('name') });
+    const { error } = await sb.from('sites').insert({ name: fd.get('name'), organization_id: org.id });
     if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); return; }
     toast('האתר נוצר', 'success');
     document.getElementById('siteModalBackdrop').classList.remove('open');
@@ -535,6 +576,7 @@
     const host = document.getElementById('requestsList');
     const { data, error } = await sb.from('signup_requests')
       .select('*')
+      .eq('organization_id', org.id)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
     if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; return; }
@@ -562,7 +604,7 @@
         if (!confirm('לדחות את הבקשה הזו?')) return;
         const { error } = await sb.from('signup_requests')
           .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
-          .eq('id', btn.dataset.reject);
+          .eq('id', btn.dataset.reject).eq('organization_id', org.id);
         if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
         toast('הבקשה נדחתה', 'success');
         loadRequests();

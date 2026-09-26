@@ -363,10 +363,15 @@ signupForm.addEventListener('submit', async e => {
   setBusy(btn, btnText, true, 'שולח...', 'שליחת בקשה');
 
   const fd = new FormData(signupForm);
-  const { error } = await sb.from('signup_requests').insert({
-    email: fd.get('email'),
-    first_name: fd.get('first_name'),
-    last_name: fd.get('last_name'),
+  // Goes through request_access instead of inserting directly: the RPC resolves the
+  // company from its slug and stays silent for an unknown one, so this endpoint cannot
+  // be used to discover which companies exist on the platform.
+  const orgSlug = new URLSearchParams(location.search).get('org') || 'sgp';
+  const { error } = await sb.rpc('request_access', {
+    p_org_slug: orgSlug,
+    p_email: fd.get('email'),
+    p_first_name: fd.get('first_name'),
+    p_last_name: fd.get('last_name'),
   });
 
   setBusy(btn, btnText, false, '', 'שליחת בקשה');

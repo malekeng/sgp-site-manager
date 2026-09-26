@@ -38,6 +38,10 @@
     <div id="msg" class="msg" aria-live="polite" role="status"></div>
 
     <form id="loginForm">
+      <div class="field" id="orgSlugField">
+        <label for="orgSlugInput">קוד חברה</label>
+        <input id="orgSlugInput" type="text" autocomplete="organization" placeholder="לדוגמה: sgp">
+      </div>
       <div class="field">
         <label for="phoneInput">מספר טלפון</label>
         <input id="phoneInput" type="tel" name="phone" required autocomplete="tel" placeholder="050-1234567">
@@ -77,10 +81,33 @@ function showErr(text) { msgEl.textContent = text; msgEl.className = 'msg show e
   toggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
 })();
 
-function phoneToSyntheticEmail(phone) {
-  const digits = phone.replace(/\D/g, '');
-  return `c${digits}@contractor.sgp.internal`;
+// Contractor accounts are per company, so the synthetic login email carries the company
+// code: c{digits}.{slug}@... The code comes from ?org= in the link the company sends,
+// and is then remembered on this device.
+const ORG_SLUG_KEY = 'sgp_contractor_org_slug';
+
+function currentOrgSlug() {
+  const fromUrl = (new URLSearchParams(location.search).get('org') || '').trim().toLowerCase();
+  if (fromUrl) { try { localStorage.setItem(ORG_SLUG_KEY, fromUrl); } catch (_) {} return fromUrl; }
+  const field = document.getElementById('orgSlugInput');
+  const typed = (field?.value || '').trim().toLowerCase();
+  if (typed) { try { localStorage.setItem(ORG_SLUG_KEY, typed); } catch (_) {} return typed; }
+  try { return (localStorage.getItem(ORG_SLUG_KEY) || '').trim().toLowerCase(); } catch (_) { return ''; }
 }
+
+function phoneToSyntheticEmail(phone, slug) {
+  const digits = phone.replace(/\D/g, '');
+  return `c${digits}.${slug}@contractor.sgp.internal`;
+}
+
+// Show the company-code field only when we do not already know it.
+(function initOrgField() {
+  const wrap = document.getElementById('orgSlugField');
+  if (!wrap) return;
+  const known = (new URLSearchParams(location.search).get('org') || '').trim()
+    || (() => { try { return localStorage.getItem(ORG_SLUG_KEY) || ''; } catch (_) { return ''; } })();
+  if (known) wrap.hidden = true;
+})();
 
 document.getElementById('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -91,7 +118,14 @@ document.getElementById('loginForm').addEventListener('submit', async e => {
   btnText.textContent = 'מתחבר...';
 
   const fd = new FormData(e.target);
-  const email = phoneToSyntheticEmail(fd.get('phone'));
+  const slug = currentOrgSlug();
+  if (!slug) {
+    showErr('חסר קוד חברה — השתמשו בקישור שקיבלתם מהחברה');
+    btn.disabled = false;
+    btnText.textContent = 'כניסה';
+    return;
+  }
+  const email = phoneToSyntheticEmail(fd.get('phone'), slug);
   const { error } = await sb.auth.signInWithPassword({ email, password: fd.get('password') });
 
   if (error) {
@@ -106,11 +140,13 @@ document.getElementById('loginForm').addEventListener('submit', async e => {
 (async function () {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return;
-  const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single();
-  // Only auto-redirect an already-logged-in contractor session. A non-contractor
+  // Roles live per company now, so ask organization_members rather than profiles.role.
+  // Only auto-redirect an already-logged-in contractor. A non-contractor
   // (owner/admin/site_user) landing here should just see the login form, not get
   // silently bounced or signed out of their existing session.
-  if (profile && profile.role === 'contractor') window.location.href = 'contractor-tasks.html';
+  const { data: m } = await sb.from('organization_members')
+    .select('role').eq('user_id', session.user.id).eq('role', 'contractor').limit(1);
+  if (m && m.length) window.location.href = 'contractor-tasks.html';
 })();
 </script>
 </body>

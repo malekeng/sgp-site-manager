@@ -101,6 +101,7 @@ function systemRoleLabel(role) {
   if (role === 'owner') return 'בעלים';
   if (role === 'admin') return 'מנהל מערכת';
   if (role === 'site_user') return 'משתמש אתר';
+  if (role === 'contractor') return 'קבלן';
   return role || '';
 }
 
@@ -126,7 +127,7 @@ async function getStorageUrl(path) {
   }
 }
 
-async function renderHeader(activePage, profile, site) {
+async function renderHeader(activePage, profile, site, org) {
   const host = document.getElementById('app-header');
   if (!host) return;
 
@@ -168,9 +169,18 @@ async function renderHeader(activePage, profile, site) {
   const name = esc(profileDisplayName(profile));
   const job = esc(profile?.job_title || systemRoleLabel(profile?.role));
 
+  // A person can belong to more than one company; show a switcher only when they do.
+  const allOrgs = org?.__allOrgs || [];
+  const orgControl = allOrgs.length > 1
+    ? `<select class="site-badge" id="orgSwitcher" style="cursor:pointer;font-weight:800;">
+        ${allOrgs.map(o => `<option value="${o.id}" ${o.id === org.id ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}
+       </select>`
+    : (org?.name ? `<div class="brand-org">${esc(org.name)}</div>` : '');
+
   host.innerHTML = `
     <div class="brand">
-      <img src="icons/logo-white.svg" alt="SGP">
+      <img src="icons/logo-white.svg" alt="${esc(org?.name || '')}">
+      ${orgControl}
     </div>
     <nav id="mainNav">${navHtml}</nav>
     <div class="sidebar-footer">
@@ -263,46 +273,82 @@ async function renderHeader(activePage, profile, site) {
     });
   });
 
+  document.getElementById('orgSwitcher')?.addEventListener('change', e => {
+    sessionStorage.setItem(SGP_ACTIVE_ORG_KEY, e.target.value);
+    sessionStorage.removeItem('sgp_active_site_id'); // the old site belongs to the old company
+    location.reload();
+  });
+
   document.getElementById('siteSwitcher')?.addEventListener('change', e => {
     sessionStorage.setItem('sgp_active_site_id', e.target.value);
     location.reload();
   });
 
   document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+    sessionStorage.removeItem(SGP_ACTIVE_ORG_KEY);
+    sessionStorage.removeItem('sgp_active_site_id');
     await sb.auth.signOut();
     window.location.href = 'index.html';
   });
 }
 
-async function resolveActiveSite(profile) {
-  if (profile.role === 'site_user') {
+const SGP_ACTIVE_ORG_KEY = 'sgp_active_org_id';
+
+// Which company is the user acting in right now, and with which role there?
+// Roles are per company (organization_members), not global — the same person can be an
+// owner in one company and a site user in another.
+async function resolveActiveOrg(userId) {
+  const { data, error } = await sb
+    .from('organization_members')
+    .select('role, organization_id, organizations(id, name, slug, logo_path, status)')
+    .eq('user_id', userId);
+  if (error) { console.error('resolveActiveOrg failed:', error); return null; }
+
+  const usable = (data || [])
+    .filter(m => m.organizations && m.organizations.status === 'active')
+    .map(m => ({ ...m.organizations, role: m.role }));
+  if (!usable.length) return null;
+
+  const savedId = sessionStorage.getItem(SGP_ACTIVE_ORG_KEY);
+  let org = savedId ? usable.find(o => o.id === savedId) : null;
+  if (!org) {
+    org = usable[0];
+    // Switching company invalidates the remembered site, which belongs to the old one.
+    if (savedId) sessionStorage.removeItem('sgp_active_site_id');
+  }
+  sessionStorage.setItem(SGP_ACTIVE_ORG_KEY, org.id);
+  return { ...org, __allOrgs: usable };
+}
+
+// Sites are always filtered by the active company explicitly, not left to row security
+// alone — two independent checks, same as the database has two policy layers.
+async function resolveActiveSite(profile, org) {
+  let mySites;
+
+  if (profile.role === 'site_user' || profile.role === 'contractor') {
     const { data: assigned, error } = await sb
       .from('profile_sites')
-      .select('site_id, sites(*)')
-      .eq('profile_id', profile.id);
+      .select('site_id, sites!inner(*)')
+      .eq('profile_id', profile.id)
+      .eq('sites.organization_id', org.id);
     if (error) { console.error(error); return null; }
-    const mySites = (assigned || []).map(r => r.sites).filter(Boolean);
-    if (!mySites.length) return null;
-
-    if (mySites.length === 1) return mySites[0];
-
-    const savedId = sessionStorage.getItem('sgp_active_site_id');
-    let site = savedId ? mySites.find(s => s.id === savedId) : null;
-    if (!site) site = mySites[0];
-    sessionStorage.setItem('sgp_active_site_id', site.id);
-    return { ...site, __allSites: mySites };
+    mySites = (assigned || []).map(r => r.sites).filter(Boolean);
+  } else {
+    const { data: allSites, error } = await sb
+      .from('sites').select('*').eq('organization_id', org.id).order('name', { ascending: true });
+    if (error) { console.error(error); return null; }
+    mySites = allSites || [];
   }
 
-  const { data: allSites, error } = await sb.from('sites').select('*').order('name', { ascending: true });
-  if (error) { console.error(error); return null; }
-  if (!allSites || !allSites.length) return null;
+  mySites = mySites.filter(s => s.organization_id === org.id);
+  if (!mySites.length) return null;
 
   const savedId = sessionStorage.getItem('sgp_active_site_id');
-  let site = savedId ? allSites.find(s => s.id === savedId) : null;
-  if (!site) site = allSites[0];
+  let site = savedId ? mySites.find(s => s.id === savedId) : null;
+  if (!site) site = mySites[0];
   sessionStorage.setItem('sgp_active_site_id', site.id);
 
-  return { ...site, __allSites: allSites };
+  return mySites.length === 1 ? { ...site } : { ...site, __allSites: mySites };
 }
 
 async function requireAuth(activePage) {
@@ -325,19 +371,29 @@ async function requireAuth(activePage) {
     return null;
   }
 
-  const site = await resolveActiveSite(profile);
-
-  if (!site) {
+  const stop = (title, detail) => {
     document.body.innerHTML = `
       <div style="padding:40px;text-align:center;font-family:sans-serif;">
-        <h2 style="color:#e0453f;">לא נמצא אתר פעיל במערכת</h2>
-        <p>יש ליצור אתר (Site) אחד לפחות בטבלת sites לפני שימוש במערכת.</p>
+        <h2 style="color:#e0453f;">${esc(title)}</h2>
+        <p>${esc(detail)}</p>
         <button onclick="sb.auth.signOut().then(()=>location.href='index.html')" style="margin-top:16px;padding:10px 20px;">יציאה</button>
       </div>`;
     return null;
-  }
+  };
 
-  await renderHeader(activePage, profile, site);
+  const org = await resolveActiveOrg(session.user.id);
+  if (!org) return stop('החשבון אינו משויך לחברה פעילה', 'פנו למנהל המערכת כדי לשייך את החשבון לחברה.');
 
-  return { user: session.user, profile, site };
+  // The role that matters is the role IN THE ACTIVE COMPANY. Overlaying it onto
+  // profile.role keeps every existing `profile.role === 'owner'` check working, but it
+  // now means "owner of this company" rather than "owner of everything".
+  profile.legacy_role = profile.role;
+  profile.role = org.role;
+
+  const site = await resolveActiveSite(profile, org);
+  if (!site) return stop('לא נמצא אתר פעיל בחברה הזו', 'יש ליצור אתר אחד לפחות, או לשייך את המשתמש לאתר קיים.');
+
+  await renderHeader(activePage, profile, site, org);
+
+  return { user: session.user, profile, site, org };
 }

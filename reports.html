@@ -104,7 +104,7 @@
 (async function () {
   const auth = await requireAuth('reports.html');
   if (!auth) return;
-  const { profile, site } = auth;
+  const { profile, site, org } = auth;
 
   const isRestricted = profile.role === 'site_user';
   let sitesCache = [];
@@ -294,7 +294,7 @@
       sitesCache = [site];
       filterState.siteIds = [site.id];
     } else {
-      const { data, error } = await sb.from('sites').select('*').order('name');
+      const { data, error } = await sb.from('sites').select('*').eq('organization_id', org.id).order('name');
       if (error) { toast('שגיאה בטעינת אתרים: ' + error.message, 'error'); return; }
       sitesCache = data || [];
       filterState.siteIds = sitesCache.map(s => s.id);

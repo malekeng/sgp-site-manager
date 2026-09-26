@@ -83,7 +83,10 @@
   if (!session) { window.location.href = 'contractor-login.html'; return; }
 
   const { data: profile, error: profErr } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
-  if (profErr || !profile || profile.role !== 'contractor') {
+  // The contractor role is per company: look it up in organization_members.
+  const { data: contractorOf } = await sb.from('organization_members')
+    .select('organization_id').eq('user_id', session.user.id).eq('role', 'contractor');
+  if (profErr || !profile || !contractorOf || !contractorOf.length) {
     document.getElementById('tasksList').innerHTML = `
       <div class="ct-empty">
         <p style="margin-bottom:16px;">דף זה מיועד לחשבונות קבלן בלבד. החשבון המחובר כרגע אינו חשבון קבלן.</p>
