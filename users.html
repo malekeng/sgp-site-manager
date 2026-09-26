@@ -208,10 +208,20 @@
       .order('created_at', { ascending: true });
     const body = document.getElementById('usersBody');
     if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="7">שגיאה: ${esc(error.message)}</td></tr>`; return; }
+    // PostgREST returns a to-one embed as an object, but as an array when it resolves the
+    // relationship as to-many. Accept both — relying on the legacy profiles.role fallback
+    // would show (and save) the wrong role for anyone whose company role differs from it.
+    const membershipRole = (u) => {
+      const m = u.organization_members;
+      if (!m) return null;
+      return Array.isArray(m) ? (m[0]?.role ?? null) : (m.role ?? null);
+    };
+    const missingRole = (data || []).filter(u => !membershipRole(u)).length;
+    if (missingRole) console.error(`${missingRole} member(s) returned without a company role`);
+
     usersCache = (data || []).map(u => ({
       ...u,
-      // the role that counts is the one inside this company
-      role: u.organization_members?.[0]?.role ?? u.role,
+      role: membershipRole(u) ?? u.role,   // the role that counts is the one in this company
       profile_sites: (u.profile_sites || []).filter(ps => ps.sites?.organization_id === org.id),
     }));
     if (!usersCache.length) { body.innerHTML = `<tr class="empty-row"><td colspan="7">אין משתמשים עדיין</td></tr>`; return; }
