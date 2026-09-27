@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>לוח״דים | SGP</title>
+<title>לוח״דים | ניהול אתרי בנייה</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
@@ -171,7 +171,7 @@ function parseSlabText(text) {
   if (text.includes('רמט טרום')) result.supplier = 'רמט טרום בע"מ';
   if (!result.supplier) {
     const candidates = [...text.matchAll(/([א-ת][א-ת\s.]{2,30}(?:בע["']?מ|בעמ))/g)];
-    const match = candidates.find(m => !m[1].includes('גיל') && !m[1].includes('שי גיל'));
+    const match = candidates.find(m => !looksLikeOwnCompany(m[1]));
     if (match) result.supplier = match[1].trim();
   }
 

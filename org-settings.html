@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>הגדרות החברה</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.logo-preview {
+  width: 140px; height: 140px; border-radius: var(--radius-sm);
+  background: var(--bg); border: 1.5px dashed var(--border);
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.logo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.logo-preview span { font-size: 12px; color: var(--steel-light); }
+</style>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">הגדרות החברה</h1>
+
+  <div class="card" style="max-width:720px;">
+    <div class="card-header"><h2>פרטי החברה</h2></div>
+    <div id="orgMsg" class="msg"></div>
+
+    <form id="orgForm">
+      <div class="form-grid">
+        <div class="field full"><label>שם החברה *</label><input type="text" name="name" required maxlength="200"></div>
+        <div class="field full">
+          <label>קוד החברה</label>
+          <input type="text" id="slugField" disabled style="opacity:0.7;">
+          <div style="font-size:11.5px;color:var(--steel);margin-top:4px;">
+            הקוד קבוע — הוא משמש בקישור הכניסה של הקבלנים. לשינוי יש לפנות למנהל הפלטפורמה.
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions" style="justify-content:flex-start;">
+        <button type="submit" class="btn btn-primary" id="saveOrgBtn">שמירה</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="max-width:720px;">
+    <div class="card-header"><h2>לוגו החברה</h2></div>
+    <div id="logoMsg" class="msg"></div>
+    <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
+      <div class="logo-preview" id="logoPreview"><span>אין לוגו</span></div>
+      <div>
+        <input type="file" id="logoInput" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden>
+        <div class="header-actions">
+          <button class="btn btn-outline" id="pickLogoBtn">בחירת קובץ</button>
+          <button class="btn btn-ghost" id="removeLogoBtn">הסרה</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--steel);margin-top:8px;">PNG, JPG, SVG או WEBP — עד 2MB.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="max-width:720px;">
+    <div class="card-header"><h2>קישור כניסה לקבלנים</h2></div>
+    <p style="font-size:13px;color:var(--steel);margin-bottom:10px;">
+      זה הקישור שיש לשלוח לקבלנים. הוא כולל את קוד החברה, כך שהם אינם צריכים להקליד אותו.
+    </p>
+    <div class="attach-item">
+      <span id="contractorLink" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;word-break:break-all;"></span>
+      <button class="btn btn-sm btn-outline" id="copyLinkBtn">העתקה</button>
+    </div>
+  </div>
+</main>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('org-settings.html');
+  if (!auth) return;
+  const { profile, org } = auth;
+
+  if (profile.role !== 'owner') {
+    document.querySelector('main.page').innerHTML = '<p>רק בעלים של החברה יכול לערוך את ההגדרות.</p>';
+    return;
+  }
+
+  const form = document.getElementById('orgForm');
+  form.name.value = org.name || '';
+  document.getElementById('slugField').value = org.slug || '';
+  document.getElementById('contractorLink').textContent =
+    `${location.origin}/contractor-login.html?org=${org.slug}`;
+
+  document.getElementById('copyLinkBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById('contractorLink').textContent);
+      toast('הקישור הועתק', 'success');
+    } catch (_) { toast('לא ניתן להעתיק — סמנו והעתיקו ידנית', 'error'); }
+  });
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('orgMsg');
+    const btn = document.getElementById('saveOrgBtn');
+    hideMsg(msgEl);
+    btn.disabled = true;
+
+    // .select() + length check: row security hides refusals, so a blocked write would
+    // otherwise look like it succeeded.
+    const { data, error } = await sb.from('organizations')
+      .update({ name: form.name.value.trim() }).eq('id', org.id).select('id');
+    if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); btn.disabled = false; return; }
+    if (!data || !data.length) { showMsg(msgEl, 'העדכון לא בוצע — אין הרשאה', 'error'); btn.disabled = false; return; }
+
+    toast('פרטי החברה עודכנו', 'success');
+    btn.disabled = false;
+    setTimeout(() => location.reload(), 600);
+  });
+
+  async function showLogo(path) {
+    const box = document.getElementById('logoPreview');
+    if (!path) { box.innerHTML = '<span>אין לוגו</span>'; return; }
+    const url = await getStorageUrl(path);
+    box.innerHTML = url ? `<img src="${url}" alt="${esc(org.name)}">` : '<span>שגיאה בטעינה</span>';
+  }
+  await showLogo(org.logo_path);
+
+  document.getElementById('pickLogoBtn').addEventListener('click', () => document.getElementById('logoInput').click());
+
+  document.getElementById('logoInput').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const msgEl = document.getElementById('logoMsg');
+    hideMsg(msgEl);
+    if (file.size > 2 * 1024 * 1024) { showMsg(msgEl, 'הקובץ גדול מ-2MB', 'error'); return; }
+
+    // Stored under the company's first site folder so it matches the storage rules.
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const path = `${auth.site.id}/org-logo/logo_${Date.now()}.${ext}`;
+
+    toast('מעלה לוגו...');
+    const { error: upErr } = await sb.storage.from('documents').upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) { showMsg(msgEl, 'שגיאה בהעלאה: ' + upErr.message, 'error'); return; }
+
+    const { data, error } = await sb.from('organizations').update({ logo_path: path }).eq('id', org.id).select('id');
+    if (error || !data || !data.length) {
+      showMsg(msgEl, 'שגיאה בשמירה' + (error ? ': ' + error.message : ' — אין הרשאה'), 'error');
+      return;
+    }
+
+    // Only once the new path is safely saved may the previous file go.
+    const oldPath = org.logo_path;
+    if (oldPath && oldPath !== path) {
+      const { error: rmErr } = await sb.storage.from('documents').remove([oldPath]);
+      if (rmErr) console.warn('הלוגו הישן לא נמחק:', rmErr.message);
+    }
+    org.logo_path = path;
+    await showLogo(path);
+    toast('הלוגו עודכן', 'success');
+  });
+
+  document.getElementById('removeLogoBtn').addEventListener('click', async () => {
+    if (!org.logo_path) return;
+    if (!confirm('להסיר את הלוגו?')) return;
+    const oldPath = org.logo_path;
+    const { data, error } = await sb.from('organizations').update({ logo_path: null }).eq('id', org.id).select('id');
+    if (error || !data || !data.length) { toast('שגיאה בהסרה', 'error'); return; }
+    const { error: rmErr } = await sb.storage.from('documents').remove([oldPath]);
+    if (rmErr) console.warn('הקובץ לא נמחק:', rmErr.message);
+    org.logo_path = null;
+    await showLogo(null);
+    toast('הלוגו הוסר', 'success');
+  });
+})();
+</script>
+</body>
+</html>

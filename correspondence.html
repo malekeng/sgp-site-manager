@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>אישורי ועדכוני יועצים ומתכננים | SGP</title>
+<title>אישורי ועדכוני יועצים ומתכננים | ניהול אתרי בנייה</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
@@ -138,7 +138,7 @@
 (async function () {
   const auth = await requireAuth('correspondence.html');
   if (!auth) return;
-  const { user, site } = auth;
+  const { user, site, org } = auth;
 
   const LINKED_TABLE_LABELS = {
     concrete_pours: 'יציקת בטון',
@@ -455,7 +455,7 @@
         `).join('')}
       </div>
       <div style="padding:14px 36px;border-top:1px solid #e1e5f0;color:#9aa0ab;font-size:11px;text-align:center;">
-        SGP ניהול אתרי בנייה — שי גיל פרויקטים
+        ${esc(org.name)}
       </div>
     `;
     document.body.appendChild(root);

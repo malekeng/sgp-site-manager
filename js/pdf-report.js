@@ -1,4 +1,4 @@
-// ===== Shared PDF rendering engine for SGP reports =====
+// ===== Shared PDF rendering engine for report pages =====
 const SGP_DOC_TYPE_LABELS = {
   photo: 'תמונה', delivery_note: 'תעודת משלוח', order: 'הזמנה',
   lab_test: 'דוח מעבדה', drawing: 'תוכנית', other: 'מסמך',
@@ -52,7 +52,7 @@ function sgpBannerHtml(genStr) {
       <div style="display:flex;align-items:center;gap:14px;">
         <img src="icons/logo-white.svg" style="height:38px;display:block;" onerror="this.style.display='none'">
         <div>
-          <div style="color:#fff;font-size:15px;font-weight:800;letter-spacing:-0.2px;">SGP · שי גיל פרויקטים</div>
+          <div style="color:#fff;font-size:15px;font-weight:800;letter-spacing:-0.2px;">${esc(orgDisplayName())}</div>
           <div style="color:rgba(255,255,255,0.65);font-size:11.5px;margin-top:2px;">ניהול אתרי בנייה</div>
         </div>
       </div>
@@ -96,7 +96,7 @@ function sgpContinuationHeaderHtml(title, pageLabel) {
 function sgpFooterHtml(title) {
   return `
     <div style="padding:16px 32px 22px;border-top:1px solid #E6EAF5;display:flex;justify-content:space-between;align-items:center;gap:12px;">
-      <div style="color:#A0A5C0;font-size:11px;font-weight:600;">SGP ניהול אתרי בנייה — דוח אוטומטי מהמערכת</div>
+      <div style="color:#A0A5C0;font-size:11px;font-weight:600;">${esc(orgDisplayName())} — דוח אוטומטי מהמערכת</div>
       <div style="color:#A0A5C0;font-size:11px;font-weight:600;">${title}</div>
     </div>`;
 }

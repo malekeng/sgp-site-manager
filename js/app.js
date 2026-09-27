@@ -37,6 +37,8 @@ const NAV_ITEMS = [
   { href: 'reports.html',   label: 'דוחות', icon: '📊' },
 ];
 const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים', icon: '👥' };
+const ORG_SETTINGS_NAV_ITEM = { href: 'org-settings.html', label: 'הגדרות החברה', icon: '🏢' };
+const PLATFORM_NAV_ITEM = { href: 'platform-admin.html', label: 'ניהול הפלטפורמה', icon: '🛠️' };
 const PROFILE_NAV_ITEM = { href: 'profile.html', label: 'הפרופיל שלי', icon: '👤' };
 
 const JOB_TITLE_OPTIONS = [
@@ -135,7 +137,23 @@ async function renderHeader(activePage, profile, site, org) {
   if (profile && (profile.role === 'owner' || profile.role === 'admin')) {
     items.push(ADMIN_NAV_ITEM);
   }
+  if (profile && profile.role === 'owner') {
+    items.push(ORG_SETTINGS_NAV_ITEM);
+  }
+  // Platform operator link, shown only to operators. The page and the database check
+  // this independently; hiding the link is only a convenience.
+  try {
+    const { data: isPlatformAdmin } = await sb.from('platform_admins')
+      .select('user_id').eq('user_id', profile.id).maybeSingle();
+    if (isPlatformAdmin) items.push(PLATFORM_NAV_ITEM);
+  } catch (_) { /* never block the header on this */ }
   items.push(PROFILE_NAV_ITEM);
+
+  // Each company sees its own name in the tab title.
+  if (org?.name) {
+    const base = (document.title || '').split('|')[0].trim();
+    document.title = base ? `${base} | ${org.name}` : org.name;
+  }
 
   const NAV_GROUP_KEY_PREFIX = 'sgp_navgroup_';
   function navLinkHtml(item, extraClass) {
@@ -292,6 +310,26 @@ async function renderHeader(activePage, profile, site, org) {
   });
 }
 
+// Platform name — deliberately generic, since the platform now serves many companies.
+// It is only a fallback: anywhere a tenant can see a name, the company's own name wins.
+const PLATFORM_NAME = 'ניהול אתרי בנייה';
+
+// Name printed on generated PDFs and footers. Set once the active company is known;
+// that always happens before any report can be produced.
+let activeOrgName = PLATFORM_NAME;
+function orgDisplayName() { return activeOrgName; }
+
+// A scanned delivery note shows our own company as the customer and the supplier as the
+// sender. Used to tell them apart. Words of 1-2 letters are skipped: they appear inside
+// unrelated Hebrew words too often to be a reliable signal.
+function looksLikeOwnCompany(text) {
+  if (!text) return false;
+  return orgDisplayName()
+    .split(/[^א-תA-Za-z0-9]+/)
+    .filter(w => w.length >= 3)
+    .some(w => text.includes(w));
+}
+
 const SGP_ACTIVE_ORG_KEY = 'sgp_active_org_id';
 
 // Which company is the user acting in right now, and with which role there?
@@ -387,6 +425,8 @@ async function requireAuth(activePage) {
   // The role that matters is the role IN THE ACTIVE COMPANY. Overlaying it onto
   // profile.role keeps every existing `profile.role === 'owner'` check working, but it
   // now means "owner of this company" rather than "owner of everything".
+  activeOrgName = org.name || PLATFORM_NAME;
+
   profile.legacy_role = profile.role;
   profile.role = org.role;
 

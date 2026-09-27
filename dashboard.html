@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>לוח בקרה | SGP</title>
+<title>לוח בקרה | ניהול אתרי בנייה</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
@@ -134,7 +134,7 @@
   </div>
 </main>
 
-<footer class="app-footer">SGP ניהול אתרי בנייה © <span id="year"></span></footer>
+<footer class="app-footer"><span id="footerOrg"></span> © <span id="year"></span></footer>
 
 <script src="js/supabase-client.js"></script>
 <script src="js/app.js"></script>
@@ -152,7 +152,8 @@ function greetingByHour() {
 (async function () {
   const auth = await requireAuth('dashboard.html');
   if (!auth) return;
-  const { user, profile, site } = auth;
+  const { user, profile, site, org } = auth;
+  document.getElementById('footerOrg').textContent = org.name;
   const canEditSite = profile.role === 'owner' || profile.role === 'admin';
   const canEditCover = true; // any internal role reaching this dashboard (owner/admin/site_user) can set the site cover photo
 

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ניהול הפלטפורמה</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.png">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.pa-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; align-items: start; }
+@media (max-width: 1000px) { .pa-grid { grid-template-columns: 1fr; } }
+.status-badge { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+.status-badge.active { background: rgba(0,214,143,0.14); color: var(--green-deep); }
+.status-badge.suspended { background: rgba(255,71,87,0.14); color: var(--danger); }
+.slug-chip {
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px;
+}
+</style>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">ניהול הפלטפורמה</h1>
+
+  <div class="pa-grid">
+
+  <div class="card">
+    <div class="card-header">
+      <h2>חברות</h2>
+      <button class="btn btn-primary btn-sm" id="newCompanyBtn">+ חברה חדשה</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>שם החברה</th><th>קוד</th><th>סטטוס</th><th>אתרים</th><th>משתמשים</th><th><span class="sr-only">פעולות</span></th></tr></thead>
+        <tbody id="orgsBody"><tr class="empty-row"><td colspan="6"><div class="loading-overlay"><div class="spinner"></div></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>בקשות לפתיחת חברה</h2></div>
+    <div id="requestsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+
+  </div>
+</main>
+
+<div class="modal-backdrop" id="companyModalBackdrop">
+  <div class="modal">
+    <h3 id="companyModalTitle">חברה חדשה</h3>
+    <p style="font-size:12.5px;color:var(--steel);margin-bottom:14px;">
+      תיווצר חברה חדשה, ובעליה יקבל הזמנה במייל. קוד החברה משמש בקישור הכניסה של הקבלנים ואינו ניתן לשינוי אחר כך.
+    </p>
+    <div id="companyMsg" class="msg"></div>
+    <form id="companyForm">
+      <input type="hidden" name="request_id">
+      <div class="form-grid">
+        <div class="field full"><label>שם החברה *</label><input type="text" name="name" required></div>
+        <div class="field full">
+          <label>קוד חברה * <span style="font-weight:400;color:var(--steel);">(אותיות אנגליות קטנות, ספרות ומקף)</span></label>
+          <input type="text" name="slug" required pattern="[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?" placeholder="acme-build">
+        </div>
+        <div class="field full"><label>אימייל הבעלים *</label><input type="email" name="owner_email" required></div>
+        <div class="field"><label>שם הבעלים</label><input type="text" name="owner_full_name"></div>
+        <div class="field"><label>שם משתמש</label><input type="text" name="owner_username"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="companySubmitBtn">יצירה ושליחת הזמנה</button>
+        <button type="button" class="btn btn-outline" id="cancelCompanyBtn">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/app.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('platform-admin.html');
+  if (!auth) return;
+  const { user } = auth;
+
+  // Operator-only page. The database enforces this too; this is just the UI gate.
+  const { data: isAdmin } = await sb.from('platform_admins').select('user_id').eq('user_id', user.id).maybeSingle();
+  if (!isAdmin) {
+    document.querySelector('main.page').innerHTML = '<p>אין לך הרשאה לצפות בעמוד זה.</p>';
+    return;
+  }
+
+  async function loadOrgs() {
+    const body = document.getElementById('orgsBody');
+    const { data, error } = await sb.from('organizations')
+      .select('*, sites(count), organization_members(count)')
+      .order('created_at', { ascending: true });
+    if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="6">שגיאה: ${esc(error.message)}</td></tr>`; return; }
+    if (!data || !data.length) { body.innerHTML = `<tr class="empty-row"><td colspan="6">אין חברות עדיין</td></tr>`; return; }
+
+    body.innerHTML = data.map(o => `
+      <tr>
+        <td>${esc(o.name)}</td>
+        <td><span class="slug-chip">${esc(o.slug)}</span></td>
+        <td><span class="status-badge ${esc(o.status)}">${o.status === 'active' ? 'פעילה' : 'מושעית'}</span></td>
+        <td class="num-cell">${o.sites?.[0]?.count ?? 0}</td>
+        <td class="num-cell">${o.organization_members?.[0]?.count ?? 0}</td>
+        <td class="row-actions"><div class="row-actions-inner">
+          <button class="btn btn-sm btn-outline" data-toggle="${o.id}" data-status="${esc(o.status)}">
+            ${o.status === 'active' ? 'השעיה' : 'הפעלה'}
+          </button>
+        </div></td>
+      </tr>`).join('');
+
+    body.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
+      const toSuspended = btn.dataset.status === 'active';
+      const msg = toSuspended
+        ? 'להשעות את החברה?\n\nכל המשתמשים שלה יאבדו גישה מיידית. הנתונים נשארים במקומם וניתן להחזיר את החברה בכל רגע.'
+        : 'להחזיר את החברה לפעילות?';
+      if (!confirm(msg)) return;
+      const { data: upd, error } = await sb.from('organizations')
+        .update({ status: toSuspended ? 'suspended' : 'active' }).eq('id', btn.dataset.toggle).select('id');
+      if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+      if (!upd || !upd.length) { toast('הפעולה לא בוצעה — אין הרשאה', 'error'); return; }
+      toast(toSuspended ? 'החברה הושעתה' : 'החברה הופעלה', 'success');
+      loadOrgs();
+    }));
+  }
+
+  async function loadRequests() {
+    const host = document.getElementById('requestsList');
+    const { data, error } = await sb.from('company_signup_requests')
+      .select('*').eq('status', 'pending').order('created_at', { ascending: false });
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; return; }
+    if (!data || !data.length) { host.innerHTML = '<p class="empty-state">אין בקשות ממתינות</p>'; return; }
+
+    host.innerHTML = `<div class="attach-list">${data.map(r => `
+      <div class="attach-item" style="align-items:flex-start;flex-direction:column;gap:6px;">
+        <div style="font-weight:800;">${esc(r.company_name)}</div>
+        <div style="font-size:12.5px;color:var(--steel);">
+          ${esc(r.contact_name)} · ${esc(r.email)}${r.phone ? ' · ' + esc(r.phone) : ''}
+        </div>
+        ${r.note ? `<div style="font-size:12.5px;">${esc(r.note)}</div>` : ''}
+        <div class="header-actions" style="margin-top:4px;">
+          <button class="btn btn-sm btn-primary" data-approve="${r.id}">אישור ופתיחת חברה</button>
+          <button class="btn btn-sm btn-ghost" data-reject="${r.id}">דחייה</button>
+        </div>
+      </div>`).join('')}</div>`;
+
+    host.querySelectorAll('[data-approve]').forEach(btn => btn.addEventListener('click', () => {
+      const r = data.find(x => x.id === btn.dataset.approve);
+      openCompanyModal(r);
+    }));
+    host.querySelectorAll('[data-reject]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('לדחות את הבקשה?')) return;
+      const { error } = await sb.from('company_signup_requests')
+        .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+        .eq('id', btn.dataset.reject);
+      if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+      toast('הבקשה נדחתה', 'success');
+      loadRequests();
+    }));
+  }
+
+  function slugify(s) {
+    return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  }
+
+  function openCompanyModal(request) {
+    const form = document.getElementById('companyForm');
+    form.reset();
+    hideMsg(document.getElementById('companyMsg'));
+    form.request_id.value = request?.id || '';
+    if (request) {
+      form.name.value = request.company_name || '';
+      form.slug.value = slugify(request.company_name);
+      form.owner_email.value = request.email || '';
+      form.owner_full_name.value = request.contact_name || '';
+    }
+    document.getElementById('companyModalTitle').textContent = request ? 'אישור בקשה — פתיחת חברה' : 'חברה חדשה';
+    document.getElementById('companyModalBackdrop').classList.add('open');
+  }
+
+  document.getElementById('newCompanyBtn').addEventListener('click', () => openCompanyModal(null));
+  document.getElementById('cancelCompanyBtn').addEventListener('click', () =>
+    document.getElementById('companyModalBackdrop').classList.remove('open'));
+  document.getElementById('companyModalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'companyModalBackdrop') e.target.classList.remove('open');
+  });
+  document.getElementById('companyForm').name.addEventListener('input', e => {
+    const slugField = document.getElementById('companyForm').slug;
+    if (!slugField.dataset.touched) slugField.value = slugify(e.target.value);
+  });
+  document.getElementById('companyForm').slug.addEventListener('input', e => { e.target.dataset.touched = '1'; });
+
+  document.getElementById('companyForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('companyMsg');
+    const btn = document.getElementById('companySubmitBtn');
+    hideMsg(msgEl);
+    btn.disabled = true;
+
+    const fd = new FormData(e.target);
+    const payload = {
+      name: fd.get('name'),
+      slug: fd.get('slug'),
+      owner_email: fd.get('owner_email'),
+      owner_full_name: fd.get('owner_full_name'),
+      owner_username: fd.get('owner_username'),
+      request_id: fd.get('request_id') || null,
+    };
+
+    const { data: { session } } = await sb.auth.getSession();
+    try {
+      const res = await fetch(SUPABASE_FUNCTIONS_URL + '/create-organization', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify(payload),
+      });
+      const out = await res.json();
+      if (!res.ok) { showMsg(msgEl, 'שגיאה: ' + (out.error || res.status), 'error'); btn.disabled = false; return; }
+      toast('החברה נוצרה והזמנה נשלחה לבעלים', 'success');
+      document.getElementById('companyModalBackdrop').classList.remove('open');
+      loadOrgs(); loadRequests();
+    } catch (err) {
+      showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
+    }
+    btn.disabled = false;
+  });
+
+  await loadOrgs();
+  await loadRequests();
+})();
+</script>
+</body>
+</html>

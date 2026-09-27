@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>SGP | ניהול אתרי בנייה</title>
+<title>ניהול אתרי בנייה</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.png">
 <link rel="stylesheet" href="css/styles.css">
@@ -61,7 +61,7 @@
       <h2>ניהול אתרי בנייה,<br>מסודר במקום אחד.</h2>
       <p>יומני יציקות, משלוחי ברזל, כתבי כמויות, משימות ודוחות — כל הצוות רואה את אותה תמונה מעודכנת, בזמן אמת.</p>
     </div>
-    <div class="auth-visual-foot"><span class="dot"></span>שי גיל פרויקטים · מאז 1987</div>
+    <div class="auth-visual-foot"><span class="dot"></span>ניהול אתרי בנייה</div>
   </div>
   <div class="auth-form-panel" style="padding-bottom:max(20px, env(safe-area-inset-bottom));">
   <div class="auth-card" id="authCard">
@@ -149,7 +149,7 @@
     <!-- ===== Screen 4: Request access (signup request, pending owner approval) ===== -->
     <form id="signupForm" class="auth-form hidden">
       <p style="font-size:13px;color:var(--steel);margin-bottom:16px;">
-        מלאו את הפרטים ונציג מטעם שי גיל פרויקטים יבדוק ויאשר את הבקשה. תקבלו מייל הזמנה עם אישור הגישה.
+        מלאו את הפרטים הבקשה תועבר לאישור מנהל החברה. תקבלו מייל הזמנה עם אישור הגישה.
       </p>
       <div class="form-grid">
         <div class="field"><label for="signupFirstName">שם פרטי</label><input id="signupFirstName" type="text" name="first_name" required></div>
@@ -160,7 +160,7 @@
         <input id="signupEmail" type="email" name="email" required autocomplete="email">
       </div>
       <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;font-size:11.5px;color:var(--steel);line-height:1.6;text-align:right;">
-        הפרטים שתמלאו (שם ואימייל) ישמשו אך ורק לצורך זיהוי וניהול הגישה שלכם למערכת הפנימית של שי גיל פרויקטים, ולא יועברו לצד שלישי.
+        הפרטים שתמלאו (שם ואימייל) ישמשו אך ורק לצורך זיהוי וניהול הגישה שלכם למערכת, ולא יועברו לצד שלישי.
       </div>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink);margin-bottom:16px;cursor:pointer;text-align:right;">
         <input type="checkbox" id="signupConsent" required style="margin-top:3px;flex-shrink:0;">
@@ -170,6 +170,34 @@
         <span id="signupBtnText">שליחת בקשה</span>
       </button>
       <span class="switch-link" id="backToLoginFromSignup">חזרה לכניסה</span>
+      <span class="switch-link" id="toCompanySignup">החברה שלכם עדיין לא במערכת? פתחו חשבון חברה</span>
+    </form>
+
+    <!-- ===== Screen 5: Open a company account (pending operator approval) ===== -->
+    <form id="companySignupForm" class="auth-form hidden">
+      <p style="font-size:13px;color:var(--steel);margin-bottom:16px;">
+        מלאו את פרטי החברה ונחזור אליכם. לאחר האישור תקבלו מייל הזמנה, ותוכלו להוסיף את האתרים והצוות שלכם.
+      </p>
+      <div class="field full">
+        <label for="csCompany">שם החברה</label>
+        <input id="csCompany" type="text" name="company_name" required maxlength="200">
+      </div>
+      <div class="form-grid">
+        <div class="field"><label for="csContact">איש קשר</label><input id="csContact" type="text" name="contact_name" required></div>
+        <div class="field"><label for="csPhone">טלפון</label><input id="csPhone" type="tel" name="phone"></div>
+      </div>
+      <div class="field full">
+        <label for="csEmail">אימייל</label>
+        <input id="csEmail" type="email" name="email" required autocomplete="email">
+      </div>
+      <div class="field full">
+        <label for="csNote">משהו שכדאי שנדע (אופציונלי)</label>
+        <textarea id="csNote" name="note" rows="2"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary" id="csBtn">
+        <span id="csBtnText">שליחת בקשה</span>
+      </button>
+      <span class="switch-link" id="backToLoginFromCompany">חזרה לכניסה</span>
     </form>
   </div>
   </div>
@@ -183,7 +211,8 @@ const loginForm = document.getElementById('loginForm');
 const requestCodeForm = document.getElementById('requestCodeForm');
 const verifyCodeForm = document.getElementById('verifyCodeForm');
 const signupForm = document.getElementById('signupForm');
-const ALL_FORMS = [loginForm, requestCodeForm, verifyCodeForm, signupForm];
+const companySignupForm = document.getElementById('companySignupForm');
+const ALL_FORMS = [loginForm, requestCodeForm, verifyCodeForm, signupForm, companySignupForm];
 const STEP_OF = { loginForm: 1, requestCodeForm: 2, verifyCodeForm: 3 };
 
 function showScreen(el) {
@@ -254,6 +283,31 @@ document.getElementById('toLoginFromRequest').addEventListener('click', () => {
   if (email) verifyCodeForm.email.value = email;
 });
 document.getElementById('toSignup').addEventListener('click', () => showScreen(signupForm));
+document.getElementById('toCompanySignup').addEventListener('click', () => showScreen(companySignupForm));
+document.getElementById('backToLoginFromCompany').addEventListener('click', () => showScreen(loginForm));
+
+// Opening a company account: goes to the platform operator, not to any company.
+companySignupForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  hideMsg();
+  const btn = document.getElementById('csBtn');
+  const btnText = document.getElementById('csBtnText');
+  setBusy(btn, btnText, true, 'שולח...', 'שליחת בקשה');
+
+  const fd = new FormData(companySignupForm);
+  const { error } = await sb.rpc('request_company_signup', {
+    p_company_name: fd.get('company_name'),
+    p_contact_name: fd.get('contact_name'),
+    p_email: fd.get('email'),
+    p_phone: fd.get('phone') || null,
+    p_note: fd.get('note') || null,
+  });
+
+  setBusy(btn, btnText, false, '', 'שליחת בקשה');
+  if (error) { showErr('שגיאה בשליחת הבקשה: ' + error.message); return; }
+  companySignupForm.reset();
+  showOk('הבקשה נשלחה. נחזור אליכם במייל לאחר הבדיקה.');
+});
 document.getElementById('backToLoginFromSignup').addEventListener('click', () => showScreen(loginForm));
 
 // ===== Screen 1: Login =====
