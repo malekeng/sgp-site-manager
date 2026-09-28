@@ -358,7 +358,7 @@ input, select, textarea {
   position: absolute;
   top: 0; right: 0; left: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--green) 0%, var(--blue) 100%);
+  background: linear-gradient(90deg, var(--green) 0%, var(--green-deep) 100%);
 }
 .stat-card .label {
   position: relative;
@@ -1001,7 +1001,7 @@ a.attach-item:hover { transform: translateX(-2px); }
   height: 24px;
   border-radius: 50%;
   background:
-    conic-gradient(from 0deg, var(--green) 0deg, var(--blue) 140deg, transparent 200deg, transparent 360deg);
+    conic-gradient(from 0deg, var(--green) 0deg, var(--green-deep) 140deg, transparent 200deg, transparent 360deg);
   animation: spin 0.85s linear infinite;
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
