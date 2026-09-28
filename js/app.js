@@ -10,36 +10,36 @@
 })();
 
 const NAV_ITEMS = [
-  { href: 'dashboard.html', label: 'לוח בקרה', icon: '🏠' },
-  { group: 'מעקב ציוד וחומר', key: 'materials', icon: '📦', items: [
-    { href: 'concrete.html', label: 'בטון', icon: '🧱' },
-    { href: 'rebar.html',    label: 'ברזל', icon: '🔩' },
-    { href: 'slabs.html',    label: 'לוח״דים', icon: '🏗️' },
+  { href: 'dashboard.html', label: 'לוח בקרה', icon: '🏠', ico: 'dashboard' },
+  { group: 'מעקב ציוד וחומר', key: 'materials', icon: '📦', ico: 'group-materials', items: [
+    { href: 'concrete.html', label: 'בטון', icon: '🧱', ico: 'concrete' },
+    { href: 'rebar.html',    label: 'ברזל', icon: '🔩', ico: 'rebar' },
+    { href: 'slabs.html',    label: 'לוח״דים', icon: '🏗️', ico: 'slabs' },
   ]},
-  { group: 'הגשות לאישור', key: 'vendor-submissions', icon: '📥', items: [
-    { href: 'vendor-contractors.html', label: 'קבלנים', icon: '👷' },
-    { href: 'vendor-suppliers.html',   label: 'ספקים', icon: '🚚' },
-    { href: 'vendor-equipment.html',   label: 'ציוד', icon: '🛠️' },
-    { href: 'vendor-materials.html',   label: 'חומר', icon: '🧰' },
+  { group: 'הגשות לאישור', key: 'vendor-submissions', icon: '📥', ico: 'group-submissions', items: [
+    { href: 'vendor-contractors.html', label: 'קבלנים', icon: '👷', ico: 'contractors' },
+    { href: 'vendor-suppliers.html',   label: 'ספקים', icon: '🚚', ico: 'suppliers' },
+    { href: 'vendor-equipment.html',   label: 'ציוד', icon: '🛠️', ico: 'equipment' },
+    { href: 'vendor-materials.html',   label: 'חומר', icon: '🧰', ico: 'materials' },
   ]},
-  { group: 'בקרת איכות', key: 'quality-control', icon: '✅', items: [
-    { href: 'qc-preliminary.html', label: 'בקרה מקדימה', icon: '🔍' },
-    { href: 'qc-inprocess.html',   label: 'בקרה בתהליך', icon: '🔄' },
+  { group: 'בקרת איכות', key: 'quality-control', icon: '✅', ico: 'quality', items: [
+    { href: 'qc-preliminary.html', label: 'בקרה מקדימה', icon: '🔍', ico: 'qc-preliminary' },
+    { href: 'qc-inprocess.html',   label: 'בקרה בתהליך', icon: '🔄', ico: 'qc-inprocess' },
   ]},
-  { href: 'facility-file.html', label: 'תיק מתקן / טופס 4', icon: '📜' },
-  { href: 'exceptions.html', label: 'חריגים', icon: '⚠️' },
-  { href: 'tasks.html', label: 'משימות', icon: '📋' },
-  { href: 'work-plan.html', label: 'תכנית עבודה שבועית', icon: '🗓️' },
-  { href: 'weekly-meeting.html', label: 'סיכומי ישיבות', icon: '📝' },
-  { href: 'correspondence.html', label: 'יועצים ומתכננים', icon: '✉️' },
-  { href: 'quantity.html',  label: 'כתבי כמויות', icon: '📐' },
-  { href: 'prices.html',    label: 'השוואת מחירים', icon: '💰' },
-  { href: 'reports.html',   label: 'דוחות', icon: '📊' },
+  { href: 'facility-file.html', label: 'תיק מתקן / טופס 4', icon: '📜', ico: 'facility-file' },
+  { href: 'exceptions.html', label: 'חריגים', icon: '⚠️', ico: 'exceptions' },
+  { href: 'tasks.html', label: 'משימות', icon: '📋', ico: 'tasks' },
+  { href: 'work-plan.html', label: 'תכנית עבודה שבועית', icon: '🗓️', ico: 'work-plan' },
+  { href: 'weekly-meeting.html', label: 'סיכומי ישיבות', icon: '📝', ico: 'meetings' },
+  { href: 'correspondence.html', label: 'יועצים ומתכננים', icon: '✉️', ico: 'correspondence' },
+  { href: 'quantity.html',  label: 'כתבי כמויות', icon: '📐', ico: 'quantity' },
+  { href: 'prices.html',    label: 'השוואת מחירים', icon: '💰', ico: 'prices' },
+  { href: 'reports.html',   label: 'דוחות', icon: '📊', ico: 'reports' },
 ];
-const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים', icon: '👥' };
-const ORG_SETTINGS_NAV_ITEM = { href: 'org-settings.html', label: 'הגדרות החברה', icon: '🏢' };
-const PLATFORM_NAV_ITEM = { href: 'platform-admin.html', label: 'ניהול הפלטפורמה', icon: '🛠️' };
-const PROFILE_NAV_ITEM = { href: 'profile.html', label: 'הפרופיל שלי', icon: '👤' };
+const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים', icon: '👥', ico: 'users' };
+const ORG_SETTINGS_NAV_ITEM = { href: 'org-settings.html', label: 'הגדרות החברה', icon: '🏢', ico: 'org-settings' };
+const PLATFORM_NAV_ITEM = { href: 'platform-admin.html', label: 'ניהול הפלטפורמה', icon: '🛠️', ico: 'platform' };
+const PROFILE_NAV_ITEM = { href: 'profile.html', label: 'הפרופיל שלי', icon: '👤', ico: 'profile' };
 
 const JOB_TITLE_OPTIONS = [
   'מנהל עבודה',
@@ -157,8 +157,13 @@ async function renderHeader(activePage, profile, site, org) {
   }
 
   const NAV_GROUP_KEY_PREFIX = 'sgp_navgroup_';
+  // The generated icon when the item has one, the emoji otherwise. Decorative: the label
+  // beside it already says what the link is, so screen readers skip the image.
+  const navIcon = item => item.ico
+    ? `<img class="nav-ico" src="icons/nav/${item.ico}.webp" alt="" aria-hidden="true" width="26" height="26">`
+    : `<span class="nav-icon">${item.icon}</span>`;
   function navLinkHtml(item, extraClass) {
-    return `<a href="${item.href}" class="${extraClass || ''} ${item.href === activePage ? 'active' : ''}"><span class="nav-icon">${item.icon}</span>${item.label}</a>`;
+    return `<a href="${item.href}" class="${extraClass || ''} ${item.href === activePage ? 'active' : ''}">${navIcon(item)}${item.label}</a>`;
   }
   const navHtml = items.map(item => {
     if (item.group) {
@@ -171,7 +176,7 @@ async function renderHeader(activePage, profile, site, org) {
       const subHtml = item.items.map(sub => navLinkHtml(sub, 'nav-sub')).join('');
       return `
         <div class="nav-group${expanded ? ' expanded' : ''}" data-group="${item.key}">
-          <button type="button" class="nav-group-header"><span class="nav-icon">${item.icon}</span>${item.group}<span class="nav-chevron">▾</span></button>
+          <button type="button" class="nav-group-header">${navIcon(item)}${item.group}<span class="nav-chevron">▾</span></button>
           <div class="nav-group-items"><div class="nav-group-items-inner">${subHtml}</div></div>
         </div>`;
     }

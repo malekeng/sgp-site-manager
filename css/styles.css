@@ -157,6 +157,8 @@ input, select, textarea {
   transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
 }
 .app-header nav a .nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+.app-header .nav-ico { display: block; width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; }
+.app-header nav a.nav-sub .nav-ico { width: 22px; height: 22px; }
 .app-header nav a:hover {
   color: #fff;
   background: rgba(255,255,255,0.09);
@@ -213,6 +215,14 @@ input, select, textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+/* the site pin sits inside the pill, opposite the dropdown chevron */
+.app-header .sidebar-footer .site-badge {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ffffff' d='M1 1l5 5 5-5'/%3E%3C/svg%3E"), url('../icons/nav/site.webp');
+  background-repeat: no-repeat, no-repeat;
+  background-position: left 14px center, right 10px center;
+  background-size: 10px, 20px;
+  padding-right: 38px;
 }
 .app-header .site-badge {
   appearance: none;
