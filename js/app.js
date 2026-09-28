@@ -313,7 +313,7 @@ async function renderHeader(activePage, profile, site, org) {
 
 // Platform name — deliberately generic, since the platform now serves many companies.
 // It is only a fallback: anywhere a tenant can see a name, the company's own name wins.
-const PLATFORM_NAME = 'ניהול אתרי בנייה';
+const PLATFORM_NAME = 'TADOK';
 
 // Name printed on generated PDFs and footers. Set once the active company is known;
 // that always happens before any report can be produced.

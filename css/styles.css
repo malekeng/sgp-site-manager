@@ -804,7 +804,7 @@ a.attach-item:hover { transform: translateX(-2px); }
   100% { transform: translate(-3%, 3%) scale(1.08); }
 }
 .auth-visual-top { position: relative; z-index: 1; }
-.auth-visual-top img { height: 40px; filter: brightness(0) invert(1); }
+.auth-visual-top img { display: block; width: 100%; max-width: 560px; height: auto; border-radius: 14px; }
 .auth-visual-body { position: relative; z-index: 1; direction: rtl; text-align: right; }
 .auth-visual-body h2 {
   color: #fff;
@@ -858,9 +858,11 @@ a.attach-item:hover { transform: translateX(-2px); }
 }
 
 .auth-card img {
-  height: 44px;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  border-radius: 12px;
   margin-bottom: 18px;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.06));
 }
 .auth-form-panel .auth-card img { display: none; }
 
