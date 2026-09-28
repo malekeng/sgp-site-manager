@@ -15,6 +15,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
+<script src="js/excel-report.js"></script>
 <style>
 .ocr-progress { display: none; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 13px; color: var(--steel); }
 .ocr-progress.show { display: flex; }
@@ -60,7 +61,7 @@
     <div class="card-header">
       <h2>גיליונות כמויות</h2>
       <button class="btn btn-primary" id="addSheetBtn">+ גיליון חדש</button>
-      <button class="btn btn-outline" id="importOcrBtn">📄 ייבוא כתב כמויות מוכן (OCR)</button>
+      <button class="btn btn-outline" id="importOcrBtn"><img class="ico3d" src="icons/nav/scan.webp" alt="" aria-hidden="true" width="20" height="20">ייבוא כתב כמויות מוכן (OCR)</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -77,7 +78,8 @@
       <h2 id="itemsTitle">שורות כמויות</h2>
       <div class="header-actions">
         <button class="btn btn-primary" id="addItemBtn">+ הוספת שורה</button>
-        <button class="btn btn-outline" id="exportSheetPdfBtn">📄 ייצוא PDF</button>
+        <button class="btn btn-outline" id="exportSheetPdfBtn"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="20" height="20">PDF</button>
+        <button class="btn btn-outline" id="exportSheetXlsxBtn"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="20" height="20">Excel</button>
         <button class="btn btn-outline" id="backToSheets">חזרה לגיליונות</button>
       </div>
     </div>
@@ -128,7 +130,7 @@
       </div>
 
       <div class="attach-zone" id="ocrZone" style="margin-top:14px;margin-bottom:16px;">
-        <div>📄 גררו לכאן קובץ (תמונה או PDF) של כתב הכמויות, או לחצו לבחירה</div>
+        <img class="zone-ico" src="icons/nav/scan.webp" alt="" aria-hidden="true" width="44" height="44"><div>גררו לכאן קובץ (תמונה או PDF) של כתב הכמויות, או לחצו לבחירה</div>
         <div style="font-size:11px;color:var(--steel);margin-top:4px;">זיהוי טקסט אוטומטי — בדקו את התוצאה לפני ייבוא</div>
         <input type="file" id="ocrInput" accept="image/*,.pdf" style="display:none;">
       </div>
@@ -286,8 +288,8 @@
         <td class="row-actions">
           <div class="row-actions-inner">
             <button class="btn btn-sm btn-outline" data-open="${s.id}">פתיחה</button>
-            <button class="icon-btn" data-edit-sheet="${s.id}" title="עריכה">✏️</button>
-            <button class="icon-btn danger" data-del-sheet="${s.id}" title="מחיקה">🗑️</button>
+            <button class="icon-btn" data-edit-sheet="${s.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
+            <button class="icon-btn danger" data-del-sheet="${s.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
           </div>
         </td>
       </tr>
@@ -409,7 +411,7 @@
       <div class="ocr-preview-row">
         <input type="text" value="${esc(r.description)}" data-field="description" data-i="${i}">
         <input type="number" step="0.01" value="${r.qty}" data-field="qty" data-i="${i}">
-        <button type="button" class="icon-btn danger" data-remove-row="${i}" title="הסרה">✕</button>
+        <button type="button" class="icon-btn danger" data-remove-row="${i}" title="הסרה" aria-label="הסרה">${uiIcon('x')}</button>
       </div>
     `).join('');
     list.querySelectorAll('input').forEach(inp => {
@@ -515,7 +517,7 @@
     await loadItems();
   }
 
-  document.getElementById('exportSheetPdfBtn').addEventListener('click', async () => {
+  async function exportSheet(format) {
     if (!itemsCache.length) { toast('אין שורות בגיליון הזה לייצוא', 'error'); return; }
     const columns = [
       { key: 'item_no', label: 'מס\' פריט', type: 'text' },
@@ -546,15 +548,19 @@
       currentSheet.plan_version ? `גרסה ${currentSheet.plan_version}` : null,
       currentSheet.plan_date ? fmtDate(currentSheet.plan_date) : null,
     ].filter(Boolean);
-    await sgpExportPdf({
+    await (format === 'xlsx' ? sgpExportExcel : sgpExportPdf)({
       title: `כתב כמויות — ${planLabel}`,
+      ico: 'quantity',
       columns,
       rows: exportRows,
       siteNames: [site.name],
-      periodText: subtitleParts.join(' · ') || null,
+      periodLabel: 'פרטי התוכנית',
+      periodText: subtitleParts.join(' · ') || '—',
       subtitle: null,
     });
-  });
+  }
+  document.getElementById('exportSheetPdfBtn').addEventListener('click', () => exportSheet('pdf'));
+  document.getElementById('exportSheetXlsxBtn').addEventListener('click', () => exportSheet('xlsx'));
 
   document.getElementById('backToSheets').addEventListener('click', () => {
     document.getElementById('itemsCard').style.display = 'none';
@@ -594,8 +600,8 @@
         <td class="num-cell">${waste ? fmtNum(waste) + '%' : '—'}</td>
         <td class="num-cell" style="font-weight:700;">${fmtNum(it.total)} <span style="font-size:11px;font-weight:600;color:var(--steel);">${esc(t.unit)}</span></td>
         <td class="row-actions"><div class="row-actions-inner">
-          <button class="icon-btn" data-edit-item="${it.id}" title="עריכה">✏️</button>
-          <button class="icon-btn danger" data-del-item="${it.id}" title="מחיקה">🗑️</button>
+          <button class="icon-btn" data-edit-item="${it.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
+          <button class="icon-btn danger" data-del-item="${it.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
         </div></td>
       </tr>`;
     }).join('');

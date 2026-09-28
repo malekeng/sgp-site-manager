@@ -13,6 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
+<script src="js/excel-report.js"></script>
 <style>
 #meetingsList .attach-list { position: relative; gap: 14px; }
 #meetingsList .attach-list::before {
@@ -49,7 +50,8 @@
       <h2>יומן ישיבות</h2>
       <div class="header-actions">
         <button class="btn btn-primary" id="addBtn">+ סיכום ישיבה</button>
-        <button class="btn btn-outline" id="exportAllBtn">📄 ייצוא PDF</button>
+        <button class="btn btn-outline" id="exportAllBtn"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="20" height="20">PDF</button>
+        <button class="btn btn-outline" id="exportAllXlsxBtn"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="20" height="20">Excel</button>
       </div>
     </div>
     <div id="meetingsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
@@ -72,7 +74,7 @@
         <button type="button" class="btn btn-danger" id="deleteBtn" style="display:none;margin-right:auto;">מחיקה</button>
       </div>
     </form>
-    <button class="icon-btn modal-close" id="closeModalBtn">✕</button>
+    <button class="icon-btn modal-close" id="closeModalBtn" aria-label="סגירה"><svg class="ui-ico ui-ico-x" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
   </div>
 </div>
 
@@ -107,8 +109,8 @@
             ${m.attendees ? `<span style="color:var(--steel);font-size:12px;"> · ${esc(m.attendees)}</span>` : ''}
           </div>
           <div style="display:flex;gap:4px;">
-            <button type="button" class="icon-btn" data-edit="${m.id}" title="עריכה">✏️</button>
-            <button type="button" class="icon-btn danger" data-del="${m.id}" title="מחיקה">🗑️</button>
+            <button type="button" class="icon-btn" data-edit="${m.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
+            <button type="button" class="icon-btn danger" data-del="${m.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
           </div>
         </div>
         <div style="font-size:13.5px;color:var(--ink);white-space:pre-wrap;line-height:1.5;">${esc(m.summary)}</div>
@@ -192,21 +194,26 @@
     await loadMeetings();
   }
 
-  document.getElementById('exportAllBtn').addEventListener('click', async () => {
+  async function exportMeetings(format) {
     if (!meetings.length) { toast('אין סיכומים לייצוא', 'error'); return; }
     const columns = [
       { key: 'meeting_date', label: 'תאריך', type: 'date' },
       { key: 'attendees', label: 'משתתפים', type: 'text' },
       { key: 'summary', label: 'סיכום', type: 'text' },
     ];
-    await sgpExportPdf({
+    await (format === 'xlsx' ? sgpExportExcel : sgpExportPdf)({
       title: 'סיכומי ישיבות שבועיות',
+      ico: 'meetings',
+      layout: 'cards',
+      cardTitleKey: 'meeting_date',
       columns,
       rows: meetings,
       siteNames: [site.name],
       periodText: null,
     });
-  });
+  }
+  document.getElementById('exportAllBtn').addEventListener('click', () => exportMeetings('pdf'));
+  document.getElementById('exportAllXlsxBtn').addEventListener('click', () => exportMeetings('xlsx'));
 
   await loadMeetings();
 })();

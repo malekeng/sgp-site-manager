@@ -32,7 +32,8 @@ function createAttachWidget(container, options = {}) {
     <div class="field full">
       <label>${label}</label>
       <div class="attach-zone" tabindex="0">
-        <div id="attachZoneLabel">📎 גררו קבצים לכאן או לחצו לבחירה — ניתן לבחור כמה קבצים ביחד</div>
+        <img class="zone-ico" src="icons/nav/upload.webp" alt="" aria-hidden="true" width="40" height="40">
+        <div id="attachZoneLabel">גררו קבצים לכאן או לחצו לבחירה — ניתן לבחור כמה קבצים ביחד</div>
         <div style="font-size:11px;margin-top:4px;">תמונות, PDF, Word — עד 10MB לקובץ</div>
       </div>
       <input type="file" multiple accept="image/*,.pdf,.doc,.docx" style="display:none;">
@@ -68,8 +69,8 @@ function createAttachWidget(container, options = {}) {
 
   function render() {
     zoneLabel.textContent = entries.length
-      ? `📎 ${entries.length} קבצים נבחרו — לחצו כאן להוספת עוד`
-      : '📎 גררו קבצים לכאן או לחצו לבחירה — ניתן לבחור כמה קבצים ביחד';
+      ? `${entries.length} קבצים נבחרו — לחצו כאן להוספת עוד`
+      : 'גררו קבצים לכאן או לחצו לבחירה — ניתן לבחור כמה קבצים ביחד';
 
     list.innerHTML = entries.map((entry, i) => {
       const f = entry.file;
@@ -93,7 +94,7 @@ function createAttachWidget(container, options = {}) {
           <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             ${typeSelect}
             ${dateInput}
-            <button type="button" class="remove" data-i="${i}">✕</button>
+            <button type="button" class="remove" data-i="${i}" aria-label="הסרה">${uiIcon('x', 14)}</button>
           </span>
         </div>
       `;

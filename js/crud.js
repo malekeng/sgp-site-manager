@@ -18,7 +18,7 @@ function openAppendNoteModal(textarea) {
           <button type="button" class="btn btn-outline" id="cancelAppendNoteBtn">ביטול</button>
         </div>
       </form>
-      <button type="button" class="icon-btn modal-close" id="closeAppendNoteBtn">✕</button>
+      <button type="button" class="icon-btn modal-close" id="closeAppendNoteBtn" aria-label="סגירה"><svg class="ui-ico ui-ico-x" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
   `;
   document.body.appendChild(backdrop);
@@ -192,7 +192,7 @@ async function initCrudPage(config) {
       }).join('');
       const docCount = state.docCounts[row.id] || 0;
       const docCell = docCount
-        ? `<td><span class="doc-badge" data-docs="${row.id}">📎 ${docCount}</span></td>`
+        ? `<td><span class="doc-badge" data-docs="${row.id}">${uiIcon('paperclip', 13)}${docCount}</span></td>`
         : `<td class="cell-muted">—</td>`;
       const whoId = row.updated_by || row.created_by;
       const when = row.updated_at || row.created_at;
@@ -201,7 +201,7 @@ async function initCrudPage(config) {
         : `<td class="cell-muted">—</td>`;
       const qt = config.quickToggle;
       const toggleBtn = qt
-        ? `<button class="icon-btn" data-toggle="${row.id}" title="${row[qt.key] ? qt.trueAction : qt.falseAction}">${row[qt.key] ? qt.trueLabel : qt.falseLabel}</button>`
+        ? `<button class="icon-btn" data-toggle="${row.id}" title="${row[qt.key] ? qt.trueAction : qt.falseAction}">${(l => l && l.icon ? uiIcon(l.icon) : l)(row[qt.key] ? qt.trueLabel : qt.falseLabel)}</button>`
         : '';
       return `
         <tr>
@@ -211,8 +211,8 @@ async function initCrudPage(config) {
           <td class="row-actions">
             <div class="row-actions-inner">
               ${toggleBtn}
-              <button class="icon-btn" data-edit="${row.id}" title="עריכה">✏️</button>
-              <button class="icon-btn danger" data-del="${row.id}" title="מחיקה">🗑️</button>
+              <button class="icon-btn" data-edit="${row.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
+              <button class="icon-btn danger" data-del="${row.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
             </div>
           </td>
         </tr>

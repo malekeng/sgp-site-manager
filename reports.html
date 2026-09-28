@@ -13,6 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
+<script src="js/excel-report.js"></script>
 <style>
 .reports-grid { display: grid; grid-template-columns: 1fr 1.7fr; column-gap: 24px; align-items: start; }
 .reports-summary-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; align-items: start; }
@@ -43,19 +44,75 @@
   <div class="reports-side">
 
   <div class="card">
-    <div class="card-header"><h2>ייצוא דוחות (PDF)</h2></div>
-    <div style="display:grid;grid-template-columns:1fr;gap:8px;">
-      <button class="btn btn-outline" data-export="concrete_pours" style="justify-content:flex-start;">📄 יומני יציקות בטון</button>
-      <button class="btn btn-outline" data-export="rebar_deliveries" style="justify-content:flex-start;">📄 משלוחי ברזל</button>
-      <button class="btn btn-outline" data-export="prestressed_slabs" style="justify-content:flex-start;">📄 לוח״דים</button>
-      <button class="btn btn-outline" data-export="price_quotes" style="justify-content:flex-start;">📄 השוואת מחירים</button>
-      <button class="btn btn-outline" data-export="vendor_contractors" style="justify-content:flex-start;">📄 קבלנים</button>
-      <button class="btn btn-outline" data-export="vendor_suppliers" style="justify-content:flex-start;">📄 ספקים</button>
-      <button class="btn btn-outline" data-export="vendor_equipment" style="justify-content:flex-start;">📄 ציוד</button>
-      <button class="btn btn-outline" data-export="vendor_materials" style="justify-content:flex-start;">📄 חומר</button>
-      <button class="btn btn-outline" data-export="qc_preliminary" style="justify-content:flex-start;">📄 בקרה מקדימה</button>
-      <button class="btn btn-outline" data-export="qc_inprocess" style="justify-content:flex-start;">📄 בקרה בתהליך</button>
-      <button class="btn btn-outline" data-export="facility_file" style="justify-content:flex-start;">📄 תיק מתקן / טופס 4</button>
+    <div class="card-header"><h2 class="with-ico"><img class="ico3d" src="icons/nav/reports.webp" alt="" aria-hidden="true" width="26" height="26">ייצוא דוחות</h2></div>
+    <p style="font-size:12.5px;color:var(--steel);margin:-4px 0 12px;">כל מודול כ-PDF מעוצב להדפסה, או כקובץ Excel לעבודה עם הנתונים.</p>
+    <div class="export-list">
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/concrete.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">יומני יציקות בטון</span>
+        <button class="btn btn-outline btn-sm" data-export="concrete_pours" data-format="pdf" aria-label="יומני יציקות בטון — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="concrete_pours" data-format="xlsx" aria-label="יומני יציקות בטון — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/rebar.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">משלוחי ברזל</span>
+        <button class="btn btn-outline btn-sm" data-export="rebar_deliveries" data-format="pdf" aria-label="משלוחי ברזל — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="rebar_deliveries" data-format="xlsx" aria-label="משלוחי ברזל — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/slabs.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">לוח״דים</span>
+        <button class="btn btn-outline btn-sm" data-export="prestressed_slabs" data-format="pdf" aria-label="לוח״דים — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="prestressed_slabs" data-format="xlsx" aria-label="לוח״דים — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/prices.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">השוואת מחירים</span>
+        <button class="btn btn-outline btn-sm" data-export="price_quotes" data-format="pdf" aria-label="השוואת מחירים — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="price_quotes" data-format="xlsx" aria-label="השוואת מחירים — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/contractors.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">קבלנים</span>
+        <button class="btn btn-outline btn-sm" data-export="vendor_contractors" data-format="pdf" aria-label="קבלנים — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="vendor_contractors" data-format="xlsx" aria-label="קבלנים — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/suppliers.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">ספקים</span>
+        <button class="btn btn-outline btn-sm" data-export="vendor_suppliers" data-format="pdf" aria-label="ספקים — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="vendor_suppliers" data-format="xlsx" aria-label="ספקים — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/equipment.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">ציוד</span>
+        <button class="btn btn-outline btn-sm" data-export="vendor_equipment" data-format="pdf" aria-label="ציוד — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="vendor_equipment" data-format="xlsx" aria-label="ציוד — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/materials.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">חומר</span>
+        <button class="btn btn-outline btn-sm" data-export="vendor_materials" data-format="pdf" aria-label="חומר — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="vendor_materials" data-format="xlsx" aria-label="חומר — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/qc-preliminary.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">בקרה מקדימה</span>
+        <button class="btn btn-outline btn-sm" data-export="qc_preliminary" data-format="pdf" aria-label="בקרה מקדימה — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="qc_preliminary" data-format="xlsx" aria-label="בקרה מקדימה — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/qc-inprocess.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">בקרה בתהליך</span>
+        <button class="btn btn-outline btn-sm" data-export="qc_inprocess" data-format="pdf" aria-label="בקרה בתהליך — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="qc_inprocess" data-format="xlsx" aria-label="בקרה בתהליך — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
+      <div class="export-row">
+        <img class="ico3d" src="icons/nav/facility-file.webp" alt="" aria-hidden="true" width="28" height="28">
+        <span class="export-name">תיק מתקן / טופס 4</span>
+        <button class="btn btn-outline btn-sm" data-export="facility_file" data-format="pdf" aria-label="תיק מתקן / טופס 4 — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="facility_file" data-format="xlsx" aria-label="תיק מתקן / טופס 4 — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
     </div>
   </div>
 
@@ -64,7 +121,10 @@
     <p style="font-size:12.5px;color:var(--steel);margin-bottom:14px;">
       קובץ אחד מרוכז הכולל את כל המודולים שיש בהם נתונים בטווח שנבחר: בטון, ברזל, לוח״דים, השוואת מחירים, קבלנים/ספקים/ציוד/חומר, בקרת איכות, תיק מתקן, חריגים, יועצים ומתכננים, משימות, וסיכומי ישיבות.
     </p>
-    <button class="btn btn-primary" id="exportFullSystemBtn">📦 ייצוא קובץ מלא</button>
+    <div class="header-actions">
+      <button class="btn btn-primary" id="exportFullSystemBtn"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="20" height="20">ייצוא מלא ל-PDF</button>
+      <button class="btn btn-outline" id="exportFullSystemXlsxBtn"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="20" height="20">ייצוא מלא ל-Excel</button>
+    </div>
   </div>
 
   </div>
@@ -72,7 +132,7 @@
   <div class="card">
     <div class="card-header">
       <h2>מסמכים מצורפים</h2>
-      <button class="btn btn-primary btn-sm" id="downloadAllDocs" style="display:none;">⬇️ הורד הכל</button>
+      <button class="btn btn-primary btn-sm" id="downloadAllDocs" style="display:none;"><svg class="ui-ico ui-ico-download" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg> הורד הכל</button>
     </div>
     <div id="docsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
@@ -84,7 +144,10 @@
   <div class="card">
     <div class="card-header">
       <h2>סיכום נפחי יציקות בטון לפי חודש</h2>
-      <button class="btn btn-outline btn-sm" id="exportConcreteSummary">📄 PDF</button>
+      <div class="header-actions">
+        <button class="btn btn-outline btn-sm" id="exportConcreteSummary"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" id="exportConcreteSummaryXlsx"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
     </div>
     <div id="concreteSummary"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
@@ -92,7 +155,10 @@
   <div class="card">
     <div class="card-header">
       <h2>סיכום משקל ברזל לפי ספק</h2>
-      <button class="btn btn-outline btn-sm" id="exportRebarSummary">📄 PDF</button>
+      <div class="header-actions">
+        <button class="btn btn-outline btn-sm" id="exportRebarSummary"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" id="exportRebarSummaryXlsx"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+      </div>
     </div>
     <div id="rebarSummary"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
@@ -115,6 +181,7 @@
 
   const REPORTS = {
     concrete_pours: {
+      ico: 'concrete',
       title: 'יומני יציקות בטון',
       dateField: 'pour_date',
       columns: [
@@ -122,8 +189,8 @@
         { key: 'location', label: 'קומה / מיקום', type: 'text' },
         { key: 'element', label: 'אלמנט', type: 'text' },
         { key: 'concrete_grade', label: 'סוג בטון', type: 'text' },
-        { key: 'volume_m3', label: 'כמות (מ"ק)', type: 'number', digits: 1 },
-        { key: 'area_m2', label: 'שטח (מ"ר)', type: 'number', digits: 2 },
+        { key: 'volume_m3', label: 'כמות (מ"ק)', type: 'number', digits: 1, total: true },
+        { key: 'area_m2', label: 'שטח (מ"ר)', type: 'number', digits: 2, total: true },
         { key: 'pour_method', label: 'אופן יציקה', type: 'text' },
         { key: 'supplier', label: 'ספק בטון', type: 'text' },
         { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
@@ -136,6 +203,7 @@
       ],
     },
     rebar_deliveries: {
+      ico: 'rebar',
       title: 'משלוחי ברזל',
       dateField: 'order_date',
       columns: [
@@ -145,7 +213,7 @@
         { key: 'diameter_text', label: 'קוטר', type: 'text' },
         { key: 'location', label: 'אלמנט / מיקום', type: 'text' },
         { key: 'description', label: 'תיאור / קוד', type: 'text' },
-        { key: 'weight_kg', label: 'משקל (ק"ג)', type: 'number', digits: 0 },
+        { key: 'weight_kg', label: 'משקל (ק"ג)', type: 'number', digits: 0, total: true },
         { key: 'supply_status', label: 'סופק', type: 'text' },
         { key: 'order_closed', label: 'סטטוס הזמנה', type: 'boolean', trueLabel: 'סגורה', falseLabel: 'פתוחה' },
         { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
@@ -154,6 +222,7 @@
       ],
     },
     prestressed_slabs: {
+      ico: 'slabs',
       title: 'לוח״דים',
       dateField: 'order_date',
       columns: [
@@ -164,12 +233,13 @@
         { key: 'supplier', label: 'ספק', type: 'text' },
         { key: 'location', label: 'קומה / מיקום', type: 'text' },
         { key: 'plan_ref', label: 'מס\' תכנית', type: 'text' },
-        { key: 'quantity_m2', label: 'סה"כ מ"ר', type: 'number', digits: 2 },
+        { key: 'quantity_m2', label: 'סה"כ מ"ר', type: 'number', digits: 2, total: true },
         { key: 'delivery_note_number', label: 'תעודת משלוח', type: 'multiline' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
     price_quotes: {
+      ico: 'prices',
       title: 'השוואת מחירים',
       dateField: 'quote_date',
       columns: [
@@ -182,6 +252,7 @@
       ],
     },
     vendor_contractors: {
+      ico: 'contractors',
       title: 'קבלנים', table: 'vendor_submissions',
       staticFilter: { column: 'submission_type', value: 'contractor' },
       dateField: 'submission_date',
@@ -197,6 +268,7 @@
       ],
     },
     vendor_suppliers: {
+      ico: 'suppliers',
       title: 'ספקים', table: 'vendor_submissions',
       staticFilter: { column: 'submission_type', value: 'supplier' },
       dateField: 'submission_date',
@@ -212,6 +284,7 @@
       ],
     },
     vendor_equipment: {
+      ico: 'equipment',
       title: 'ציוד', table: 'vendor_submissions',
       staticFilter: { column: 'submission_type', value: 'equipment' },
       dateField: 'submission_date',
@@ -226,6 +299,7 @@
       ],
     },
     vendor_materials: {
+      ico: 'materials',
       title: 'חומר', table: 'vendor_submissions',
       staticFilter: { column: 'submission_type', value: 'material' },
       dateField: 'submission_date',
@@ -240,6 +314,7 @@
       ],
     },
     qc_preliminary: {
+      ico: 'qc-preliminary',
       title: 'בקרה מקדימה', table: 'quality_controls',
       staticFilter: { column: 'stage', value: 'preliminary' },
       dateField: 'control_date',
@@ -252,6 +327,7 @@
       ],
     },
     qc_inprocess: {
+      ico: 'qc-inprocess',
       title: 'בקרה בתהליך', table: 'quality_controls',
       staticFilter: { column: 'stage', value: 'in_process' },
       dateField: 'control_date',
@@ -264,6 +340,7 @@
       ],
     },
     facility_file: {
+      ico: 'facility-file',
       title: 'תיק מתקן / טופס 4', table: 'facility_file_items',
       dateField: 'due_date',
       columns: [
@@ -357,24 +434,22 @@
     return sitesCache.find(s => s.id === id)?.name || '—';
   }
 
-  async function exportPdf(title, columns, rows, subtitleOverride) {
-    const names = sitesCache.filter(s => filterState.siteIds.includes(s.id)).map(s => s.name);
-    const periodText = (filterState.from || filterState.to)
+  function currentPeriodText() {
+    return (filterState.from || filterState.to)
       ? `${filterState.from ? fmtDate(filterState.from) : 'תחילת הפעילות'} — ${filterState.to ? fmtDate(filterState.to) : 'היום'}`
       : 'כל התקופה';
-    await sgpExportPdf({
-      title,
-      columns,
-      rows,
-      siteNames: names,
-      periodText,
-      subtitle: subtitleOverride || '',
-    });
   }
 
-  document.getElementById('exportFullSystemBtn').addEventListener('click', async () => {
+  // format: 'pdf' | 'xlsx'
+  async function exportReport(format, { title, columns, rows, subtitle, ico }) {
+    const names = sitesCache.filter(s => filterState.siteIds.includes(s.id)).map(s => s.name);
+    const opts = { title, columns, rows, siteNames: names, periodText: currentPeriodText(), subtitle: subtitle || '', ico };
+    await (format === 'xlsx' ? sgpExportExcel(opts) : sgpExportPdf(opts));
+  }
+
+  async function runFullExport(format, btn) {
     if (!filterState.siteIds.length) { toast('בחרו לפחות אתר אחד', 'error'); return; }
-    const btn = document.getElementById('exportFullSystemBtn');
+    const label = btn.innerHTML;
     btn.disabled = true;
     btn.textContent = 'מכין קובץ...';
 
@@ -396,14 +471,14 @@
         if (cfg.staticFilter) q = q.eq(cfg.staticFilter.column, cfg.staticFilter.value);
         q = dateRange(q, cfg.dateField).order(cfg.dateField, { ascending: false });
         const { data } = await q;
-        sections.push({ title: cfg.title, columns: cfg.columns, rows: data || [] });
+        sections.push({ title: cfg.title, columns: cfg.columns, rows: data || [], ico: cfg.ico });
       }
 
       // Exceptions
       {
         const { data } = await dateRange(sb.from('exceptions').select('*').in('site_id', filterState.siteIds), 'exception_date').order('exception_date', { ascending: false });
         sections.push({
-          title: 'חריגים',
+          title: 'חריגים', ico: 'exceptions',
           columns: [
             { key: 'exception_date', label: 'תאריך', type: 'date' },
             { key: 'category', label: 'קטגוריה', type: 'text' },
@@ -420,7 +495,7 @@
       {
         const { data } = await dateRange(sb.from('correspondence').select('*').in('site_id', filterState.siteIds), 'entry_date').order('entry_date', { ascending: false });
         sections.push({
-          title: 'אישורי ועדכוני יועצים ומתכננים',
+          title: 'אישורי ועדכוני יועצים ומתכננים', ico: 'correspondence',
           columns: [
             { key: 'entry_date', label: 'תאריך', type: 'date' },
             { key: 'party', label: 'גורם מקצועי', type: 'text' },
@@ -436,7 +511,7 @@
       {
         const { data } = await dateRange(sb.from('weekly_meetings').select('*').in('site_id', filterState.siteIds), 'meeting_date').order('meeting_date', { ascending: false });
         sections.push({
-          title: 'סיכומי ישיבות שבועיות',
+          title: 'סיכומי ישיבות שבועיות', ico: 'meetings',
           columns: [
             { key: 'meeting_date', label: 'תאריך', type: 'date' },
             { key: 'attendees', label: 'משתתפים', type: 'text' },
@@ -458,7 +533,7 @@
         const STATUS_LABELS = { todo: 'לביצוע', in_progress: 'בתהליך', done: 'הושלם' };
         const rows = (taskRows || []).map(t => ({ ...t, assignee_name: names[t.assignee_id] || '—', status_label: STATUS_LABELS[t.status] || t.status }));
         sections.push({
-          title: 'משימות',
+          title: 'משימות', ico: 'tasks',
           columns: [
             { key: 'title', label: 'כותרת', type: 'text' },
             { key: 'location', label: 'מיקום', type: 'text' },
@@ -472,14 +547,17 @@
       }
 
       const siteNames = sitesCache.filter(s => filterState.siteIds.includes(s.id)).map(s => s.name);
-      await sgpExportFullSystem({ sections, siteNames, fileTitle: 'דוח מערכת מלא' });
+      const opts = { sections, siteNames, periodText: currentPeriodText(), fileTitle: 'דוח מערכת מלא' };
+      await (format === 'xlsx' ? sgpExportFullSystemExcel(opts) : sgpExportFullSystem(opts));
     } catch (err) {
       toast('שגיאה: ' + err.message, 'error');
     } finally {
       btn.disabled = false;
-      btn.textContent = '📦 ייצוא קובץ מלא';
+      btn.innerHTML = label;
     }
-  });
+  }
+  document.getElementById('exportFullSystemBtn').addEventListener('click', e => runFullExport('pdf', e.currentTarget));
+  document.getElementById('exportFullSystemXlsxBtn').addEventListener('click', e => runFullExport('xlsx', e.currentTarget));
 
   document.querySelectorAll('[data-export]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -535,7 +613,7 @@
       }
 
       btn.disabled = false;
-      await exportPdf(cfg.title, columns, rows);
+      await exportReport(btn.dataset.format, { title: cfg.title, columns, rows, ico: cfg.ico });
     });
   });
 
@@ -563,13 +641,13 @@
         }</tbody></table></div>`
       : '<p class="empty-state">אין נתונים תואמים לסינון</p>';
 
-    document.getElementById('exportConcreteSummary').onclick = () => {
-      exportPdf(
-        'סיכום נפחי יציקות בטון לפי חודש',
-        [{ key: 'month', label: 'חודש', type: 'text' }, { key: 'total', label: 'נפח כולל (מ\"ק)', type: 'number', digits: 2 }],
-        months.map(m => ({ month: m, total: byMonth[m] })),
-      );
+    const concreteSummary = {
+      title: 'סיכום נפחי יציקות בטון לפי חודש', ico: 'concrete',
+      columns: [{ key: 'month', label: 'חודש', type: 'text' }, { key: 'total', label: 'נפח כולל (מ\"ק)', type: 'number', digits: 2, total: true }],
+      rows: months.map(m => ({ month: m, total: byMonth[m] })),
     };
+    document.getElementById('exportConcreteSummary').onclick = () => exportReport('pdf', concreteSummary);
+    document.getElementById('exportConcreteSummaryXlsx').onclick = () => exportReport('xlsx', concreteSummary);
 
     let rq = sb.from('rebar_deliveries').select('supplier, weight_kg, order_date, site_id').in('site_id', filterState.siteIds);
     if (filterState.from) rq = rq.gte('order_date', filterState.from);
@@ -586,13 +664,13 @@
         }</tbody></table></div>`
       : '<p class="empty-state">אין נתונים תואמים לסינון</p>';
 
-    document.getElementById('exportRebarSummary').onclick = () => {
-      exportPdf(
-        'סיכום משקל ברזל לפי ספק',
-        [{ key: 'supplier', label: 'ספק', type: 'text' }, { key: 'total', label: 'משקל כולל (ק\"ג)', type: 'number', digits: 0 }],
-        suppliers.map(s => ({ supplier: s, total: bySupplier[s] })),
-      );
+    const rebarSummary = {
+      title: 'סיכום משקל ברזל לפי ספק', ico: 'rebar',
+      columns: [{ key: 'supplier', label: 'ספק', type: 'text' }, { key: 'total', label: 'משקל כולל (ק\"ג)', type: 'number', digits: 0, total: true }],
+      rows: suppliers.map(s => ({ supplier: s, total: bySupplier[s] })),
     };
+    document.getElementById('exportRebarSummary').onclick = () => exportReport('pdf', rebarSummary);
+    document.getElementById('exportRebarSummaryXlsx').onclick = () => exportReport('xlsx', rebarSummary);
   }
 
   // Cap on how many documents the attachments panel loads at once (each one costs a
@@ -719,7 +797,7 @@
     currentDocs = resolved.filter(d => d.url);
 
     downloadAllBtn.style.display = currentDocs.length ? 'inline-flex' : 'none';
-    downloadAllBtn.textContent = `⬇️ הורד הכל (${currentDocs.length})`;
+    downloadAllBtn.innerHTML = `${uiIcon('download', 15)} הורד הכל (${currentDocs.length})`;
 
     function renderDocItem(d, i) {
       const typeLabel = LINKED_TABLE_LABELS[d.linked_table] || d.linked_table || '';
@@ -759,13 +837,14 @@
     const GROUP_ORDER = ['concrete_pours', 'rebar_deliveries', 'prestressed_slabs', 'price_quotes',
       'vendor_submissions', 'quality_controls', 'facility_file_items',
       'progress_gallery', 'correspondence', 'tasks', '__none__'];
+    // [3D icon, heading] per group
     const GROUP_ICONS = {
-      concrete_pours: '🧱 בטון', rebar_deliveries: '🔩 ברזל',
-      prestressed_slabs: '🏗️ לוח״דים', price_quotes: '💰 השוואת מחירים',
-      vendor_submissions: '📥 הגשות קבלנים/ספקים/ציוד/חומר', quality_controls: '✅ בקרת איכות',
-      facility_file_items: '📜 תיק מתקן', progress_gallery: '🏗️ גלריית ביצוע',
-      correspondence: '✉️ יועצים ומתכננים', tasks: '📋 משימות',
-      __none__: '📎 כללי / לא משויך',
+      concrete_pours: ['concrete', 'בטון'], rebar_deliveries: ['rebar', 'ברזל'],
+      prestressed_slabs: ['slabs', 'לוח״דים'], price_quotes: ['prices', 'השוואת מחירים'],
+      vendor_submissions: ['group-submissions', 'הגשות קבלנים/ספקים/ציוד/חומר'], quality_controls: ['quality', 'בקרת איכות'],
+      facility_file_items: ['facility-file', 'תיק מתקן'], progress_gallery: ['gallery', 'גלריית ביצוע'],
+      correspondence: ['correspondence', 'יועצים ומתכננים'], tasks: ['tasks', 'משימות'],
+      __none__: ['documents', 'כללי / לא משויך'],
     };
     // Null-prototype map: a linked_table literally named 'constructor' or '__proto__'
     // would otherwise hit an inherited property and throw, taking the panel down.
@@ -800,7 +879,7 @@
 
     host.innerHTML = noticeHtml + renderOrder.map(key => `
       <div style="margin-bottom:18px;">
-        <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:8px;">${GROUP_ICONS[key] || '📎 ' + esc(key)} (${groups[key].length})</div>
+        <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:8px;display:flex;align-items:center;gap:8px;">${ico3d((GROUP_ICONS[key] || ['documents'])[0], 22)}${GROUP_ICONS[key] ? GROUP_ICONS[key][1] : esc(key)} (${groups[key].length})</div>
         <div class="attach-list">${groups[key].map(i => renderDocItem(resolved[i], i)).join('')}</div>
       </div>
     `).join('');
@@ -827,7 +906,7 @@
       await new Promise(r => setTimeout(r, 400));
     }
     btn.disabled = false;
-    btn.textContent = `⬇️ הורד הכל (${currentDocs.length})`;
+    btn.innerHTML = `${uiIcon('download', 15)} הורד הכל (${currentDocs.length})`;
     toast(`הורדו ${currentDocs.length} קבצים`, 'success');
   });
 

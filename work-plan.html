@@ -13,6 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
+<script src="js/excel-report.js"></script>
 <style>
 .priority-badge { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
 .priority-badge.high { background: rgba(255,71,87,0.14); color: var(--danger); }
@@ -49,7 +50,8 @@
       <h2 id="planTasksTitle">משימות התכנית</h2>
       <div class="header-actions">
         <button class="btn btn-primary" id="addPlanTaskBtn">+ משימה</button>
-        <button class="btn btn-outline" id="exportPlanPdfBtn">📄 ייצוא PDF</button>
+        <button class="btn btn-outline" id="exportPlanPdfBtn"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="20" height="20">PDF</button>
+        <button class="btn btn-outline" id="exportPlanXlsxBtn"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="20" height="20">Excel</button>
         <button class="btn btn-outline" id="backToPlansBtn">חזרה לתכניות</button>
       </div>
     </div>
@@ -171,7 +173,7 @@
         <td class="num-cell">${counts[p.id] || 0}</td>
         <td class="row-actions"><div class="row-actions-inner">
           <button class="btn btn-sm btn-outline" data-open="${p.id}">פתיחה</button>
-          <button class="icon-btn danger" data-del="${p.id}" title="מחיקה">🗑️</button>
+          <button class="icon-btn danger" data-del="${p.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
         </div></td>
       </tr>
     `).join('');
@@ -246,8 +248,8 @@
         <td>${esc(t.due_date ? fmtDate(t.due_date) : '—')}</td>
         <td><span class="status-badge ${esc(t.status)}">${esc(STATUS_LABELS[t.status] || t.status)}</span></td>
         <td class="row-actions"><div class="row-actions-inner">
-          <button class="icon-btn" data-edit="${t.id}" title="עריכה">✏️</button>
-          <button class="icon-btn danger" data-del="${t.id}" title="מחיקה">🗑️</button>
+          <button class="icon-btn" data-edit="${t.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
+          <button class="icon-btn danger" data-del="${t.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
         </div></td>
       </tr>
     `).join('');
@@ -326,7 +328,7 @@
     }
   });
 
-  document.getElementById('exportPlanPdfBtn').addEventListener('click', async () => {
+  async function exportPlan(format) {
     if (!planTasks.length) { toast('אין משימות לייצוא', 'error'); return; }
     const rows = planTasks.map(t => ({ ...t, assignee_name: memberName(t.assignee_id), status_label: STATUS_LABELS[t.status] || t.status }));
     const columns = [
@@ -337,14 +339,17 @@
       { key: 'status_label', label: 'סטטוס', type: 'text' },
       { key: 'description', label: 'תיאור', type: 'text' },
     ];
-    await sgpExportPdf({
+    await (format === 'xlsx' ? sgpExportExcel : sgpExportPdf)({
       title: `תכנית עבודה שבועית — ${fmtDate(currentPlan.week_start)}`,
+      ico: 'work-plan',
       columns,
       rows,
       siteNames: [site.name],
       periodText: currentPlan.week_end ? `${fmtDate(currentPlan.week_start)} – ${fmtDate(currentPlan.week_end)}` : null,
     });
-  });
+  }
+  document.getElementById('exportPlanPdfBtn').addEventListener('click', () => exportPlan('pdf'));
+  document.getElementById('exportPlanXlsxBtn').addEventListener('click', () => exportPlan('xlsx'));
 
   await loadMembers();
   await loadPlans();

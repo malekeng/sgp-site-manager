@@ -61,7 +61,7 @@
     <h3 id="modalTitle">הוספת רשומה</h3>
 
     <div class="ocr-zone" id="ocrZone">
-      <div>📄 גררו כאן הצעת מחיר (תמונה או PDF) למילוי אוטומטי</div>
+      <img class="zone-ico" src="icons/nav/scan.webp" alt="" aria-hidden="true" width="44" height="44"><div>גררו כאן הצעת מחיר (תמונה או PDF) למילוי אוטומטי</div>
       <div style="font-size:11px;color:var(--steel);margin-top:4px;">זיהוי טקסט אוטומטי — בדקו את התוצאה לפני שמירה</div>
       <input type="file" id="ocrInput" accept="image/*,.pdf" style="display:none;">
     </div>
@@ -76,7 +76,7 @@
         <button type="button" class="btn btn-outline" id="cancelBtn">ביטול</button>
       </div>
     </form>
-    <button class="icon-btn modal-close" id="closeModalBtn">✕</button>
+    <button class="icon-btn modal-close" id="closeModalBtn" aria-label="סגירה"><svg class="ui-ico ui-ico-x" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
   </div>
 </div>
 

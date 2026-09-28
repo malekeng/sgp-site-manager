@@ -45,7 +45,7 @@
 
   <div class="card">
     <div class="card-header">
-      <h2>📌 לוח הודעות</h2>
+      <h2 class="with-ico"><img class="ico3d" src="icons/nav/pin.webp" alt="" aria-hidden="true" width="26" height="26">לוח הודעות</h2>
       <button class="btn btn-primary btn-sm" id="addNoticeBtn">+ הודעה חדשה</button>
     </div>
     <div id="noticesList"><div class="loading-overlay"><div class="spinner"></div></div></div>
@@ -83,7 +83,7 @@
 
   <div class="card">
     <div class="card-header">
-      <h2>🏗️ גלריית ביצוע</h2>
+      <h2 class="with-ico"><img class="ico3d" src="icons/nav/gallery.webp" alt="" aria-hidden="true" width="26" height="26">גלריית ביצוע</h2>
       <button class="btn btn-primary btn-sm" id="addProgressPhotoBtn">+ הוספת תמונה</button>
     </div>
     <div id="progressGallery"><div class="loading-overlay"><div class="spinner"></div></div></div>
@@ -119,7 +119,7 @@
   <div class="dashboard-side">
 
   <div class="card">
-    <div class="card-header"><h2>דורש תשומת לב</h2></div>
+    <div class="card-header"><h2 class="with-ico"><img class="ico3d" src="icons/nav/exceptions.webp" alt="" aria-hidden="true" width="26" height="26">דורש תשומת לב</h2></div>
     <div id="attentionList" style="max-height:420px;overflow-y:auto;"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
 
@@ -127,7 +127,7 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>פעילות אחרונה</h2></div>
+    <div class="card-header"><h2 class="with-ico"><img class="ico3d" src="icons/nav/updated.webp" alt="" aria-hidden="true" width="26" height="26">פעילות אחרונה</h2></div>
     <div id="recentList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
 
@@ -190,7 +190,7 @@ function greetingByHour() {
               ${topicBadge}
               <div style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${esc(n.message)}</div>
             </div>
-            ${canDelete ? `<button type="button" class="icon-btn danger" data-del-notice="${n.id}" title="מחיקה" style="flex-shrink:0;">🗑️</button>` : ''}
+            ${canDelete ? `<button type="button" class="icon-btn danger" data-del-notice="${n.id}" title="מחיקה" aria-label="מחיקה" style="flex-shrink:0;">${uiIcon('trash')}</button>` : ''}
           </div>
           <span style="font-size:11.5px;color:var(--steel);">${authorName} · ${fmtDate(n.created_at)}</span>
         </div>
@@ -275,7 +275,7 @@ function greetingByHour() {
   if (canEditCover) {
     heroActions.innerHTML = `
       <label class="btn btn-sm site-cover-btn" style="cursor:pointer;">
-        📷 ${site.cover_path ? 'החלפת תמונת אתר' : 'העלאת תמונת אתר'}
+        ${uiIcon('camera')} ${site.cover_path ? 'החלפת תמונת אתר' : 'העלאת תמונת אתר'}
         <input type="file" id="coverInput" accept="image/*" style="display:none;">
       </label>
       ${site.cover_path ? '<button type="button" class="btn btn-sm btn-ghost site-cover-btn" id="removeCoverBtn">הסרה</button>' : ''}
@@ -332,7 +332,7 @@ function greetingByHour() {
       .eq('site_id', site.id).is('cube_test_date', null)
       .order('pour_date', { ascending: false });
     (pours || []).forEach(p => items.push({
-      icon: '🧪', text: `יציקה "${p.element}" מ-${fmtDate(p.pour_date)} — ללא תאריך בדיקת קוביות`,
+      ico: 'concrete', text: `יציקה "${p.element}" מ-${fmtDate(p.pour_date)} — ללא תאריך בדיקת קוביות`,
       href: 'concrete.html',
     }));
 
@@ -345,13 +345,14 @@ function greetingByHour() {
       const note = s.delivery_note_number ? `תעודה ${s.delivery_note_number}` : '';
       const detail = [qty, note].filter(Boolean).join(' · ');
       items.push({
-        icon: '🏗️',
+        ico: 'slabs',
         text: `לוח\"ד מ-${s.supplier}${detail ? ' (' + detail + ')' : ''} (סופקה ${fmtDate(s.delivery_date)}) — טרם הותקנה`,
         href: 'slabs.html',
       });
     });
 
     const VENDOR_TYPE_HREF = { contractor: 'vendor-contractors.html', supplier: 'vendor-suppliers.html', equipment: 'vendor-equipment.html', material: 'vendor-materials.html' };
+    const VENDOR_TYPE_ICO = { contractor: 'contractors', supplier: 'suppliers', equipment: 'equipment', material: 'materials' };
     const VENDOR_TYPE_LABEL = { contractor: 'קבלן', supplier: 'ספק', equipment: 'ציוד', material: 'חומר' };
     const soonThreshold = new Date(); soonThreshold.setDate(soonThreshold.getDate() + 30);
     const { data: expiring } = await sb.from('vendor_submissions')
@@ -361,7 +362,7 @@ function greetingByHour() {
     (expiring || []).forEach(v => {
       const expired = new Date(v.valid_until) < new Date(new Date().toDateString());
       items.push({
-        icon: expired ? '🔴' : '🟠',
+        ico: VENDOR_TYPE_ICO[v.submission_type] || 'group-submissions', dot: expired ? 'red' : 'orange',
         text: `${VENDOR_TYPE_LABEL[v.submission_type] || ''} "${v.name}" — תוקף ${expired ? 'פג ב' : 'עומד לפוג ב'}-${fmtDate(v.valid_until)}`,
         href: VENDOR_TYPE_HREF[v.submission_type] || 'reports.html',
       });
@@ -372,19 +373,19 @@ function greetingByHour() {
       .eq('site_id', site.id).eq('result', 'לא תקין')
       .order('control_date', { ascending: false });
     (failedQc || []).forEach(q => items.push({
-      icon: '❌',
+      ico: q.stage === 'preliminary' ? 'qc-preliminary' : 'qc-inprocess', dot: 'red',
       text: `בקרה ${q.stage === 'preliminary' ? 'מקדימה' : 'בתהליך'} ל"${q.subject}" מ-${fmtDate(q.control_date)} — לא תקין`,
       href: q.stage === 'preliminary' ? 'qc-preliminary.html' : 'qc-inprocess.html',
     }));
 
     const host = document.getElementById('attentionList');
     if (!items.length) {
-      host.innerHTML = '<p style="color:var(--steel);font-size:14px;">אין פריטים שדורשים תשומת לב כרגע 👍</p>';
+      host.innerHTML = '<p class="all-clear"><img class="ico3d" src="icons/nav/done.webp" alt="" aria-hidden="true" width="22" height="22">אין פריטים שדורשים תשומת לב כרגע</p>';
       return;
     }
     host.innerHTML = `<div class="attach-list">${items.slice(0, 10).map(it => `
       <a href="${it.href}" class="attach-item" style="text-decoration:none;color:inherit;">
-        <span>${it.icon} ${esc(it.text)}</span>
+        <span class="att-text">${ico3d(it.ico, 24)}${it.dot ? `<span class="sev-dot sev-${it.dot}"></span>` : ''}<span>${esc(it.text)}</span></span>
         <span style="color:var(--green-deep);font-weight:700;">←</span>
       </a>
     `).join('')}</div>`;
