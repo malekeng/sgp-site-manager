@@ -142,9 +142,10 @@ async function renderHeader(activePage, profile, site, org) {
   }
   // Platform operator link, shown only to operators. The page and the database check
   // this independently; hiding the link is only a convenience.
+  // platform_admins is unreadable from the client on purpose, so ask the question
+  // instead of reading the table.
   try {
-    const { data: isPlatformAdmin } = await sb.from('platform_admins')
-      .select('user_id').eq('user_id', profile.id).maybeSingle();
+    const { data: isPlatformAdmin } = await sb.rpc('am_i_platform_admin');
     if (isPlatformAdmin) items.push(PLATFORM_NAV_ITEM);
   } catch (_) { /* never block the header on this */ }
   items.push(PROFILE_NAV_ITEM);
