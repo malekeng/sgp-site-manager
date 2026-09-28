@@ -241,6 +241,18 @@ input, select, textarea {
   background: #E7F8EE;
   color: #0E1A20;
 }
+.auth-legal {
+  display: flex; justify-content: center; gap: 8px;
+  margin-top: 22px; font-size: 12.5px; color: var(--steel);
+}
+.auth-legal a { color: var(--steel); text-decoration: none; }
+.auth-legal a:hover { color: var(--green-deep); text-decoration: underline; }
+.app-header .sidebar-legal {
+  display: flex; justify-content: center; gap: 6px;
+  margin-top: 8px; font-size: 11.5px; color: rgba(255,255,255,0.45);
+}
+.app-header .sidebar-legal a { color: rgba(255,255,255,0.55); text-decoration: none; }
+.app-header .sidebar-legal a:hover { color: #fff; text-decoration: underline; }
 .app-header .logout-btn {
   background: rgba(255,255,255,0.07);
   color: rgba(255,255,255,0.82);

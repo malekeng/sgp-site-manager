@@ -219,6 +219,7 @@ async function renderHeader(activePage, profile, site, org) {
       </a>
       ${siteControl}
       <button class="logout-btn" id="logoutBtn">יציאה</button>
+      <div class="sidebar-legal"><a href="privacy.html">פרטיות</a><span aria-hidden="true">·</span><a href="terms.html">תנאי שימוש</a></div>
     </div>
   `;
 

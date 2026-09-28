@@ -1,0 +1,92 @@
+/* Privacy policy and terms of use. Public pages, readable without signing in,
+   so they carry their own small stylesheet instead of the whole app shell. */
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap');
+
+:root {
+  --navy: #0E1A20;
+  --navy-deep: #081014;
+  --green: #22D86B;
+  --green-deep: #16B650;
+  --bg: #F3F6F4;
+  --sheet: #FFFFFF;
+  --border: #E3E9E6;
+  --ink: #0E1A20;
+  --steel: #637178;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Rubik', 'Segoe UI', Tahoma, sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.legal-top {
+  background: linear-gradient(175deg, var(--navy) 0%, var(--navy-deep) 100%);
+  padding: 18px 16px;
+  display: flex;
+  justify-content: center;
+}
+.legal-top img { display: block; height: 52px; width: auto; }
+
+.legal {
+  max-width: 760px;
+  margin: 28px auto 48px;
+  padding: 32px 36px;
+  background: var(--sheet);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+}
+
+.legal h1 { margin: 0; font-size: 30px; font-weight: 700; color: var(--navy); }
+.legal-updated { margin: 4px 0 24px; color: var(--steel); font-size: 14px; }
+
+.legal h2 {
+  margin: 34px 0 10px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--navy);
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.legal h3 { margin: 20px 0 6px; font-size: 16.5px; font-weight: 500; color: var(--navy); }
+.legal p { margin: 0 0 12px; }
+.legal ul, .legal ol { margin: 0 0 12px; padding-inline-start: 22px; }
+.legal li { margin-bottom: 6px; }
+.legal a { color: var(--green-deep); font-weight: 500; }
+.legal-note { color: var(--steel); font-size: 14px; }
+
+.legal-toc {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 8px;
+}
+.legal-toc ol { margin: 0; columns: 2; column-gap: 28px; }
+.legal-toc li { margin-bottom: 2px; break-inside: avoid; }
+.legal-toc a { text-decoration: none; }
+.legal-toc a:hover { text-decoration: underline; }
+
+/* Details the operator still has to supply. Visible on purpose, so none slip through. */
+mark.ph { background: #FFF1B8; color: inherit; padding: 0 3px; border-radius: 4px; }
+
+.legal-foot {
+  margin-top: 36px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  color: var(--steel);
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .legal { margin: 0; border-radius: 0; border-inline: none; padding: 24px 16px; }
+  .legal h1 { font-size: 25px; }
+  .legal-toc ol { columns: 1; }
+}
