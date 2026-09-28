@@ -160,7 +160,7 @@ async function renderHeader(activePage, profile, site, org) {
   // The generated icon when the item has one, the emoji otherwise. Decorative: the label
   // beside it already says what the link is, so screen readers skip the image.
   const navIcon = item => item.ico
-    ? `<img class="nav-ico" src="icons/nav/${item.ico}.webp" alt="" aria-hidden="true" width="26" height="26">`
+    ? `<img class="nav-ico" src="icons/nav/${item.ico}.webp" alt="" aria-hidden="true" width="28" height="28">`
     : `<span class="nav-icon">${item.icon}</span>`;
   function navLinkHtml(item, extraClass) {
     return `<a href="${item.href}" class="${extraClass || ''} ${item.href === activePage ? 'active' : ''}">${navIcon(item)}${item.label}</a>`;
