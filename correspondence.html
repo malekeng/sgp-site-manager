@@ -187,11 +187,10 @@
     const host = document.getElementById('statsRow');
     const outgoing = state.rows.filter(r => r.direction === 'outgoing').length;
     const incoming = state.rows.filter(r => r.direction === 'incoming').length;
-    host.innerHTML = `
-      <div class="stat-card"><div class="label">📋 סה"כ רשומות</div><div class="value">${state.rows.length}</div></div>
-      <div class="stat-card"><div class="label">➡️ יוצא (בקשה/פנייה ליועץ)</div><div class="value">${outgoing}</div></div>
-      <div class="stat-card"><div class="label">⬅️ נכנס (אישור/עדכון מהיועץ)</div><div class="value">${incoming}</div></div>
-    `;
+    host.innerHTML =
+      statCardHtml({ ico: 'correspondence', label: 'סה"כ רשומות', value: state.rows.length }) +
+      statCardHtml({ ico: 'outgoing', label: 'יוצא (בקשה/פנייה ליועץ)', value: outgoing }) +
+      statCardHtml({ ico: 'incoming', label: 'נכנס (אישור/עדכון מהיועץ)', value: incoming });
   }
 
   function renderTable() {

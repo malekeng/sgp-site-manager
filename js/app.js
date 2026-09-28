@@ -41,6 +41,21 @@ const ORG_SETTINGS_NAV_ITEM = { href: 'org-settings.html', label: 'הגדרות 
 const PLATFORM_NAV_ITEM = { href: 'platform-admin.html', label: 'ניהול הפלטפורמה', icon: '🛠️', ico: 'platform' };
 const PROFILE_NAV_ITEM = { href: 'profile.html', label: 'הפרופיל שלי', icon: '👤', ico: 'profile' };
 
+// The icon a page has in the sidebar, so the page itself can reuse it (e.g. on its stat cards).
+function pageIco(href) {
+  const all = [...NAV_ITEMS.flatMap(i => i.items ? [i, ...i.items] : [i]),
+    ADMIN_NAV_ITEM, ORG_SETTINGS_NAV_ITEM, PLATFORM_NAV_ITEM, PROFILE_NAV_ITEM];
+  return all.find(i => i.href === href)?.ico || null;
+}
+
+// One statistic card. `label` and `value` are inserted as-is, so pass only trusted text.
+// With `ico` the card uses the icon layout (see .stat-card.has-ico); without, the plain one.
+function statCardHtml({ ico, label, value, valueStyle = '' }) {
+  const img = ico ? `<img class="stat-ico" src="icons/nav/${ico}.webp" alt="" aria-hidden="true" width="44" height="44">` : '';
+  const style = valueStyle ? ` style="${valueStyle}"` : '';
+  return `<div class="stat-card${ico ? ' has-ico' : ''}">${img}<div class="label">${label}</div><div class="value"${style}>${value}</div></div>`;
+}
+
 const JOB_TITLE_OPTIONS = [
   'מנהל עבודה',
   'מנהל פרויקט',

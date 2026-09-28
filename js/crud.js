@@ -158,11 +158,11 @@ async function initCrudPage(config) {
     const lastUpdated = state.rows.length
       ? fmtDate(state.rows.map(r => r.updated_at || r.created_at).sort().slice(-1)[0])
       : '—';
-    const icon = config.icon || '📋';
-    host.innerHTML = `
-      <div class="stat-card"><div class="label">${icon} סה\"כ רשומות</div><div class="value">${state.rows.length}</div></div>
-      <div class="stat-card"><div class="label">🕒 עודכן לאחרונה</div><div class="value" style="font-size:20px;">${lastUpdated}</div></div>
-    `;
+    // the page's own sidebar icon; a page without one keeps its emoji
+    const ico = pageIco(config.activePage);
+    host.innerHTML =
+      statCardHtml({ ico, label: ico ? 'סה"כ רשומות' : `${config.icon || '📋'} סה"כ רשומות`, value: state.rows.length }) +
+      statCardHtml({ ico: 'updated', label: 'עודכן לאחרונה', value: lastUpdated, valueStyle: 'font-size:20px;' });
   }
 
   function renderTable() {

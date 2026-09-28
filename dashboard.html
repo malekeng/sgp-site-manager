@@ -452,13 +452,8 @@ function greetingByHour() {
       sb.from(t.key).select('id', { count: 'exact', head: true }).eq('site_id', site.id)
     ));
     const host = document.getElementById('statsRow');
-    host.innerHTML = tables.map((t, i) => `
-      <div class="stat-card has-ico">
-        <img class="stat-ico" src="icons/nav/${t.ico}.webp" alt="" aria-hidden="true" width="44" height="44">
-        <div class="label">${t.label}</div>
-        <div class="value">${results[i].count ?? 0}</div>
-      </div>
-    `).join('');
+    host.innerHTML = tables.map((t, i) =>
+      statCardHtml({ ico: t.ico, label: t.label, value: results[i].count ?? 0 })).join('');
   }
 
   function isImageFile(name) {
