@@ -196,9 +196,14 @@ async function renderHeader(activePage, profile, site, org) {
        </select>`
     : (org?.name ? `<div class="brand-org">${esc(org.name)}</div>` : '');
 
+  const logo = await orgLogo(org);
+  const logoHtml = logo.isCompany
+    ? `<img class="brand-logo company" src="${esc(logo.src)}" alt="${esc(org?.name || '')}" onerror="this.onerror=null;this.className='brand-logo';this.src='${PLATFORM_LOGO}'">`
+    : `<img class="brand-logo" src="${PLATFORM_LOGO}" alt="TADOK">`;
+
   host.innerHTML = `
     <div class="brand">
-      <img src="icons/logo-white.svg" alt="${esc(org?.name || '')}">
+      ${logoHtml}
       ${orgControl}
     </div>
     <nav id="mainNav">${navHtml}</nav>
@@ -331,6 +336,39 @@ function looksLikeOwnCompany(text) {
     .some(w => text.includes(w));
 }
 
+// The platform's own logo, shown wherever a company hasn't uploaded one. It has light
+// lettering and a transparent background, so it only ever goes on dark surfaces.
+const PLATFORM_LOGO = 'brand/tadok-logo-transparent.png';
+
+// The company the user is working in, for code that runs after sign-in (PDF export).
+let activeOrg = null;
+
+// A company's own logo if it uploaded one, otherwise the platform's.
+async function orgLogo(org) {
+  if (org?.logo_path) {
+    const url = await getStorageUrl(org.logo_path);
+    if (url) return { src: url, isCompany: true };
+  }
+  return { src: PLATFORM_LOGO, isCompany: false };
+}
+
+// The same, as markup for a PDF banner. A company logo is inlined as a data URL:
+// html2canvas cannot paint a cross-origin image it isn't allowed to read, and one
+// tainted image would abort the whole export.
+async function pdfLogoHtml(height = 38) {
+  const logo = await orgLogo(activeOrg);
+  if (logo.isCompany) {
+    try {
+      const blob = await (await fetch(logo.src)).blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob);
+      });
+      return `<div style="background:#fff;border-radius:8px;padding:5px 8px;display:flex;align-items:center;"><img src="${dataUrl}" style="height:${height - 10}px;display:block;"></div>`;
+    } catch (_) { /* fall back to the platform logo */ }
+  }
+  return `<img src="${PLATFORM_LOGO}" style="height:${height}px;display:block;">`;
+}
+
 const SGP_ACTIVE_ORG_KEY = 'sgp_active_org_id';
 
 // Which company is the user acting in right now, and with which role there?
@@ -427,6 +465,7 @@ async function requireAuth(activePage) {
   // profile.role keeps every existing `profile.role === 'owner'` check working, but it
   // now means "owner of this company" rather than "owner of everything".
   activeOrgName = org.name || PLATFORM_NAME;
+  activeOrg = org;
 
   profile.legacy_role = profile.role;
   profile.role = org.role;

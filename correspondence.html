@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
 .dir-badge { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; padding:3px 9px; border-radius:999px; }
-.dir-badge.outgoing { background:rgba(0,214,143,0.14); color:var(--green-deep); }
+.dir-badge.outgoing { background:rgba(34, 216, 107,0.14); color:var(--green-deep); }
 .dir-badge.incoming { background:rgba(61,158,255,0.14); color:#1a6fc4; }
 </style>
 </head>
@@ -436,27 +436,28 @@
     const genStr = now.toLocaleDateString('he-IL') + ' ' + now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
     const root = document.createElement('div');
     root.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;background:#fff;direction:rtl;font-family:"Assistant","Segoe UI",sans-serif;';
+    const bannerLogo = await pdfLogoHtml(42);
     root.innerHTML = `
-      <div style="background:linear-gradient(135deg,#1A237E 0%,#0F1757 100%);padding:26px 36px;display:flex;align-items:center;justify-content:space-between;">
-        <img src="icons/logo-white.svg" style="height:42px;display:block;">
+      <div style="background:linear-gradient(135deg,#16262E 0%,#081014 100%);padding:26px 36px;display:flex;align-items:center;justify-content:space-between;">
+        ${bannerLogo}
         <div style="color:#fff;font-size:12px;opacity:0.75;">${genStr}</div>
       </div>
       <div style="padding:28px 36px 8px;">
-        <h1 style="color:#1A237E;font-size:24px;font-weight:800;margin:0;">${esc(title)}</h1>
+        <h1 style="color:#16262E;font-size:24px;font-weight:800;margin:0;">${esc(title)}</h1>
         <div style="color:#6b7280;font-size:13px;margin-top:6px;">${esc(site.name)} · סה"כ ${rows.length} רשומות</div>
       </div>
       <div style="padding:12px 36px 28px;">
         ${rows.map(r => `
-          <div style="border:1px solid #e1e5f0;border-radius:10px;padding:16px 20px;margin-bottom:14px;">
+          <div style="border:1px solid #E3E9E6;border-radius:10px;padding:16px 20px;margin-bottom:14px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <strong style="font-size:15px;color:#1a1f36;">${esc(r.subject)}</strong>
+              <strong style="font-size:15px;color:#0E1A20;">${esc(r.subject)}</strong>
               <span style="font-size:12px;color:#6b7280;">${esc(fmtDate(r.entry_date))} · ${r.direction === 'outgoing' ? 'יוצא (בקשה/פנייה ליועץ)' : 'נכנס (אישור/עדכון מהיועץ)'}${r.party ? ' · ' + esc(r.party) : ''}${r.category ? ' · ' + esc(r.category) : ''}</span>
             </div>
             <div style="font-size:13px;color:#374151;white-space:pre-wrap;">${esc(r.body || '—')}</div>
           </div>
         `).join('')}
       </div>
-      <div style="padding:14px 36px;border-top:1px solid #e1e5f0;color:#9aa0ab;font-size:11px;text-align:center;">
+      <div style="padding:14px 36px;border-top:1px solid #E3E9E6;color:#9aa0ab;font-size:11px;text-align:center;">
         ${esc(org.name)}
       </div>
     `;

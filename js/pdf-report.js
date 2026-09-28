@@ -22,8 +22,8 @@ function sgpFmtPdfCell(v, col) {
       const dateLabel = d.date ? ` · ${fmtDate(d.date)}` : '';
       return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;">
         <span style="background:#E8FBF3;color:#00A86B;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700;white-space:nowrap;">📎 ${typeLabel}</span>
-        <span style="color:#141729;">${sgpEsc(d.name)}</span>
-        ${dateLabel ? `<span style="color:#A0A5C0;font-weight:600;">${dateLabel}</span>` : ''}
+        <span style="color:#0E1A20;">${sgpEsc(d.name)}</span>
+        ${dateLabel ? `<span style="color:#9FAAB0;font-weight:600;">${dateLabel}</span>` : ''}
       </div>`;
     }).join('');
   }
@@ -46,11 +46,11 @@ function sgpFmtPdfCell(v, col) {
   return s;
 }
 
-function sgpBannerHtml(genStr) {
+function sgpBannerHtml(genStr, logoHtml) {
   return `
-    <div style="background:linear-gradient(135deg,#121A6B 0%,#0A1048 100%);padding:22px 32px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="background:linear-gradient(135deg,#0E1A20 0%,#081014 100%);padding:22px 32px;display:flex;align-items:center;justify-content:space-between;">
       <div style="display:flex;align-items:center;gap:14px;">
-        <img src="icons/logo-white.svg" style="height:38px;display:block;" onerror="this.style.display='none'">
+        ${logoHtml}
         <div>
           <div style="color:#fff;font-size:15px;font-weight:800;letter-spacing:-0.2px;">${esc(orgDisplayName())}</div>
           <div style="color:rgba(255,255,255,0.65);font-size:11.5px;margin-top:2px;">ניהול אתרי בנייה</div>
@@ -60,24 +60,24 @@ function sgpBannerHtml(genStr) {
         <div>הופק ב־${genStr}</div>
       </div>
     </div>
-    <div style="height:4px;background:linear-gradient(90deg,#00D68F 0%,#3D9EFF 100%);"></div>`;
+    <div style="height:4px;background:linear-gradient(90deg,#22D86B 0%,#16B650 100%);"></div>`;
 }
 
 function sgpTitleBlockHtml(title, subtitle, names, period, count) {
   return `
     <div style="padding:26px 32px 8px;">
-      <h1 style="color:#121A6B;font-size:26px;font-weight:800;margin:0;letter-spacing:-0.4px;">${title}</h1>
-      ${subtitle ? `<div style="color:#6B7090;font-size:13px;margin-top:6px;font-weight:500;">${subtitle}</div>` : ''}
+      <h1 style="color:#0E1A20;font-size:26px;font-weight:800;margin:0;letter-spacing:-0.4px;">${title}</h1>
+      ${subtitle ? `<div style="color:#637178;font-size:13px;margin-top:6px;font-weight:500;">${subtitle}</div>` : ''}
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;">
-        <div style="background:#F4F6FB;border:1px solid #E6EAF5;border-radius:12px;padding:10px 14px;min-width:140px;">
-          <div style="font-size:11px;color:#6B7090;font-weight:600;">אתרים</div>
+        <div style="background:#F3F6F4;border:1px solid #E3E9E6;border-radius:12px;padding:10px 14px;min-width:140px;">
+          <div style="font-size:11px;color:#637178;font-weight:600;">אתרים</div>
           <div style="font-size:13px;font-weight:700;margin-top:2px;">${sgpEsc(names.join(', ') || '—')}</div>
         </div>
-        <div style="background:#F4F6FB;border:1px solid #E6EAF5;border-radius:12px;padding:10px 14px;min-width:140px;">
-          <div style="font-size:11px;color:#6B7090;font-weight:600;">תקופה</div>
+        <div style="background:#F3F6F4;border:1px solid #E3E9E6;border-radius:12px;padding:10px 14px;min-width:140px;">
+          <div style="font-size:11px;color:#637178;font-weight:600;">תקופה</div>
           <div style="font-size:13px;font-weight:700;margin-top:2px;">${period}</div>
         </div>
-        <div style="background:#E8FBF3;border:1px solid rgba(0,214,143,0.25);border-radius:12px;padding:10px 14px;min-width:100px;">
+        <div style="background:#E8FBF3;border:1px solid rgba(34, 216, 107,0.25);border-radius:12px;padding:10px 14px;min-width:100px;">
           <div style="font-size:11px;color:#00A86B;font-weight:600;">סה״כ רשומות</div>
           <div style="font-size:18px;font-weight:800;color:#04231a;margin-top:2px;">${count}</div>
         </div>
@@ -87,17 +87,17 @@ function sgpTitleBlockHtml(title, subtitle, names, period, count) {
 
 function sgpContinuationHeaderHtml(title, pageLabel) {
   return `
-    <div style="padding:16px 32px 4px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #E6EAF5;">
-      <div style="font-size:14px;font-weight:800;color:#121A6B;">${title} — המשך</div>
-      <div style="font-size:11px;color:#A0A5C0;font-weight:600;">${pageLabel}</div>
+    <div style="padding:16px 32px 4px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #E3E9E6;">
+      <div style="font-size:14px;font-weight:800;color:#0E1A20;">${title} — המשך</div>
+      <div style="font-size:11px;color:#9FAAB0;font-weight:600;">${pageLabel}</div>
     </div>`;
 }
 
 function sgpFooterHtml(title) {
   return `
-    <div style="padding:16px 32px 22px;border-top:1px solid #E6EAF5;display:flex;justify-content:space-between;align-items:center;gap:12px;">
-      <div style="color:#A0A5C0;font-size:11px;font-weight:600;">${esc(orgDisplayName())} — דוח אוטומטי מהמערכת</div>
-      <div style="color:#A0A5C0;font-size:11px;font-weight:600;">${title}</div>
+    <div style="padding:16px 32px 22px;border-top:1px solid #E3E9E6;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <div style="color:#9FAAB0;font-size:11px;font-weight:600;">${esc(orgDisplayName())} — דוח אוטומטי מהמערכת</div>
+      <div style="color:#9FAAB0;font-size:11px;font-weight:600;">${title}</div>
     </div>`;
 }
 
@@ -111,7 +111,7 @@ async function sgpWaitForImages(el) {
 
 function sgpMakeRoot(rootW) {
   const root = document.createElement('div');
-  root.style.cssText = `position:fixed;left:-9999px;top:0;width:${rootW}px;background:#fff;direction:rtl;font-family:Rubik,Segoe UI,Tahoma,sans-serif;color:#141729;`;
+  root.style.cssText = `position:fixed;left:-9999px;top:0;width:${rootW}px;background:#fff;direction:rtl;font-family:Rubik,Segoe UI,Tahoma,sans-serif;color:#0E1A20;`;
   document.body.appendChild(root);
   return root;
 }
@@ -120,6 +120,7 @@ function sgpMakeRoot(rootW) {
 // starting on its own fresh page(s). Never cuts a row/card across a page break --
 // it measures real heights first, then only breaks between whole items.
 async function sgpRenderSectionIntoPdf(pdf, { title, columns, rows, siteNames, periodText, subtitle }, { isFirstSectionOverall } = {}) {
+  const bannerLogo = await pdfLogoHtml(38);
   if (!rows || !rows.length) return false;
 
   const useCardLayout = columns.length > 6;
@@ -133,21 +134,21 @@ async function sgpRenderSectionIntoPdf(pdf, { title, columns, rows, siteNames, p
 
   const tableHeadHtml = `
     <tr>
-      <th style="background:#F7F8FC;color:#6B7090;font-weight:700;font-size:11px;text-align:right;padding:12px 10px;border-bottom:1px solid #E6EAF5;width:36px;">#</th>
-      ${columns.map(c => `<th style="background:#F7F8FC;color:#6B7090;font-weight:700;font-size:11px;text-align:right;padding:12px 12px;border-bottom:1px solid #E6EAF5;white-space:nowrap;">${c.label}</th>`).join('')}
+      <th style="background:#F7F8FC;color:#637178;font-weight:700;font-size:11px;text-align:right;padding:12px 10px;border-bottom:1px solid #E3E9E6;width:36px;">#</th>
+      ${columns.map(c => `<th style="background:#F7F8FC;color:#637178;font-weight:700;font-size:11px;text-align:right;padding:12px 12px;border-bottom:1px solid #E3E9E6;white-space:nowrap;">${c.label}</th>`).join('')}
     </tr>`;
 
   function rowHtml(row, i) {
     return `
       <tr style="background:${i % 2 === 0 ? '#ffffff' : '#FAFBFE'};">
-        <td style="padding:11px 10px;border-bottom:1px solid #EEF1F8;color:#A0A5C0;font-size:11px;font-weight:600;">${i + 1}</td>
-        ${columns.map(c => `<td style="padding:11px 12px;border-bottom:1px solid #EEF1F8;color:#141729;vertical-align:top;line-height:1.45;">${sgpFmtPdfCell(row[c.key], c)}</td>`).join('')}
+        <td style="padding:11px 10px;border-bottom:1px solid #EEF1F8;color:#9FAAB0;font-size:11px;font-weight:600;">${i + 1}</td>
+        ${columns.map(c => `<td style="padding:11px 12px;border-bottom:1px solid #EEF1F8;color:#0E1A20;vertical-align:top;line-height:1.45;">${sgpFmtPdfCell(row[c.key], c)}</td>`).join('')}
       </tr>`;
   }
   function tableWrap(bodyRowsHtml) {
     return `
       <div style="padding:18px 32px 24px;">
-        <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;border:1px solid #E6EAF5;border-radius:14px;overflow:hidden;">
+        <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;border:1px solid #E3E9E6;border-radius:14px;overflow:hidden;">
           <thead>${tableHeadHtml}</thead>
           <tbody>${bodyRowsHtml}</tbody>
         </table>
@@ -160,22 +161,22 @@ async function sgpRenderSectionIntoPdf(pdf, { title, columns, rows, siteNames, p
   function cardHtml(row, i) {
     const gridItems = gridCols.map(c => `
       <div>
-        <div style="font-size:10px;color:#A0A5C0;font-weight:700;margin-bottom:2px;">${c.label}</div>
-        <div style="font-size:12.5px;color:#141729;line-height:1.4;">${sgpFmtPdfCell(row[c.key], c)}</div>
+        <div style="font-size:10px;color:#9FAAB0;font-weight:700;margin-bottom:2px;">${c.label}</div>
+        <div style="font-size:12.5px;color:#0E1A20;line-height:1.4;">${sgpFmtPdfCell(row[c.key], c)}</div>
       </div>`).join('');
     const longItems = longCols.map(c => {
       const v = sgpFmtPdfCell(row[c.key], c);
       if (v === '<span style="color:#9aa0ab;">—</span>') return '';
       return `
-        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #E6EAF5;">
-          <div style="font-size:10px;color:#A0A5C0;font-weight:700;margin-bottom:3px;">${c.label}</div>
-          <div style="font-size:12.5px;color:#141729;line-height:1.5;white-space:pre-wrap;">${v}</div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #E3E9E6;">
+          <div style="font-size:10px;color:#9FAAB0;font-weight:700;margin-bottom:3px;">${c.label}</div>
+          <div style="font-size:12.5px;color:#0E1A20;line-height:1.5;white-space:pre-wrap;">${v}</div>
         </div>`;
     }).join('');
     return `
-      <div class="pdf-card" style="border:1px solid #E6EAF5;border-radius:12px;padding:14px 18px;margin-bottom:10px;background:#fff;">
+      <div class="pdf-card" style="border:1px solid #E3E9E6;border-radius:12px;padding:14px 18px;margin-bottom:10px;background:#fff;">
         <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
-          <span style="background:#F4F6FB;color:#6B7090;font-size:10.5px;font-weight:700;padding:2px 10px;border-radius:999px;">#${i + 1}</span>
+          <span style="background:#F3F6F4;color:#637178;font-size:10.5px;font-weight:700;padding:2px 10px;border-radius:999px;">#${i + 1}</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px 18px;">${gridItems}</div>
         ${longItems}
@@ -197,13 +198,13 @@ async function sgpRenderSectionIntoPdf(pdf, { title, columns, rows, siteNames, p
   let theadTop = 0, theadHeight = 0, itemHeights = [];
 
   if (useCardLayout) {
-    measureRoot.innerHTML = sgpBannerHtml(genStr) + sgpTitleBlockHtml(title, subtitle, names, period, rows.length) + cardsWrap(rows.map((r, i) => cardHtml(r, i)).join(''));
+    measureRoot.innerHTML = sgpBannerHtml(genStr, bannerLogo) + sgpTitleBlockHtml(title, subtitle, names, period, rows.length) + cardsWrap(rows.map((r, i) => cardHtml(r, i)).join(''));
     await sgpWaitForImages(measureRoot);
     const cardsWrapEl = measureRoot.querySelector('.pdf-card')?.parentElement;
     theadTop = cardsWrapEl ? (cardsWrapEl.getBoundingClientRect().top - measureRoot.getBoundingClientRect().top) : 0;
     itemHeights = Array.from(measureRoot.querySelectorAll('.pdf-card')).map(el => el.getBoundingClientRect().height + 10);
   } else {
-    measureRoot.innerHTML = sgpBannerHtml(genStr) + sgpTitleBlockHtml(title, subtitle, names, period, rows.length) + tableWrap(rows.map((r, i) => rowHtml(r, i)).join(''));
+    measureRoot.innerHTML = sgpBannerHtml(genStr, bannerLogo) + sgpTitleBlockHtml(title, subtitle, names, period, rows.length) + tableWrap(rows.map((r, i) => rowHtml(r, i)).join(''));
     await sgpWaitForImages(measureRoot);
     const measureRect = measureRoot.getBoundingClientRect();
     const theadEl = measureRoot.querySelector('thead');
@@ -239,7 +240,7 @@ async function sgpRenderSectionIntoPdf(pdf, { title, columns, rows, siteNames, p
 
     const pageRoot = sgpMakeRoot(rootW);
     pageRoot.innerHTML =
-      (first ? sgpBannerHtml(genStr) + sgpTitleBlockHtml(title, subtitle, names, period, rows.length) : sgpContinuationHeaderHtml(title, `עמוד ${p + 1} מתוך ${pages.length}`)) +
+      (first ? sgpBannerHtml(genStr, bannerLogo) + sgpTitleBlockHtml(title, subtitle, names, period, rows.length) : sgpContinuationHeaderHtml(title, `עמוד ${p + 1} מתוך ${pages.length}`)) +
       bodyHtml +
       (isLast ? sgpFooterHtml(title) : '');
     await sgpWaitForImages(pageRoot);
