@@ -428,6 +428,66 @@ async function resolveActiveSite(profile, org) {
   return mySites.length === 1 ? { ...site } : { ...site, __allSites: mySites };
 }
 
+// Shown in place of the page when a company's owner or admin has no site yet — the
+// first sign-in of a newly opened company. Creates the site, then reloads into it.
+// Returns null so the calling page stops, exactly like the other requireAuth exits.
+function firstSiteSetup(org) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg);direction:rtl;">
+      <div class="card" style="width:100%;max-width:440px;">
+        <div class="auth-brand"><img src="${PLATFORM_LOGO}" alt="TADOK"></div>
+        <h2 style="margin:0 0 6px;color:var(--navy);">ברוכים הבאים, ${esc(org.name)}</h2>
+        <p style="margin:0 0 18px;color:var(--steel);line-height:1.6;">
+          כדי להתחיל, צרו את אתר הבנייה הראשון של החברה. אתרים נוספים אפשר להוסיף אחר כך מעמוד המשתמשים.
+        </p>
+        <div id="firstSiteMsg" class="msg"></div>
+        <form id="firstSiteForm" style="display:flex;flex-direction:column;gap:14px;">
+          <div class="field"><label for="firstSiteName">שם האתר *</label>
+            <input id="firstSiteName" name="name" required maxlength="120" autocomplete="off"></div>
+          <div class="field"><label for="firstSiteLocation">מיקום</label>
+            <input id="firstSiteLocation" name="location" maxlength="200" autocomplete="off"></div>
+          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">יצירת האתר והמשך</button>
+        </form>
+        <button type="button" class="btn btn-ghost" id="firstSiteLogout" style="width:100%;justify-content:center;margin-top:10px;">יציאה</button>
+      </div>
+    </div>`;
+
+  document.getElementById('firstSiteLogout').addEventListener('click', async () => {
+    sessionStorage.removeItem(SGP_ACTIVE_ORG_KEY);
+    sessionStorage.removeItem('sgp_active_site_id');
+    await sb.auth.signOut();
+    location.href = 'index.html';
+  });
+
+  document.getElementById('firstSiteForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('firstSiteMsg');
+    hideMsg(msgEl);
+    const fd = new FormData(e.target);
+    const name = String(fd.get('name') || '').trim();
+    if (!name) { showMsg(msgEl, 'יש להזין שם לאתר', 'error'); return; }
+
+    const btn = e.target.querySelector('[type=submit]');
+    btn.disabled = true;
+    // organization_id is always sent explicitly. The database would fill it in by itself,
+    // but only when the user administers exactly one company, and the company fence
+    // re-checks it either way.
+    const { data, error } = await sb.from('sites')
+      .insert({ name, location: String(fd.get('location') || '').trim() || null, organization_id: org.id })
+      .select('id').single();
+    if (error || !data) {
+      btn.disabled = false;
+      showMsg(msgEl, 'לא ניתן היה ליצור את האתר: ' + (error?.message || 'אין הרשאה'), 'error');
+      return;
+    }
+    sessionStorage.setItem('sgp_active_site_id', data.id);
+    location.reload();
+  });
+
+  document.getElementById('firstSiteName').focus();
+  return null;
+}
+
 async function requireAuth(activePage) {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
@@ -471,7 +531,13 @@ async function requireAuth(activePage) {
   profile.role = org.role;
 
   const site = await resolveActiveSite(profile, org);
-  if (!site) return stop('לא נמצא אתר פעיל בחברה הזו', 'יש ליצור אתר אחד לפחות, או לשייך את המשתמש לאתר קיים.');
+  if (!site) {
+    // A brand-new company has no sites yet. Every page — including users.html, where
+    // sites are otherwise created — sits behind this check, so without this its owner
+    // would be stopped at first sign-in with no way forward.
+    if (profile.role === 'owner' || profile.role === 'admin') return firstSiteSetup(org);
+    return stop('עדיין לא שויכת לאף אתר', 'פנו למנהל החברה כדי שישייך אתכם לאתר.');
+  }
 
   await renderHeader(activePage, profile, site, org);
 
