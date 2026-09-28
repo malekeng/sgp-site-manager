@@ -383,6 +383,19 @@ input, select, textarea {
   height: 3px;
   background: linear-gradient(90deg, var(--green) 0%, var(--green-deep) 100%);
 }
+.stat-card.has-ico {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 12px;
+  align-items: center;
+}
+.stat-card.has-ico .stat-ico {
+  grid-column: 2; grid-row: 1 / span 2;
+  width: 44px; height: 44px; object-fit: contain;
+  /* the set was lit for a dark sidebar; a soft shadow keeps the pale ones from fading into a white card */
+  filter: drop-shadow(0 2px 3px rgba(14, 26, 32, 0.18));
+}
+.stat-card.has-ico .label, .stat-card.has-ico .value { grid-column: 1; }
 .stat-card .label {
   position: relative;
   color: var(--steel);

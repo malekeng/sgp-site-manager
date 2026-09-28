@@ -437,24 +437,25 @@ function greetingByHour() {
 
   async function loadStats() {
     const tables = [
-      { key: 'concrete_pours', label: 'יציקות בטון', icon: '🧱' },
-      { key: 'rebar_deliveries', label: 'משלוחי ברזל', icon: '🔩' },
-      { key: 'prestressed_slabs', label: 'לוח״דים', icon: '🏗️' },
-      { key: 'exceptions', label: 'חריגים', icon: '⚠️' },
-      { key: 'quantity_sheets', label: 'גיליונות כמויות', icon: '📐' },
-      { key: 'price_quotes', label: 'הצעות מחיר', icon: '💰' },
-      { key: 'vendor_submissions', label: 'הגשות קבלנים/ספקים/ציוד/חומר', icon: '📥' },
-      { key: 'quality_controls', label: 'בקרות איכות', icon: '✅' },
-      { key: 'facility_file_items', label: 'תיק מתקן', icon: '📜' },
-      { key: 'documents', label: 'מסמכים מצורפים', icon: '📎' },
+      { key: 'concrete_pours', label: 'יציקות בטון', ico: 'concrete' },
+      { key: 'rebar_deliveries', label: 'משלוחי ברזל', ico: 'rebar' },
+      { key: 'prestressed_slabs', label: 'לוח״דים', ico: 'slabs' },
+      { key: 'exceptions', label: 'חריגים', ico: 'exceptions' },
+      { key: 'quantity_sheets', label: 'גיליונות כמויות', ico: 'quantity' },
+      { key: 'price_quotes', label: 'הצעות מחיר', ico: 'prices' },
+      { key: 'vendor_submissions', label: 'הגשות קבלנים/ספקים/ציוד/חומר', ico: 'group-submissions' },
+      { key: 'quality_controls', label: 'בקרות איכות', ico: 'quality' },
+      { key: 'facility_file_items', label: 'תיק מתקן', ico: 'facility-file' },
+      { key: 'documents', label: 'מסמכים מצורפים', ico: 'documents' },
     ];
     const results = await Promise.all(tables.map(t =>
       sb.from(t.key).select('id', { count: 'exact', head: true }).eq('site_id', site.id)
     ));
     const host = document.getElementById('statsRow');
     host.innerHTML = tables.map((t, i) => `
-      <div class="stat-card">
-        <div class="label">${t.icon} ${t.label}</div>
+      <div class="stat-card has-ico">
+        <img class="stat-ico" src="icons/nav/${t.ico}.webp" alt="" aria-hidden="true" width="44" height="44">
+        <div class="label">${t.label}</div>
         <div class="value">${results[i].count ?? 0}</div>
       </div>
     `).join('');
