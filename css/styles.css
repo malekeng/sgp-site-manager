@@ -308,6 +308,122 @@ input, select, textarea {
   .page-title { padding-right: 62px; }
 }
 
+.field-hint { font-size: 11.5px; color: var(--steel); margin-top: 4px; min-height: 0; }
+.field-hint:empty { display: none; }
+
+/* ===== Licensing path to טופס 4 (facility-file.html, js/licensing.js) ===== */
+.lic-card { margin-bottom: 20px; }
+.lic-card[hidden] { display: none; }
+.lic-card .card-header { flex-wrap: wrap; gap: 6px 12px; }
+.lic-sub { font-size: 12px; color: var(--steel); }
+.lic-path { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.lic-step button { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px 8px; padding: 10px 12px;
+  background: var(--sheet); border: 1.5px solid var(--border); border-radius: 14px; cursor: pointer; font: inherit; text-align: right; color: var(--ink); }
+.lic-step button:hover { border-color: var(--green); }
+.lic-step.active button { border-color: var(--green-deep); box-shadow: 0 0 0 3px var(--green-soft); }
+.lic-num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--bg); color: var(--steel); }
+.lic-done .lic-num { background: var(--green); color: #fff; }
+.lic-partial .lic-num { background: var(--warn); color: #fff; }
+.lic-name { font-size: 12.5px; font-weight: 700; line-height: 1.3; }
+.lic-count { font-size: 12px; color: var(--steel); font-variant-numeric: tabular-nums; }
+.lic-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--bg); overflow: hidden; }
+.lic-bar span { display: block; height: 100%; background: var(--green-deep); border-radius: 2px; }
+.lic-note { font-size: 12px; color: var(--steel); margin: 8px 2px 0; }
+.lic-offer { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 12px;
+  background: var(--green-soft); border-radius: var(--radius-sm); padding: 14px 16px; }
+.lic-offer p { margin: 4px 0 0; font-size: 13px; color: var(--ink); line-height: 1.6; max-width: 70ch; }
+.lic-offer.small { background: var(--bg); font-size: 13px; padding: 10px 14px; }
+.lic-basis { font-size: 11.5px; color: var(--steel); }
+.lic-status { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.lic-status-open { background: var(--bg); color: var(--steel); }
+.lic-status-progress { background: #FFF1DC; color: #B25E00; }
+.lic-status-done { background: var(--green-soft); color: var(--green-deep); }
+
+.corr-reply { font-size: 12px; color: var(--steel); }
+
+/* ===== Price comparison (prices.html) ===== */
+.pc-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.pc-group { background: var(--bg); border-radius: var(--radius-sm); padding: 12px 14px; }
+.pc-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.pc-head b { font-size: 14px; color: var(--navy); }
+.pc-head span { font-size: 12px; color: var(--steel); }
+.pc-spread { margin-inline-start: auto; font-weight: 700; color: #B25E00 !important; }
+.pc-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.pc-list li { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; background: var(--sheet); border-radius: 9px; padding: 6px 10px; font-size: 13px; }
+.pc-list li.best { box-shadow: inset 0 0 0 1.5px var(--green); }
+.pc-price { font-weight: 800; font-variant-numeric: tabular-nums; }
+.pc-date { grid-column: 1 / -1; font-size: 11.5px; color: var(--steel); }
+.pc-date.old { color: #B25E00; }
+.pc-note { font-size: 11.5px; color: var(--steel); margin-top: 6px; }
+
+/* ===== Weekly meeting: open items and action items ===== */
+.mt-list { display: grid; gap: 6px; }
+.mt-row { display: grid; grid-template-columns: minmax(0, 1fr) 130px 140px auto; gap: 6px; align-items: center; }
+.mt-row input, .mt-row select { font-size: 13px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--sheet); min-width: 0; }
+.mt-row.saved { display: flex; justify-content: space-between; gap: 10px; background: var(--bg); border-radius: 9px; padding: 7px 10px; font-size: 13px; }
+.mt-meta { color: var(--steel); font-size: 12px; white-space: nowrap; }
+.mt-open { margin: 4px 0 0; padding-inline-start: 18px; display: grid; gap: 4px; font-size: 13px; }
+.mt-open a { color: var(--navy); text-decoration: underline; text-underline-offset: 2px; }
+.mt-badge { display: inline-block; margin-inline-start: 8px; font-size: 11.5px; font-weight: 700; color: var(--green-deep); background: var(--green-soft); border-radius: 999px; padding: 1px 8px; }
+@media (max-width: 600px) { .mt-row { grid-template-columns: 1fr 1fr; } .mt-row input[data-k="title"] { grid-column: 1 / -1; } }
+
+/* ===== QC checklists (js/qc-checklists.js) and non-conformances ===== */
+.qc-checklist { background: var(--bg); border-radius: var(--radius-sm); padding: 12px 14px; margin: 4px 0 16px; }
+.qc-empty { margin: 0; font-size: 13px; color: var(--steel); }
+.qc-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-bottom: 8px; }
+.qc-head b { font-size: 14px; color: var(--navy); }
+.qc-head span { font-size: 11.5px; color: var(--steel); }
+.qc-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: qc; }
+.qc-item { counter-increment: qc; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  background: var(--sheet); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+.qc-item.hold { border-inline-start: 3px solid var(--warn); }
+.qc-text::before { content: counter(qc) ". "; color: var(--steel); font-weight: 700; }
+.qc-hold-key { display: inline-block; font-size: 10.5px; font-weight: 800; color: #B25E00; background: #FFF1DC; border-radius: 999px; padding: 1px 7px; }
+.qc-choices { display: flex; gap: 4px; }
+.qc-choice { font-size: 11.5px; font-weight: 700; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--sheet); color: var(--steel); }
+.qc-choice.on.qc-ok { background: var(--green); border-color: var(--green); color: #04231a; }
+.qc-choice.on.qc-fail { background: var(--danger); border-color: var(--danger); color: #fff; }
+.qc-choice.on.qc-na { background: var(--steel-light); border-color: var(--steel-light); color: #fff; }
+.qc-mini { font-size: 12px; color: var(--steel); white-space: nowrap; }
+.qc-mini-fail { color: var(--danger); }
+.lic-status-fail { background: #FFECEE; color: #D1293A; }
+.ncr-sev { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 12px; font-weight: 800; color: #fff; }
+.ncr-sev-1 { background: var(--steel-light); }
+.ncr-sev-2 { background: var(--warn); }
+.ncr-sev-3 { background: var(--danger); }
+.ncr-late { font-size: 11.5px; font-weight: 700; color: #D1293A; }
+
+/* ===== "מהמסמכים המצורפים" — what the attached documents say (js/doc-insights.js) ===== */
+.doc-insights { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.doc-insights > * { min-width: 0; }
+.doc-insights[hidden] { display: none; }
+.di-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--navy); }
+.di-head b { font-size: 14px; }
+.di-head span { font-size: 11.5px; color: var(--steel); }
+.di-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.di-checks li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.5; padding: 7px 10px; border-radius: 10px; background: var(--sheet); }
+.di-checks li .ui-ico { flex: none; margin-top: 2px; }
+.di-checks .di-ok .ui-ico { color: var(--green-deep); }
+.di-checks .di-info .ui-ico { color: var(--steel); }
+.di-checks .di-warn { background: #FFF6EA; }
+.di-checks .di-warn .ui-ico { color: #C46A00; }
+.di-checks .di-bad { background: #FFECEE; }
+.di-checks .di-bad .ui-ico { color: var(--danger); }
+.di-more summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--steel); }
+.di-more .table-wrap { margin-top: 8px; max-height: 260px; overflow: auto; }
+.di-table { font-size: 12px; }
+.di-table th, .di-table td { padding: 6px 8px; white-space: nowrap; }
+.di-table .di-na { color: var(--steel-light); }
+.di-table .di-doubt { color: #C46A00; font-weight: 700; }
+.di-foot { font-size: 11px; color: var(--steel); margin: 6px 0 0; }
+.di-docs { margin: 6px 0 0; padding-inline-start: 18px; font-size: 12px; color: var(--ink); display: grid; gap: 3px; }
+.di-docs .di-pending { color: var(--steel); }
+.di-read { justify-self: start; }
+.di-dot { width: 11px; height: 11px; border-radius: 50%; border: 0; padding: 0; margin-inline-start: 6px; vertical-align: middle; cursor: pointer; }
+.di-dot-ok { background: var(--green); }
+.di-dot-warn { background: var(--warn); }
+.di-dot-bad { background: var(--danger); }
+
 /* ===== Phones: bottom tab bar and home tiles (hidden on desktop) ===== */
 .tab-bar, .home-tiles { display: none; }
 @media (max-width: 900px) {
@@ -390,7 +506,10 @@ input, select, textarea {
 /* ===== Layout ===== */
 .page {
   flex: 1;
-  width: 100%;
+  /* auto, not 100%: with the sidebar's margin a 100% width overflowed every screen
+     narrower than about 1500px and cut the page off on the left */
+  width: auto;
+  min-width: 0;
   max-width: 1280px;
   margin-right: 236px;
   padding: 32px 24px 64px;

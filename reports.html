@@ -26,6 +26,8 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
 <script src="js/excel-report.js"></script>
+<script src="js/doc-insights.js"></script>
+<script src="js/weekly-report.js"></script>
 <style>
 .reports-grid { display: grid; grid-template-columns: 1fr 1.7fr; column-gap: 24px; align-items: start; }
 .reports-summary-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; align-items: start; }
@@ -109,15 +111,15 @@
       </div>
       <div class="export-row">
         <img class="ico3d" src="icons/nav/qc-preliminary.webp" alt="" aria-hidden="true" width="28" height="28">
-        <span class="export-name">בקרה מקדימה</span>
-        <button class="btn btn-outline btn-sm" data-export="qc_preliminary" data-format="pdf" aria-label="בקרה מקדימה — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
-        <button class="btn btn-outline btn-sm" data-export="qc_preliminary" data-format="xlsx" aria-label="בקרה מקדימה — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+        <span class="export-name">בקרה מוקדמת</span>
+        <button class="btn btn-outline btn-sm" data-export="qc_preliminary" data-format="pdf" aria-label="בקרה מוקדמת — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="qc_preliminary" data-format="xlsx" aria-label="בקרה מוקדמת — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
       </div>
       <div class="export-row">
         <img class="ico3d" src="icons/nav/qc-inprocess.webp" alt="" aria-hidden="true" width="28" height="28">
-        <span class="export-name">בקרה בתהליך</span>
-        <button class="btn btn-outline btn-sm" data-export="qc_inprocess" data-format="pdf" aria-label="בקרה בתהליך — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
-        <button class="btn btn-outline btn-sm" data-export="qc_inprocess" data-format="xlsx" aria-label="בקרה בתהליך — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
+        <span class="export-name">בקרה שוטפת</span>
+        <button class="btn btn-outline btn-sm" data-export="qc_inprocess" data-format="pdf" aria-label="בקרה שוטפת — PDF"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="18" height="18">PDF</button>
+        <button class="btn btn-outline btn-sm" data-export="qc_inprocess" data-format="xlsx" aria-label="בקרה שוטפת — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
       </div>
       <div class="export-row">
         <img class="ico3d" src="icons/nav/facility-file.webp" alt="" aria-hidden="true" width="28" height="28">
@@ -126,6 +128,18 @@
         <button class="btn btn-outline btn-sm" data-export="facility_file" data-format="xlsx" aria-label="תיק מתקן / טופס 4 — Excel"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="18" height="18">Excel</button>
       </div>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="with-ico"><img class="ico3d" src="icons/nav/quality.webp" alt="" aria-hidden="true" width="26" height="26">דוח איכות שבועי</h2></div>
+    <p style="font-size:12.5px;color:var(--steel);margin:-4px 0 12px;">
+      לפי המפרט הכללי לבקרת איכות: יציקות השבוע, ממצאים מהתעודות ודוחות המעבדה, תוצאות מעבדה מול הדרישה, בקרות איכות ונקודות עצירה, אי-התאמות פתוחות, אספקות ומשימות מהישיבות — הכול נאסף אוטומטית, בלי מילוי.
+    </p>
+    <div class="form-grid" style="margin-bottom:12px;">
+      <div class="field"><label>משבוע</label><input type="date" id="weekFrom"></div>
+      <div class="field"><label>עד</label><input type="date" id="weekTo"></div>
+    </div>
+    <button class="btn btn-primary" id="weeklyReportBtn"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="20" height="20">הפקת דוח שבועי</button>
   </div>
 
   <div class="card">
@@ -327,27 +341,29 @@
     },
     qc_preliminary: {
       ico: 'qc-preliminary',
-      title: 'בקרה מקדימה', table: 'quality_controls',
+      title: 'בקרה מוקדמת', table: 'quality_controls',
       staticFilter: { column: 'stage', value: 'preliminary' },
       dateField: 'control_date',
       columns: [
         { key: 'control_date', label: 'תאריך בקרה', type: 'date' },
-        { key: 'subject', label: 'בקרה מקדימה ל', type: 'text' },
+        { key: 'subject', label: 'בקרה מוקדמת ל', type: 'text' },
         { key: 'inspector', label: 'בודק / מבצע הבקרה', type: 'text' },
         { key: 'result', label: 'תוצאה', type: 'text' },
+        { key: 'approved_by', label: 'נקודת עצירה אושרה ע״י', type: 'text' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
     qc_inprocess: {
       ico: 'qc-inprocess',
-      title: 'בקרה בתהליך', table: 'quality_controls',
+      title: 'בקרה שוטפת', table: 'quality_controls',
       staticFilter: { column: 'stage', value: 'in_process' },
       dateField: 'control_date',
       columns: [
         { key: 'control_date', label: 'תאריך בקרה', type: 'date' },
-        { key: 'subject', label: 'בקרה בתהליך ל', type: 'text' },
+        { key: 'subject', label: 'בקרה שוטפת ל', type: 'text' },
         { key: 'inspector', label: 'בודק / מבצע הבקרה', type: 'text' },
         { key: 'result', label: 'תוצאה', type: 'text' },
+        { key: 'approved_by', label: 'נקודת עצירה אושרה ע״י', type: 'text' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
@@ -356,9 +372,10 @@
       title: 'תיק מתקן / טופס 4', table: 'facility_file_items',
       dateField: 'due_date',
       columns: [
+        { key: 'stage', label: 'שלב', type: 'text' },
         { key: 'item_name', label: 'שם הפריט / אישור נדרש', type: 'text' },
-        { key: 'category', label: 'קטגוריה', type: 'text' },
-        { key: 'responsible', label: 'גורם אחראי', type: 'text' },
+        { key: 'responsible', label: 'גורם מאשר / אחראי', type: 'text' },
+        { key: 'basis', label: 'בסיס', type: 'text' },
         { key: 'status', label: 'סטטוס', type: 'text' },
         { key: 'due_date', label: 'תאריך יעד', type: 'date' },
         { key: 'completed_date', label: 'תאריך השלמה', type: 'date' },
@@ -490,14 +507,17 @@
       {
         const { data } = await dateRange(sb.from('exceptions').select('*').in('site_id', filterState.siteIds), 'exception_date').order('exception_date', { ascending: false });
         sections.push({
-          title: 'חריגים', ico: 'exceptions',
+          title: 'חריגים / אי-התאמות', ico: 'exceptions',
           columns: [
             { key: 'exception_date', label: 'תאריך', type: 'date' },
             { key: 'category', label: 'קטגוריה', type: 'text' },
             { key: 'location', label: 'מיקום', type: 'text' },
+            { key: 'severity', label: 'חומרה', type: 'text' },
             { key: 'status', label: 'סטטוס', type: 'text' },
+            { key: 'planned_close_date', label: 'סגירה מתוכננת', type: 'date' },
+            { key: 'closed_date', label: 'נסגר', type: 'date' },
             { key: 'description', label: 'תיאור', type: 'text' },
-            { key: 'notes', label: 'הערות', type: 'text' },
+            { key: 'corrective_action', label: 'פעולה מתקנת', type: 'text' },
           ],
           rows: data || [],
         });
@@ -570,6 +590,26 @@
   }
   document.getElementById('exportFullSystemBtn').addEventListener('click', e => runFullExport('pdf', e.currentTarget));
   document.getElementById('exportFullSystemXlsxBtn').addEventListener('click', e => runFullExport('xlsx', e.currentTarget));
+
+  // weekly quality report: the last seven days unless another week is picked
+  {
+    const t = new Date(), iso = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const f = new Date(t); f.setDate(t.getDate() - 6);
+    document.getElementById('weekFrom').value = iso(f);
+    document.getElementById('weekTo').value = iso(t);
+    document.getElementById('weeklyReportBtn').addEventListener('click', async e => {
+      if (!filterState.siteIds.length) { toast('בחרו לפחות אתר אחד', 'error'); return; }
+      const btn = e.currentTarget, label = btn.innerHTML;
+      btn.disabled = true; btn.textContent = 'מכין דוח...';
+      try {
+        await sgpWeeklyQualityReport({
+          siteIds: filterState.siteIds, siteNames: sitesCache.filter(s => filterState.siteIds.includes(s.id)).map(s => s.name),
+          from: document.getElementById('weekFrom').value, to: document.getElementById('weekTo').value,
+        });
+      } catch (err) { console.error(err); toast('שגיאה בהפקת הדוח: ' + err.message, 'error'); }
+      finally { btn.disabled = false; btn.innerHTML = label; }
+    });
+  }
 
   document.querySelectorAll('[data-export]').forEach(btn => {
     btn.addEventListener('click', async () => {

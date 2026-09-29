@@ -22,6 +22,9 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="js/ocr.js"></script>
 </head>
 <body>
 
@@ -78,10 +81,13 @@
 <script src="js/supabase-client.js"></script>
 <script src="js/app.js"></script>
 <script src="js/documents.js"></script>
+<script src="js/doc-insights.js"></script>
 <script src="js/crud.js"></script>
 <script>
+const EQUIP_INSPECTION_MONTHS = { 'עגורן צריח': 6, 'במת הרמה': 6, 'אביזרי הרמה': 6, 'ציוד הרמה': 6, 'מנוף נייד / מכונת הרמה': 14 };
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 initCrudPage({
-  table: 'vendor_submissions',
+  table: 'vendor_submissions', docInsights: true,
   staticFilter: { column: 'submission_type', value: 'equipment' },
   icon: '🛠️',
   activePage: 'vendor-equipment.html',
@@ -93,21 +99,46 @@ initCrudPage({
     { key: 'category', label: 'קטגוריה', type: 'text' },
     { key: 'reg_number', label: 'מס\' רישוי / סידורי', type: 'text' },
     { key: 'approval_status', label: 'סטטוס אישור', type: 'text' },
+    { key: 'inspection_date', label: 'נבדק', type: 'date' },
     { key: 'valid_until', label: 'תוקף בדיקה תקופתית', type: 'date' },
     { key: 'submission_date', label: 'תאריך הגשה', type: 'date' },
   ],
   formFields: [
     { key: 'name', label: 'שם / סוג ציוד', type: 'text', required: true },
     { key: 'category', label: 'קטגוריה', type: 'select',
-      options: ['מנוף', 'פיגום', 'גנרטור', 'מכולה', 'ציוד הרמה', 'רכב עבודה', 'שונות'] },
+      options: ['עגורן צריח', 'מנוף נייד / מכונת הרמה', 'במת הרמה', 'אביזרי הרמה', 'מנוף', 'פיגום', 'גנרטור', 'מכולה', 'ציוד הרמה', 'רכב עבודה', 'שונות'] },
     { key: 'reg_number', label: 'מס\' רישוי / סידורי', type: 'text' },
     { key: 'contact_person', label: 'ספק / בעלים', type: 'text' },
     { key: 'phone', label: 'טלפון', type: 'text' },
     { key: 'approval_status', label: 'סטטוס אישור', type: 'select', options: ['ממתין לאישור', 'מאושר', 'נדחה'] },
-    { key: 'valid_until', label: 'תוקף בדיקה תקופתית (בודק מוסמך)', type: 'date' },
+    { key: 'inspection_date', label: 'תאריך הבדיקה האחרונה (תסקיר)', type: 'date' },
+    { key: 'valid_until', label: 'תוקף הבדיקה התקופתית', type: 'date' },
     { key: 'submission_date', label: 'תאריך הגשה', type: 'date', required: true },
     { key: 'notes', label: 'הערות', type: 'textarea', full: true },
   ],
+  // The validity follows from the last inspection and the kind of equipment (פקודת הבטיחות
+  // בעבודה: lifting machines every 14 months; tower cranes, lifting platforms and lifting
+  // accessories every 6). Filled in for the user; a date they typed themselves is kept.
+  formExtension: {
+    mount(form) {
+      const cat = form.querySelector('[name=category]'), insp = form.querySelector('[name=inspection_date]'), until = form.querySelector('[name=valid_until]');
+      const hint = document.createElement('div');
+      hint.className = 'field-hint';
+      until.insertAdjacentElement('afterend', hint);
+      const update = () => {
+        const months = EQUIP_INSPECTION_MONTHS[cat.value];
+        hint.textContent = months ? `בדיקה כל ${months} חודשים לסוג הציוד הזה` : (cat.value === 'מנוף' ? 'לחישוב אוטומטי בחרו "עגורן צריח" (6 ח׳) או "מנוף נייד" (14 ח׳)' : '');
+        if (!months || !insp.value) return;
+        if (until.value && until.dataset.auto !== until.value) return;       // typed by the user
+        const [y, m, d] = insp.value.split('-').map(Number);
+        const due = new Date(Date.UTC(y, m - 1 + months, d)).toISOString().slice(0, 10);
+        until.value = due; until.dataset.auto = due;
+      };
+      cat.addEventListener('change', update); insp.addEventListener('change', update);
+      this.update = update;
+    },
+    fill() { const until = document.querySelector('[name=valid_until]'); if (until) delete until.dataset.auto; this.update && this.update(); },
+  },
 });
 </script>
 </body>

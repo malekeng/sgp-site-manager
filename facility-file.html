@@ -32,6 +32,12 @@
 
   <div class="stats-row" id="statsRow"></div>
 
+  <section class="card lic-card" id="licCard" hidden>
+    <div class="card-header"><h2>מסלול הרישוי — מהיתר ועד תעודת גמר</h2><span class="lic-sub">לחיצה על שלב מציגה רק את הפריטים שלו</span></div>
+    <div id="licPath"></div>
+    <div id="licTemplate"></div>
+  </section>
+
   <div class="card">
     <div class="card-header">
       <h2>רשימת אישורים ומסמכים לתיק המתקן</h2>
@@ -78,35 +84,91 @@
 <script src="js/supabase-client.js"></script>
 <script src="js/app.js"></script>
 <script src="js/documents.js"></script>
+<script src="js/licensing.js"></script>
 <script src="js/crud.js"></script>
 <script>
+let licStage = null;
+const STATUS_TONE = { 'פתוח': 'open', 'בטיפול': 'progress', 'הושלם': 'done' };
 initCrudPage({
   table: 'facility_file_items',
   icon: '📜',
   activePage: 'facility-file.html',
   title: 'תיק מתקן / טופס 4',
   dateField: 'due_date',
-  orderBy: { column: 'due_date', ascending: true },
+  orderBy: { column: 'sort_order', ascending: true },
   columns: [
-    { key: 'item_name', label: 'שם הפריט / אישור נדרש', type: 'text' },
-    { key: 'category', label: 'קטגוריה', type: 'text' },
-    { key: 'responsible', label: 'גורם אחראי', type: 'text' },
-    { key: 'status', label: 'סטטוס', type: 'text' },
+    { key: 'stage', label: 'שלב', type: 'text' },
+    { key: 'item_name', label: 'אישור / מסמך נדרש', type: 'text' },
+    { key: 'responsible', label: 'גורם מאשר / אחראי', type: 'text' },
+    { key: 'basis', label: 'בסיס', render: r => r.basis ? `<span class="lic-basis">${esc(r.basis)}</span>` : '' },
+    { key: 'status', label: 'סטטוס', render: r => r.status ? `<span class="lic-status lic-status-${STATUS_TONE[r.status] || 'open'}">${esc(r.status)}</span>` : '' },
     { key: 'due_date', label: 'תאריך יעד', type: 'date' },
     { key: 'completed_date', label: 'תאריך השלמה', type: 'date' },
   ],
   formFields: [
-    { key: 'item_name', label: 'שם הפריט / אישור נדרש', type: 'text', required: true,
+    { key: 'item_name', label: 'שם האישור / המסמך הנדרש', type: 'text', required: true,
       placeholder: 'לדוגמה: אישור כיבוי אש, אישור נגישות, בדיקת מעלית...' },
+    { key: 'stage', label: 'שלב במסלול', type: 'select', options: LIC_STAGES.map(x => x.label) },
     { key: 'category', label: 'קטגוריה', type: 'select',
       options: ['רשויות ואישורים', 'בדיקות מכון', 'מסמכי תכנון', 'חיבורי תשתית'] },
-    { key: 'responsible', label: 'גורם אחראי', type: 'text' },
+    { key: 'responsible', label: 'גורם מאשר / אחראי', type: 'text' },
+    { key: 'basis', label: 'בסיס (תקנה / תקן)', type: 'text' },
     { key: 'status', label: 'סטטוס', type: 'select', options: ['פתוח', 'בטיפול', 'הושלם'] },
     { key: 'due_date', label: 'תאריך יעד', type: 'date' },
     { key: 'completed_date', label: 'תאריך השלמה', type: 'date' },
     { key: 'notes', label: 'הערות', type: 'textarea', full: true },
   ],
+  formExtension: {
+    // a new item goes to the end of its stage
+    collect(payload, fd, api) {
+      if (!api.editingId) {
+        const inStage = api.rows.filter(r => r.stage === payload.stage).map(r => r.sort_order || 0);
+        const all = api.rows.map(r => r.sort_order || 0);
+        payload.sort_order = (inStage.length ? Math.max(...inStage) : Math.max(0, ...all)) + 1;
+      }
+    },
+  },
+  onLoaded(rows, api) {
+    document.getElementById('licCard').hidden = false;
+    renderPath(api);
+    renderTemplateOffer(rows, api);
+  },
 });
+
+// The stage path; a click on a stage shows only its items, a second click shows all again.
+function renderPath(api) {
+  const host = document.getElementById('licPath');
+  host.innerHTML = api.rows.length ? licPathHtml(api.rows, licStage) : '';
+  host.querySelectorAll('[data-stage]').forEach(b => b.addEventListener('click', () => {
+    licStage = licStage === b.dataset.stage ? null : b.dataset.stage;
+    api.setRowFilter(licStage ? r => r.stage === licStage : null);
+    renderPath(api);
+  }));
+}
+
+// The template: loaded on request, never over what the team already has.
+function renderTemplateOffer(rows, api) {
+  const host = document.getElementById('licTemplate');
+  const have = new Set(rows.map(r => r.item_name));
+  const missing = licTemplateRows().filter(t => !have.has(t.item_name));
+  if (!missing.length) { host.innerHTML = ''; return; }
+  host.innerHTML = rows.length
+    ? `<div class="lic-offer small"><span>${missing.length} פריטים מרשימת האישורים לבניין מסחרי עוד לא ברשימה שלכם.</span>
+        <button type="button" class="btn btn-sm btn-outline" id="licLoad">הוספת ${missing.length} הפריטים החסרים</button></div>`
+    : `<div class="lic-offer">
+        <div><b>רשימת האישורים לטופס 4 ותעודת גמר — מוכנה</b>
+        <p>${missing.length} אישורים ומסמכים בשישה שלבים, לפי תקנות רישוי בנייה (76–78, 87, 89, 95), נוהל מכוני הבקרה (ISRAC) ורשימות הרשויות — כל אחד עם הגורם המאשר והבסיס שלו. מותאם לבניין מסחרי; אפשר להוסיף, לשנות ולמחוק לפי רשימת הוועדה המקומית.</p></div>
+        <button type="button" class="btn btn-primary" id="licLoad">טעינת הרשימה</button></div>`;
+  document.getElementById('licLoad').addEventListener('click', async e => {
+    e.target.disabled = true;
+    const now = new Date().toISOString();
+    const payload = missing.map(m => ({ ...m, site_id: api.site.id, created_by: api.user.id, updated_by: api.user.id, updated_at: now }));
+    const { error } = await sb.from('facility_file_items').insert(payload);
+    if (error) { toast('שגיאה בטעינת הרשימה: ' + error.message, 'error'); e.target.disabled = false; return; }
+    toast(`נוספו ${missing.length} פריטים לרשימה`, 'success');
+    await api.reload();
+  });
+}
 </script>
 </body>
 </html>

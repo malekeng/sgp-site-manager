@@ -154,6 +154,7 @@
 
 <script src="js/supabase-client.js"></script>
 <script src="js/app.js"></script>
+<script src="js/doc-insights.js"></script>
 <script>
 document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -386,14 +387,38 @@ function greetingByHour() {
   async function loadAttention() {
     const items = [];
 
-    const { data: pours } = await sb.from('concrete_pours')
-      .select('id, pour_date, element, cube_test_date')
-      .eq('site_id', site.id).is('cube_test_date', null)
-      .order('pour_date', { ascending: false });
-    (pours || []).forEach(p => items.push({
-      ico: 'concrete', text: `יציקה "${p.element}" מ-${fmtDate(p.pour_date)} — ללא תאריך בדיקת קוביות`,
-      href: 'concrete.html',
+    // What the attached documents say (js/doc-insights.js): a pour whose lab result fails,
+    // whose 28-day result is late, whose notes do not match the form… Each opens its record.
+    const VENDOR_TYPE_HREF = { contractor: 'vendor-contractors.html', supplier: 'vendor-suppliers.html', equipment: 'vendor-equipment.html', material: 'vendor-materials.html' };
+    const VENDOR_TYPE_ICO = { contractor: 'contractors', supplier: 'suppliers', equipment: 'equipment', material: 'materials' };
+    const VENDOR_TYPE_LABEL = { contractor: 'קבלן', supplier: 'ספק', equipment: 'ציוד', material: 'חומר' };
+    const DOC_SOURCES = [
+      { table: 'concrete_pours', page: 'concrete.html', ico: 'concrete', cols: '*', label: r => `יציקה "${r.element || ''}" מ-${fmtDate(r.pour_date)}` },
+      { table: 'rebar_deliveries', page: 'rebar.html', ico: 'rebar', cols: '*', label: r => `ברזל מ-${r.supplier || ''} (${fmtDate(r.order_date)})` },
+      { table: 'prestressed_slabs', page: 'slabs.html', ico: 'slabs', cols: '*', label: r => `לוח"דים הזמנה ${r.order_number || ''} (${fmtDate(r.delivery_date || r.order_date)})` },
+      { table: 'vendor_submissions', page: r => VENDOR_TYPE_HREF[r.submission_type] || 'reports.html', ico: r => VENDOR_TYPE_ICO[r.submission_type] || 'group-submissions',
+        cols: '*', label: r => `${VENDOR_TYPE_LABEL[r.submission_type] || ''} "${r.name || ''}"` },
+    ];
+    const docItems = [];
+    await Promise.all(DOC_SOURCES.map(async src => {
+      const [{ data: recs }, { data: docs }] = await Promise.all([
+        sb.from(src.table).select(src.cols).eq('site_id', site.id),
+        sb.from('documents').select('id, linked_record_id, doc_type, file_name, file_path, extracted')
+          .eq('site_id', site.id).eq('linked_table', src.table),
+      ]);
+      const byRec = {};
+      (docs || []).forEach(d => { (byRec[d.linked_record_id] ||= []).push(d); });
+      (recs || []).forEach(r => {
+        if (!byRec[r.id]) return;
+        const ins = sgpInsights(src.table, r, byRec[r.id]);
+        const page = typeof src.page === 'function' ? src.page(r) : src.page;
+        ins.checks.filter(c => c.level === 'bad' || c.level === 'warn').forEach(c => docItems.push({
+          ico: typeof src.ico === 'function' ? src.ico(r) : src.ico, dot: c.level === 'bad' ? 'red' : 'orange', rank: c.level === 'bad' ? 0 : 1,
+          text: `${src.label(r)} — ${c.text}`, href: `${page}?open=${r.id}`, tile: page,
+        }));
+      });
     }));
+    docItems.sort((a, b) => a.rank - b.rank).forEach(it => items.push(it));
 
     const { data: slabs } = await sb.from('prestressed_slabs')
       .select('id, delivery_date, supplier, quantity_m2, delivery_note_number, installed_date')
@@ -410,9 +435,6 @@ function greetingByHour() {
       });
     });
 
-    const VENDOR_TYPE_HREF = { contractor: 'vendor-contractors.html', supplier: 'vendor-suppliers.html', equipment: 'vendor-equipment.html', material: 'vendor-materials.html' };
-    const VENDOR_TYPE_ICO = { contractor: 'contractors', supplier: 'suppliers', equipment: 'equipment', material: 'materials' };
-    const VENDOR_TYPE_LABEL = { contractor: 'קבלן', supplier: 'ספק', equipment: 'ציוד', material: 'חומר' };
     const soonThreshold = new Date(); soonThreshold.setDate(soonThreshold.getDate() + 30);
     const { data: expiring } = await sb.from('vendor_submissions')
       .select('id, submission_type, name, valid_until')
@@ -427,17 +449,39 @@ function greetingByHour() {
       });
     });
 
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const { data: lateNcr } = await sb.from('exceptions')
+      .select('id, location, description, severity, planned_close_date, status')
+      .eq('site_id', site.id).neq('status', 'נסגר').lt('planned_close_date', todayIso)
+      .order('planned_close_date', { ascending: true });
+    (lateNcr || []).forEach(x => items.push({
+      ico: 'exceptions', dot: x.severity === 3 ? 'red' : 'orange',
+      text: `אי-התאמה${x.severity ? ' (חומרה ' + x.severity + ')' : ''} ב"${x.location || ''}" — הייתה אמורה להיסגר ב-${fmtDate(x.planned_close_date)}`,
+      href: `exceptions.html?open=${x.id}`, tile: 'exceptions.html',
+    }));
+
+    const [{ data: waiting }, { data: answers }] = await Promise.all([
+      sb.from('correspondence').select('id, subject, party, reply_due').eq('site_id', site.id).eq('direction', 'outgoing').lt('reply_due', todayIso),
+      sb.from('correspondence').select('reply_to').eq('site_id', site.id).eq('direction', 'incoming').not('reply_to', 'is', null),
+    ]);
+    const answered = new Set((answers || []).map(a => a.reply_to));
+    (waiting || []).filter(w => !answered.has(w.id)).forEach(w => items.push({
+      ico: 'correspondence', dot: 'orange',
+      text: `${w.party ? w.party + ': ' : ''}"${w.subject}" — התשובה הייתה צפויה עד ${fmtDate(w.reply_due)}`,
+      href: 'correspondence.html', tile: 'correspondence.html',
+    }));
+
     const { data: failedQc } = await sb.from('quality_controls')
       .select('id, stage, subject, control_date')
       .eq('site_id', site.id).eq('result', 'לא תקין')
       .order('control_date', { ascending: false });
     (failedQc || []).forEach(q => items.push({
       ico: q.stage === 'preliminary' ? 'qc-preliminary' : 'qc-inprocess', dot: 'red',
-      text: `בקרה ${q.stage === 'preliminary' ? 'מקדימה' : 'בתהליך'} ל"${q.subject}" מ-${fmtDate(q.control_date)} — לא תקין`,
+      text: `בקרה ${q.stage === 'preliminary' ? 'מוקדמת' : 'שוטפת'} ל"${q.subject}" מ-${fmtDate(q.control_date)} — לא תקין`,
       href: q.stage === 'preliminary' ? 'qc-preliminary.html' : 'qc-inprocess.html',
     }));
 
-    items.forEach(it => { tileState.attention[it.href] = (tileState.attention[it.href] || 0) + 1; });
+    items.forEach(it => { const k = it.tile || it.href; tileState.attention[k] = (tileState.attention[k] || 0) + 1; });
     renderTileBadges();
 
     const host = document.getElementById('attentionList');

@@ -133,7 +133,7 @@ async function initCrudPage(config) {
       const ids = state.rows.map(r => r.id);
       const { data: docs, error: docsErr } = await sb
         .from('documents')
-        .select('linked_record_id')
+        .select(config.docInsights ? 'id, linked_record_id, doc_type, file_name, file_path, extracted' : 'linked_record_id')
         .eq('linked_table', config.table)
         .in('linked_record_id', ids);
       // If this fails the counts are unknown, not zero — the delete warning must not
@@ -144,12 +144,25 @@ async function initCrudPage(config) {
       (docs || []).forEach(d => {
         state.docCounts[d.linked_record_id] = (state.docCounts[d.linked_record_id] || 0) + 1;
       });
+      // what the attached documents say about each record (see js/doc-insights.js)
+      state.docsByRecord = {};
+      state.insights = {};
+      if (config.docInsights && typeof sgpInsights === 'function') {
+        (docs || []).forEach(d => { (state.docsByRecord[d.linked_record_id] ||= []).push(d); });
+        state.rows.forEach(r => {
+          const ds = state.docsByRecord[r.id];
+          if (ds) state.insights[r.id] = sgpInsights(config.table, r, ds);
+        });
+      }
     } else {
       state.docCounts = {};
+      state.docsByRecord = {};
+      state.insights = {};
     }
 
     renderStats();
     renderTable();
+    if (config.onLoaded) config.onLoaded(state.rows, api);
   }
 
   function renderStats() {
@@ -170,16 +183,19 @@ async function initCrudPage(config) {
     const tbody = document.getElementById('tableBody');
     thead.innerHTML = '<tr>' + config.columns.map(c => `<th>${esc(c.label)}</th>`).join('') + '<th>מסמכים</th><th>עודכן</th><th></th></tr>';
 
-    if (!state.rows.length) {
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="${config.columns.length + 3}">אין רשומות עדיין</td></tr>`;
+    // a page may narrow the table (e.g. one stage of the licensing path)
+    const rows = state.rowFilter ? state.rows.filter(state.rowFilter) : state.rows;
+    if (!rows.length) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="${config.columns.length + 3}">${state.rows.length ? 'אין רשומות בסינון הזה' : 'אין רשומות עדיין'}</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = state.rows.map(row => {
+    tbody.innerHTML = rows.map(row => {
       const cells = config.columns.map(c => {
         const v = row[c.key];
         let out = '—';
-        if (v !== null && v !== undefined && v !== '') {
+        if (c.render) out = c.render(row) || '—';     // the page builds (and escapes) this cell itself
+        else if (v !== null && v !== undefined && v !== '') {
           if (c.type === 'date') out = esc(fmtDate(v));
           else if (c.type === 'number') out = esc(fmtNum(v, c.digits ?? 2));
           else if (c.type === 'boolean') out = esc(v ? (c.trueLabel || 'כן') : (c.falseLabel || 'לא'));
@@ -191,8 +207,14 @@ async function initCrudPage(config) {
         return `<td class="${c.type === 'number' ? 'num-cell' : ''}">${out}</td>`;
       }).join('');
       const docCount = state.docCounts[row.id] || 0;
+      // a dot for what the documents say: red = fails the standard, orange = check, green = matches
+      const ins = state.insights && state.insights[row.id];
+      const topCheck = ins && ins.level ? ins.checks.find(c => c.level === ins.level) : null;
+      const dot = topCheck
+        ? `<button type="button" class="di-dot di-dot-${ins.level}" data-insight="${row.id}" title="${esc(topCheck.text)}" aria-label="מהמסמכים: ${esc(topCheck.text)}"></button>`
+        : '';
       const docCell = docCount
-        ? `<td><span class="doc-badge" data-docs="${row.id}">${uiIcon('paperclip', 13)}${docCount}</span></td>`
+        ? `<td><span class="doc-badge" data-docs="${row.id}">${uiIcon('paperclip', 13)}${docCount}</span>${dot}</td>`
         : `<td class="cell-muted">—</td>`;
       const whoId = row.updated_by || row.created_by;
       const when = row.updated_at || row.created_at;
@@ -227,6 +249,8 @@ async function initCrudPage(config) {
       btn.addEventListener('click', () => quickToggle(btn.dataset.toggle)));
     tbody.querySelectorAll('[data-docs]').forEach(btn =>
       btn.addEventListener('click', () => showDocsPopup(btn.dataset.docs)));
+    tbody.querySelectorAll('[data-insight]').forEach(btn =>
+      btn.addEventListener('click', () => openModal(btn.dataset.insight)));
   }
 
   function isImageFile(name) {
@@ -326,6 +350,8 @@ async function initCrudPage(config) {
         <input type="${f.type}" name="${f.key}" ${f.step ? `step="${f.step}"` : ''} ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''} ${f.required ? 'required' : ''}></div>`;
     }).join('');
 
+    if (config.formExtension && config.formExtension.mount) config.formExtension.mount(formEl, api);
+
     grid.querySelectorAll('[data-append-note]').forEach(btn => {
       btn.addEventListener('click', () => openAppendNoteModal(btn.parentElement.querySelector('textarea')));
     });
@@ -356,6 +382,37 @@ async function initCrudPage(config) {
       modalTitle.insertAdjacentElement('afterend', el);
     }
     return el;
+  }
+
+  // "מהמסמכים המצורפים" — under the title of an existing record
+  function ensureInsightsEl() {
+    let el = document.getElementById('docInsights');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'docInsights';
+      el.className = 'doc-insights';
+      ensureAuditEl().insertAdjacentElement('afterend', el);
+    }
+    return el;
+  }
+  function renderInsights(id) {
+    if (!config.docInsights || typeof sgpInsights !== 'function') return;
+    const el = ensureInsightsEl();
+    const row = id ? state.rows.find(r => r.id === id) : null;
+    const docs = id && state.docsByRecord ? state.docsByRecord[id] : null;
+    const ins = row && docs ? (state.insights[id] || sgpInsights(config.table, row, docs)) : null;
+    el.innerHTML = ins ? sgpInsightsHtml(ins, config.table) : '';
+    el.hidden = !el.innerHTML;
+    const btn = el.querySelector('[data-read-docs]');
+    if (!btn) return;
+    if (typeof sgpExtractFile !== 'function') { btn.remove(); return; }
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const n = await sgpReadPendingDocs(ins.pending, t => { btn.textContent = t; });
+      toast(n ? (n === 1 ? 'המסמך נקרא' : `${n} מסמכים נקראו`) : 'לא נקרא אף מסמך', n ? 'success' : 'error');
+      await loadData();
+      if (state.editingId === id && modalBackdrop.classList.contains('open')) renderInsights(id);
+    });
   }
 
   function openModal(id) {
@@ -409,6 +466,10 @@ async function initCrudPage(config) {
       auditEl.hidden = true;
       auditEl.textContent = '';
     }
+    renderInsights(id);
+    if (config.formExtension && config.formExtension.fill) {
+      config.formExtension.fill(id ? state.rows.find(r => r.id === id) : null, api);
+    }
     modalBackdrop.classList.add('open');
   }
   function closeModal() { modalBackdrop.classList.remove('open'); }
@@ -446,6 +507,9 @@ async function initCrudPage(config) {
       if (v !== null && (f.type === 'number' || f.numeric)) v = Number(v);
       payload[f.key] = v;
     });
+    if (!validationError && config.formExtension && config.formExtension.collect) {
+      validationError = config.formExtension.collect(payload, fd, api) || null;
+    }
     if (validationError) { showMsg(formMsg, validationError, 'error'); return; }
 
     payload.updated_by = user.id;
@@ -475,10 +539,11 @@ async function initCrudPage(config) {
         state.editingId = recordId;
       }
 
+      const uploaded = [];
       try {
         for (const w of attachWidgets) {
           if (w.getFiles().length) {
-            await w.upload({ siteId: site.id, table: config.table, recordId, userId: user.id });
+            uploaded.push(...((await w.upload({ siteId: site.id, table: config.table, recordId, userId: user.id })) || []));
           }
         }
       } catch (attachErr) {
@@ -492,6 +557,8 @@ async function initCrudPage(config) {
       toast(isNew ? 'הרשומה נוספה' : 'הרשומה עודכנה', 'success');
       closeModal();
       await loadData();
+      readNewUploads(uploaded);
+      if (config.afterSave) config.afterSave({ id: recordId, payload, isNew }, api);
     } catch (err) {
       console.error(err);
       showMsg(formMsg, 'שגיאה: ' + err.message, 'error');
@@ -499,6 +566,27 @@ async function initCrudPage(config) {
       submitBtn.disabled = false;
     }
   });
+
+  // New attachments are read in the background, so the documents become the record's source
+  // without anyone waiting or typing. If the page is closed first, the record offers to read
+  // them later ("קריאת המסמכים שעוד לא נקראו").
+  async function readNewUploads(uploaded) {
+    if (!config.docInsights || typeof sgpExtractFile !== 'function') return;
+    const todo = uploaded.filter(u => !u.extracted && u.docType !== 'photo' && SGP_READABLE_RE.test(u.file.name));
+    if (!todo.length) return;
+    toast(todo.length === 1 ? 'קורא ברקע את המסמך שצורף...' : `קורא ברקע ${todo.length} מסמכים שצורפו...`);
+    let n = 0;
+    for (const u of todo) {
+      try {
+        const extracted = await sgpExtractFile(u.file);
+        const { error } = await sb.from('documents').update({ extracted, extracted_at: new Date().toISOString() })
+          .eq('id', u.id).is('extracted', null);
+        if (error) throw error;
+        n++;
+      } catch (err) { console.error('reading a new document failed', u.file.name, err); }
+    }
+    if (n) { toast(n === 1 ? 'המסמך שצורף נקרא' : `${n} מסמכים שצורפו נקראו`, 'success'); await loadData(); }
+  }
 
   async function deleteRow(id) {
     // Warn when the record still carries attachments: deleting it leaves those
@@ -558,6 +646,21 @@ async function initCrudPage(config) {
     loadData();
   });
 
+  // what a page's own code can use (stage bar, checklists, "open a non-conformance"…)
+  const api = {
+    get rows() { return state.rows; },
+    get editingId() { return state.editingId; },
+    get docCounts() { return state.docCounts; },
+    reload: loadData,
+    openModal,
+    setRowFilter(fn) { state.rowFilter = fn || null; renderTable(); },
+    site, user, profile,
+  };
+  window.sgpCrud = api;
+
   buildForm();
   await loadData();
+  // ?open=<id> (from the dashboard) opens that record
+  const openId = new URLSearchParams(location.search).get('open');
+  if (openId && state.rows.some(r => r.id === openId)) openModal(openId);
 }

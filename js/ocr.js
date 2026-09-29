@@ -153,11 +153,32 @@ async function sgpFixNumbers(data, canvas) {
   return lines.join('\n');
 }
 
+// A page that read as noise: few real Hebrew words, or low confidence.
+function sgpLooksUnread(data) {
+  return (String(data.text || '').match(/[א-ת]{3,}/g) || []).length < 12 || data.confidence < 45;
+}
+
 async function sgpOcrCanvas(canvas) {
-  const deg = await sgpDetectAngle(canvas);
-  const upright = sgpRotated(canvas, deg);
+  let deg = await sgpDetectAngle(canvas);
+  let upright = sgpRotated(canvas, deg);
   const main = await sgpOcrWorker('main');
-  const { data } = await main.recognize(upright);
+  let { data } = await main.recognize(upright);
+  // Phone photos of a note lying upside down, with dark margins around it, fool the
+  // orientation detector (one came back as nothing at all). When the page reads as noise,
+  // compare the four turns on a small copy and read again the way that reads best.
+  if (sgpLooksUnread(data)) {
+    const small = sgpScaled(canvas, Math.min(1, 1200 / Math.max(canvas.width, canvas.height)));
+    let best = { deg, conf: -1 };
+    for (const d of [0, 90, 180, 270]) {
+      const r = (await main.recognize(sgpRotated(small, d))).data;
+      if (r.confidence > best.conf) best = { deg: d, conf: r.confidence };
+    }
+    if (best.deg !== deg) {
+      deg = best.deg;
+      upright = sgpRotated(canvas, deg);
+      data = (await main.recognize(upright)).data;
+    }
+  }
   const text = data.lines && data.lines.length ? await sgpFixNumbers(data, upright) : data.text;
   return { text, confidence: data.confidence, angle: deg };
 }
@@ -456,3 +477,318 @@ const sgpParse = {
     return r;
   },
 };
+
+// ===== What each attached document says — kept in documents.extracted ==============
+// The documents are the source of the information the standards ask for (the ת״י 118
+// fields of every truck, the lab's cubes, what was ordered and what arrived), so nothing
+// here is typed by the user. sgpExtractFile(file) reads a document and keeps what is
+// printed on it, truck by truck and cube by cube. A value the reader is not sure of is
+// listed in `doubt`, so the screen says "check against the document" instead of trusting
+// it or quietly correcting it. Handwriting (arrival time, signatures) is not read: the
+// document itself stays the proof.
+const SGP_EXTRACT_VERSION = 1;
+const SGP_EXCELJS_SRC = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+
+function sgpDocKind(text, fileName) {
+  const t = String(text || ''), name = String(fileName || '');
+  if (/(?<![A-Za-z0-9])LA\d{10,}/.test(t) || (/חוזק\s*לחיצה/.test(t) && /מעבד/.test(t))) return 'concrete_lab';
+  if (/מ["'״]?ק/.test(t) && /(ערבל|דרגת\s*חשיפה|יציאה\s*בשעה|בטון\s*מו?א?סי|גרגיר)/.test(t)) return 'concrete_note';
+  if (/(לוח["'״]?ד|דריכה|רמט)/.test(t) && /מ["'״]?ר/.test(t) && /משלוח/.test(t)) return 'slab_note';
+  if (/(?:SH\d{8}|תעודת\s*משלוח)/.test(t) && /ק["'״]?ג/.test(t)) return 'rebar_note';
+  if (/^הז[_\s-]*\d/.test(name) || (/הזמנ|להצעת מחיר/.test(t) && /(רשתות|ברזל|מוטות|קוטר|פסיעה)/.test(t))) return 'rebar_order';
+  if (/(קבלן\s*מוכר|רשם\s*הקבלנים|פנקס\s*הקבלנים)/.test(t) && /סיווג/.test(t)) return 'contractor_cert';
+  if (/(תסקיר|בודק\s*מוסמך|בדיקה\s*תקופתית)/.test(t) && /(הרמה|עגורן|מנוף|במה|מלגזה|אביזר)/.test(t)) return 'inspection';
+  if (/(From:|Subject:|נושא:|מאת:)/.test(t) && /(מאושר|אושר|מאשרים|אישור)/.test(t)) return 'approval';
+  return 'unknown';
+}
+
+// "תעודת קבלן מוכר" / registrar certificate: the branches with group and class, and expiry.
+function sgpExtractContractorCert(text) {
+  const r = { branches: [] };
+  const co = text.match(/(?:לחברה|שם\s*הקבלן)[\s:]*\n?\s*([^\n]{3,60}?)\s*,?\s*(\d{9})/);
+  if (co) { r.company = co[1].replace(/\s+/g, ' ').replace(/בע\s*["״]\s*מ/, 'בע"מ').trim(); r.company_no = co[2]; }
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*(\d{3})\s+(.+?)\s+([א-ה])\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d)\s*$/);
+    if (m) r.branches.push({ code: m[1], name: m[2].trim(), group: m[3], class: +m[5], expiry: sgpDates(m[4])[0]?.iso || null });
+  }
+  // the date AFTER "תוקף … עד" (the issue date often sits on the same line, before it)
+  const until = text.match(/תוקף[^\n\d]{0,25}עד\s*:?\s*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/);
+  r.valid_until = until ? (sgpDates(until[1])[0]?.iso || null)
+    : (r.branches.length ? r.branches.map(b => b.expiry).filter(Boolean).sort()[0] || null : null);
+  const issued = text.match(/תאריך\s*מתן[^\n]*?(\d{1,2}\/\d{1,2}\/\d{4})/);
+  if (issued) r.issued = sgpDates(issued[1])[0]?.iso || null;
+  if (/קבלן\s*מוכר/.test(text)) r.type = 'קבלן מוכר לעבודות ממשלתיות';
+  else if (/רשם\s*הקבלנים|פנקס\s*הקבלנים/.test(text)) r.type = 'רשם הקבלנים';
+  return r;
+}
+
+// An approval that arrived by email: "הקבלן מאושר", when, and the line that says so.
+function sgpExtractApproval(text) {
+  const lines = text.split('\n');
+  const i = lines.findIndex(l => /(מאושר|אושר|מאשרים)/.test(l) && !/(לאישור|אישורים)\s*$/.test(l.trim()));
+  const r = { approved: i >= 0 };
+  if (i >= 0) r.quote = lines[i].trim().slice(0, 160);
+  // the newest message comes first in an exported thread
+  const sent = text.match(/(?:Sent|תאריך|נשלח)\s*:?\s*[^\n]*?(\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2}|[A-Za-z]+,?\s+[A-Za-z]+\s+\d{1,2},\s+\d{4})/);
+  if (sent) {
+    const iso = sgpDates(sent[1])[0]?.iso || (!isNaN(Date.parse(sent[1])) ? new Date(Date.parse(sent[1]) + 12 * 3600e3).toISOString().slice(0, 10) : null);
+    if (iso) r.date = iso;
+  }
+  const subj = text.match(/(?:Subject|נושא)\s*:\s*([^\n]{3,120})/); if (subj) r.subject = subj[1].trim();
+  return r;
+}
+
+// A periodic inspection report (תסקיר) for lifting equipment: inspected on, next by.
+function sgpExtractInspection(text) {
+  const r = {};
+  r.inspection_date = sgpDateNear(text, /תאריך\s*(?:ה)?בדיקה(?!\s*הבאה)/);
+  const next = text.match(/(?:בדיקה\s*הבאה|מועד\s*הבדיקה\s*הבא|בתוקף\s*עד)[^\n\d]{0,20}(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/);
+  if (next) r.next_date = sgpDates(next[1])[0]?.iso || null;
+  const kind = text.match(/(עגורן\s*צריח|מנוף\s*נייד|במת\s*הרמה|מלגזה|אביזרי\s*הרמה|מכונת\s*הרמה)/); if (kind) r.equipment = kind[1];
+  return r;
+}
+
+// "08:09" from an OCR'd time; flags the ones the reader may have turned around
+function sgpTimeAfter(page, labelRe) {
+  const m = page.match(new RegExp(labelRe.source + String.raw`\s*[:.]?\s*(\d{1,2})(\s*[:;.]\s*)(\d{2})(?!\d)`));
+  if (!m || +m[1] > 23 || +m[3] > 59) return null;
+  const hh = +m[1];
+  // printed as "08 : 09" — OCR sometimes swaps the halves or drops a digit
+  const doubtful = m[2].trim() !== ':' || /\s/.test(m[2]) || m[1].length < 2 || hh < 5 || hh >= 19;
+  return { value: `${String(hh).padStart(2, '0')}:${m[3]}`, doubtful };
+}
+const sgpDec = s => (s == null ? null : sgpNum(String(s).replace(',', '.')));
+
+// One ready-mix truck = one delivery note page (ת״י 118 §7.3 fields as the plant prints them).
+function sgpConcreteTruck(page, pageNo) {
+  const t = { page: pageNo, doubt: [] };
+  t.note = sgpNoteNumber(page);
+  t.date = sgpDateNear(page, /תארי[ךכן]/);
+  const dep = sgpTimeAfter(page, /יציאה\s*בשעה/);
+  if (dep) { t.departure = dep.value; if (dep.doubtful) t.doubt.push('departure'); }
+  let m = page.match(/כמות\s*[:.]?\s*(\d+(?:[.,]\d+)?)\s*מ/);
+  if (m) { const v = sgpDec(m[1]); if (v > 0 && v <= 14) t.qty = v; }
+  m = page.match(/(?:הוזמן|הומן|הוזמ)\s*[:.]?\s*(\d+(?:[.,]\d+)?)/); if (m) t.ordered = sgpDec(m[1]);
+  m = page.match(/סה["'״]?כ\s*[:.]?\s*(\d+(?:[.,]\d+)?)\s*מ["'״]?ק/); if (m) t.cumulative = sgpDec(m[1]);
+  m = page.match(/הזמנה\s*מס\s*['"׳]?\s*[:.,]?\s*(\d{5,7})(?!\d)/) || page.match(/(?<!\d)(\d{6})(?!\d)[^\n\d]{0,12}הזמנה\s*מס/);
+  if (m) t.order = m[1];
+  m = page.match(new RegExp(`${SGP_NOT_HEB_BEFORE}ב\\s*[-–]?\\s*(20|25|30|35|40|50|60)(?!\\d)`)); if (m) t.grade = `ב-${m[1]}`;
+  m = page.match(/דרגת\s*חשיפה\s*[:.]?\s*(\d{1,2})(?!\d)/); if (m && +m[1] >= 1 && +m[1] <= 11) t.exposure = +m[1];
+  m = page.match(/גי?ר\s*מ[יר]*בי\s*[:.]?\s*(\d{1,2})\s*מ/); if (m && +m[1] >= 5 && +m[1] <= 40) t.max_aggregate_mm = +m[1];
+  m = page.match(/מים\s*באתר\s*(?:עד|ער)\s*(\d{1,3})\s*ליטר/); if (m) t.water_allowed_l_m3 = +m[1];
+  m = page.match(/ערבל\s*[:.]?\s*(\d{2,5})(?!\d)/); if (m) t.truck = m[1];
+  const isTruck = t.note || (t.qty != null && (t.truck || t.exposure != null));
+  return isTruck ? t : null;
+}
+
+function sgpExtractConcreteNote(doc) {
+  const trucks = doc.pages.map((p, i) => sgpConcreteTruck(p.text, i + 1)).filter(Boolean);
+  // a plant numbers its notes in one series: a number that does not share the file's
+  // common prefix was most likely misread (889325 came back as 839325)
+  const prefixes = trucks.map(t => (t.note && /^\d{6}$/.test(t.note) ? t.note.slice(0, 2) : null)).filter(Boolean);
+  const tally = {};
+  prefixes.forEach(p => { tally[p] = (tally[p] || 0) + 1; });
+  const common = Object.keys(tally).sort((a, b) => tally[b] - tally[a])[0];
+  if (prefixes.length >= 2) trucks.forEach(t => { if (t.note && /^\d{6}$/.test(t.note) && t.note.slice(0, 2) !== common) t.doubt.push('note'); });
+  trucks.forEach(t => { if (!t.doubt.length) delete t.doubt; });
+  return { trucks };
+}
+
+// A concrete lab report ("LA…"): cubes with their sampling time, truck and note, the
+// strengths, and the acceptance rule the lab prints itself.
+function sgpExtractLab(text) {
+  const r = { samples: [], ages: [], averages: [] };
+  let m = text.match(/(?<![A-Za-z0-9])(LA\d{10,16})(?!\d)/); if (m) r.lab_no = m[1];
+  r.pour_date = sgpDateNear(text, /תאריך\s*היציקה/);
+  const printed = sgpDateNear(text, /תאריך\s*הדפסה/);
+  if (printed && printed !== r.pour_date) r.report_date = printed;
+  m = text.match(/סוג\s*הבטון[^\n\d]{0,8}(\d{2})/); if (m) r.grade = `ב-${m[1]}`;
+  r.ages = sgpUnique([...text.matchAll(/חוזק\s*לחיצה\s*(\d{1,2})\s*יום/g)].map(x => +x[1]));
+  m = text.match(/בגיל\s*(\d{1,2})\s*יום\s*לא\s*יקטן\s*מ\s*-?\s*(\d{1,3}(?:\.\d)?)[^\n]*?לממוצע[^\n]*?לא\s*יקטן\s*מ\s*-?\s*(\d{1,3}(?:\.\d)?)/);
+  if (m) r.criteria = { age: +m[1], avg_min: +m[2], single_min: +m[3] };
+  r.averages = [...text.matchAll(/ממוצע\s*[:.]?\s*(\d{1,3}\.\d{1,2})/g)].map(x => +x[1]);
+  // a row reads (left to right, as printed): MPa… kN… note truck HH:MM supplier code no
+  for (const line of text.split('\n')) {
+    const tok = line.trim().split(/\s+/);
+    const ti = tok.findIndex(x => /^\d{1,2}:\d{2}$/.test(x));
+    if (ti < 3 || tok.length < 6) continue;
+    const note = tok[ti - 2], truck = tok[ti - 1];
+    if (!/^\d{5,7}$/.test(note) || !/^\d{2,5}$/.test(truck)) continue;
+    const nums = tok.slice(0, ti - 2).map(Number).filter(n => !isNaN(n));
+    r.samples.push({
+      no: /^\d{1,3}$/.test(tok[tok.length - 1]) ? +tok[tok.length - 1] : null,
+      time: tok[ti], truck, note,
+      mpa: nums.filter(n => n < 150), kn: nums.filter(n => n >= 150),
+    });
+  }
+  return r;
+}
+
+function sgpOrderKey(a, b, c) { return `${parseInt(a, 10)}-${b}${c ? '.' + c : ''}`; }
+function sgpOrderKeyFromName(name) {
+  const m = String(name || '').match(/הז[_\s-]*(\d{3,4})[-_](\d{2})(?:\.(\d))?/);
+  return m ? sgpOrderKey(m[1], m[2], m[3]) : null;
+}
+
+function sgpExtractRebarNote(doc) {
+  const text = doc.text;
+  const p = sgpParse.rebar(text);
+  const r = {
+    notes: p.delivery_note_number ? p.delivery_note_number.split('\n') : [],
+    date: p.delivery_date, total_kg: p.weight_kg, diameters: p.diameter_text,
+  };
+  if (p._summary) r.per_note = p._summary;
+  r.orders = sgpUnique([...text.matchAll(/(?:הז|רכש)\s*[:_.]?\s*(\d{3,4})\s*-\s*(\d{2})(?:\.(\d))?(?!\d)/g)].map(m => sgpOrderKey(m[1], m[2], m[3])));
+  r.supplier_orders = sgpUnique([...text.matchAll(/(?<![A-Za-z0-9])S[O0](\d{8})(?!\d)/g)].map(m => 'SO' + m[1]));
+  const mf = text.match(/(נוימן)[^\n]{0,24}?(\d{2}[A-Z]\d{5}|\d{5,8})/);
+  if (mf) r.manufacturer = { name: mf[1], ref: mf[2] };
+  else if (/נוימן/.test(text)) r.manufacturer = { name: 'נוימן' };
+  return r;
+}
+
+function sgpExtractRebarOrder(doc, fileName) {
+  const text = doc.text;
+  const r = { order: sgpOrderKeyFromName(fileName) };
+  if (!r.order) {
+    const m = text.match(/(?:הז|הזמנה)\s*[:_.]?\s*(\d{3,4})\s*-\s*(\d{2})(?:\.(\d))?(?!\d)/);
+    if (m) r.order = sgpOrderKey(m[1], m[2], m[3]);
+  }
+  r.supply_date = sgpDateNear(text, /תאריך\s*אספקה/);
+  // the order's own total, where it prints one ("סה"כ … 45,044.00")
+  const totals = text.split('\n').filter(l => /סה["'״]?כ/.test(l))
+    .flatMap(l => [...l.matchAll(/(?<![\d,.])(\d{1,3}(?:,\d{3})+\.\d{2}|\d{3,6}\.\d{2})(?!\d)/g)].map(m => sgpNum(m[1])));
+  if (totals.length) { r.total_kg = Math.max(...totals); r.doubt = ['total_kg']; }
+  return r;
+}
+
+function sgpExtractSlabNote(doc) {
+  const p = sgpParse.slab(doc.text);
+  const r = {
+    notes: p.delivery_note_number ? p.delivery_note_number.split('\n') : [],
+    date: p.delivery_date, total_m2: p.quantity_m2,
+  };
+  const pr = doc.text.match(/(?<![A-Za-z0-9])(PR\d{8})(?!\d)/); if (pr) r.project = pr[1];
+  if (/≈|\?/.test(p._summary || '')) r.doubt = ['total_m2'];
+  return r;
+}
+
+// ---- Excel (the slab supplier's order form, with the team's own tracking sheet) --------
+let sgpExcelJsLoading = null;
+function sgpEnsureExcelJs() {
+  if (typeof ExcelJS !== 'undefined') return Promise.resolve();
+  if (!sgpExcelJsLoading) {
+    sgpExcelJsLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = SGP_EXCELJS_SRC; s.onload = resolve;
+      s.onerror = () => { sgpExcelJsLoading = null; reject(new Error('טעינת רכיב האקסל נכשלה')); };
+      document.head.appendChild(s);
+    });
+  }
+  return sgpExcelJsLoading;
+}
+function sgpCellValue(v) {
+  if (v == null) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'object') {
+    if ('result' in v) return sgpCellValue(v.result);
+    if (v.richText) return v.richText.map(r => r.text).join('').trim() || null;
+    if ('text' in v) return v.text;
+    return null;
+  }
+  return typeof v === 'string' ? (v.replace(/\s+/g, ' ').trim() || null) : v;
+}
+async function sgpReadWorkbook(file) {
+  await sgpEnsureExcelJs();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await file.arrayBuffer());
+  return wb.worksheets.map(ws => {
+    const rows = [];
+    ws.eachRow({ includeEmpty: false }, (row, i) => { rows.push({ i, cells: row.values.slice(1).map(sgpCellValue) }); });
+    return { name: ws.name, rows };
+  });
+}
+const sgpRound = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
+function sgpFindCol(cells, re) { return cells.findIndex(c => typeof c === 'string' && re.test(c)); }
+// the value that follows a label on its row (the sheets read right to left: label, value)
+function sgpValueAfter(rows, labelRe) {
+  for (const r of rows) {
+    const k = sgpFindCol(r.cells, labelRe);
+    if (k < 0) continue;
+    const v = r.cells.slice(k + 1).find(x => x != null && x !== '');
+    if (v != null) return v;
+  }
+  return null;
+}
+function sgpExtractSlabWorkbook(sheets) {
+  const orders = [], tracking = [];
+  for (const sh of sheets) {
+    const hi = sh.rows.findIndex(r => sgpFindCol(r.cells, /מס['"׳]{0,2}\s*לוחד/) >= 0 && sgpFindCol(r.cells, /^כמות/) >= 0);
+    if (hi >= 0) {
+      const h = sh.rows[hi].cells;
+      const col = re => sgpFindCol(h, re);
+      const c = { plan: col(/^תכנית/), rev: col(/מהדורה/), thick: col(/עובי/), el: col(/מס['"׳]{0,2}\s*לוחד/), qty: col(/^כמות/),
+        len: col(/אורך\s*1/), width: col(/רוחב/), axes: col(/צירים/) };
+      const lines = [];
+      for (const r of sh.rows.slice(hi + 1)) {
+        const v = k => (k >= 0 ? r.cells[k] : null);
+        if (v(c.el) == null || typeof v(c.qty) !== 'number') continue;
+        lines.push({ element: v(c.el), qty: v(c.qty), length_m: v(c.len), width_m: v(c.width), axes: v(c.axes),
+          thickness_cm: v(c.thick), plan: v(c.plan), revision: v(c.rev) });
+      }
+      if (lines.length) {
+        const run = lines.reduce((a, l) => a + (l.qty || 0) * (l.length_m || 0), 0);
+        const area = lines.reduce((a, l) => a + (l.qty || 0) * (l.length_m || 0) * (l.width_m || 0), 0);
+        orders.push({
+          sheet: sh.name,
+          order_no: sgpValueAfter(sh.rows, /הזמנת\s*לוחדים\s*מספר/),
+          date: sgpValueAfter(sh.rows, /^תאריך\s*:?$/),
+          wanted_date: sgpValueAfter(sh.rows, /תאריך\s*אספקה\s*רצוי/),
+          units: lines.reduce((a, l) => a + (l.qty || 0), 0),
+          total_m: sgpRound(run), total_m2: sgpRound(area), lines,
+        });
+      }
+    }
+    const ti = sh.rows.findIndex(r => sgpFindCol(r.cells, /תעודת\s*משלוח/) >= 0 && sgpFindCol(r.cells, /תאריך\s*הזמנה/) >= 0);
+    if (ti >= 0) {
+      const h = sh.rows[ti].cells;
+      const col = re => sgpFindCol(h, re);
+      const c = { no: col(/^מס['"׳]?$/), od: col(/תאריך\s*הזמנה/), sd: col(/תאריך\s*אספקה/), id: col(/תאריך\s*הנחה|התקנה/),
+        sup: col(/ספק|יצרן/), floor: col(/קומה|מיקום/), plan: col(/תכנית/), m: col(/סה["'״]{1,2}כ/), note: col(/תעודת\s*משלוח/), rem: col(/הערות/) };
+      for (const r of sh.rows.slice(ti + 1)) {
+        const v = k => (k >= 0 ? r.cells[k] : null);
+        if (!v(c.od) && !v(c.note)) continue;
+        tracking.push({ order_no: v(c.no), order_date: v(c.od), supply_date: v(c.sd), install_date: v(c.id),
+          supplier: v(c.sup), floor: v(c.floor), plan: v(c.plan), total_m: v(c.m), note: v(c.note), remarks: v(c.rem) });
+      }
+    }
+  }
+  return { orders, tracking };
+}
+
+// Reads a file and returns what goes into documents.extracted.
+async function sgpExtractFile(file, { onProgress } = {}) {
+  const name = file.name || '';
+  const base = { v: SGP_EXTRACT_VERSION };
+  if (/\.xlsx$/i.test(name)) {
+    const wb = sgpExtractSlabWorkbook(await sgpReadWorkbook(file));
+    return wb.orders.length || wb.tracking.length ? { ...base, kind: 'slab_order', ...wb } : { ...base, kind: 'unknown' };
+  }
+  const readable = /^image\/(jpeg|png|webp|gif|bmp)$/.test(file.type) || file.type === 'application/pdf' || /\.(pdf|jpe?g|png|webp|gif|bmp)$/i.test(name);
+  if (!readable) return { ...base, kind: 'unsupported' };
+  return sgpExtract(await sgpReadDocument(file, { onProgress }), name);
+}
+// The same, from a document sgpReadDocument has already read (the scan zone on the forms).
+function sgpExtract(doc, fileName) {
+  const kind = sgpDocKind(doc.text, fileName);
+  const base = { v: SGP_EXTRACT_VERSION, kind, pages: doc.pages.length };
+  if (doc.totalPages > doc.pages.length) base.pages_total = doc.totalPages;
+  if (kind === 'concrete_note') return { ...base, ...sgpExtractConcreteNote(doc) };
+  if (kind === 'concrete_lab') return { ...base, ...sgpExtractLab(doc.text) };
+  if (kind === 'rebar_note') return { ...base, ...sgpExtractRebarNote(doc) };
+  if (kind === 'rebar_order') return { ...base, ...sgpExtractRebarOrder(doc, fileName) };
+  if (kind === 'slab_note') return { ...base, ...sgpExtractSlabNote(doc) };
+  if (kind === 'contractor_cert') return { ...base, ...sgpExtractContractorCert(doc.text) };
+  if (kind === 'approval') return { ...base, ...sgpExtractApproval(doc.text) };
+  if (kind === 'inspection') return { ...base, ...sgpExtractInspection(doc.text) };
+  return base;
+}

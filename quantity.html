@@ -170,7 +170,8 @@
     <div id="itemFormMsg" class="msg"></div>
     <form id="itemForm">
       <div class="form-grid">
-        <div class="field"><label>מס' פריט</label><input type="text" name="item_no"></div>
+        <div class="field"><label>מס' פריט</label><input type="text" name="item_no" placeholder="02.01.010">
+          <div class="field-hint">פרק.תת-פרק.סעיף — הבא בתור מוצע אוטומטית</div></div>
         <div class="field full"><label>תיאור *</label><input type="text" name="description" required></div>
         <div class="field full">
           <label>סוג חישוב *</label>
@@ -261,6 +262,15 @@
 
   let currentSheet = null;
   let itemsCache = [];
+  // The number after the sheet's last one, keeping its pattern: 02.01.010 → 02.01.020,
+  // 2.1.3 → 2.1.4, 7 → 8. A sheet without numbers gets none.
+  function qtyNextItemNo(items) {
+    const last = [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map(i => String(i.item_no || '').trim()).filter(Boolean).pop();
+    const m = last && last.match(/^(.*?)(\d+)$/);
+    if (!m) return '';
+    const step = m[2].length >= 3 && /0$/.test(m[2]) ? 10 : 1;
+    return m[1] + String(Number(m[2]) + step).padStart(m[2].length, '0');
+  }
   let editingItemId = null;
   let sheetsCache = [];
   let editingSheetId = null;
@@ -626,6 +636,7 @@
       form.calc_type.value = DEFAULT_CALC;
       form.multiplier.value = 1;
       form.waste_pct.value = 0;
+      form.item_no.value = qtyNextItemNo(itemsCache);
     }
     applyCalcType();
     document.getElementById('itemModalBackdrop').classList.add('open');
@@ -700,6 +711,11 @@
       if (!CALC_TYPES[payload.calc_type].uses.includes(k)) payload[k] = null;
     });
 
+    payload.item_no = (payload.item_no || '').trim() || null;
+    if (payload.item_no && itemsCache.some(it => it.id !== editingItemId && String(it.item_no || '').trim() === payload.item_no)) {
+      showMsg(document.getElementById('itemFormMsg'), `מספר הפריט ${payload.item_no} כבר קיים בכתב הכמויות הזה`, 'error');
+      return;
+    }
     if (editingItemId) {
       const { error } = await sb.from('quantity_items').update(payload).eq('id', editingItemId);
       if (error) { showMsg(document.getElementById('itemFormMsg'), 'שגיאה: ' + error.message, 'error'); return; }

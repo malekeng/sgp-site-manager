@@ -107,10 +107,11 @@
 <script src="js/supabase-client.js"></script>
 <script src="js/app.js"></script>
 <script src="js/documents.js"></script>
+<script src="js/doc-insights.js"></script>
 <script src="js/crud.js"></script>
 <script>
 initCrudPage({
-  table: 'rebar_deliveries', icon: '🔩',
+  table: 'rebar_deliveries', docInsights: true, icon: '🔩',
   activePage: 'rebar.html',
   title: 'משלוחי ברזל',
   dateField: 'order_date',
@@ -169,6 +170,7 @@ ocrInput.addEventListener('change', () => {
 });
 
 let lastOcrFile = null;
+let lastOcrExtracted = null;   // what the scan zone read, stored with the file when it is attached
 
 async function handleOcrFile(file) {
   lastOcrFile = file;
@@ -178,6 +180,7 @@ async function handleOcrFile(file) {
   ocrProgressText.textContent = 'טוען קובץ...';
   try {
     const doc = await sgpReadDocument(file, { onProgress: t => { ocrProgressText.textContent = t; } });
+    lastOcrExtracted = sgpExtract(doc, file.name);
     document.getElementById('ocrRawText').textContent = sgpDocumentRawText(doc);
     document.getElementById('ocrRawWrap').style.display = 'block';
 
@@ -210,16 +213,18 @@ function attachOcrFileAs(docType) {
   const widget = (window.sgpAttachWidgetsByType && window.sgpAttachWidgetsByType[docType])
     || (window.sgpAttachWidgetsByType && window.sgpAttachWidgetsByType.default);
   if (!widget) { toast('שגיאה: לא נמצא אזור צירוף מתאים', 'error'); return; }
-  widget.addFile(lastOcrFile, docType);
+  widget.addFile(lastOcrFile, docType, { extracted: lastOcrExtracted });
   toast(docType === 'order' ? 'הקובץ צורף כקובץ הזמנה' : 'הקובץ צורף כתעודת משלוח', 'success');
   document.getElementById('ocrAttachChoice').style.display = 'none';
   lastOcrFile = null;
+  lastOcrExtracted = null;
 }
 
 document.getElementById('ocrAttachAsOrder').addEventListener('click', () => attachOcrFileAs('order'));
 document.getElementById('ocrAttachAsDeliveryNote').addEventListener('click', () => attachOcrFileAs('delivery_note'));
 document.getElementById('ocrAttachSkip').addEventListener('click', () => {
   lastOcrFile = null;
+  lastOcrExtracted = null;
   document.getElementById('ocrAttachChoice').style.display = 'none';
 });
 </script>

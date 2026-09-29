@@ -69,7 +69,7 @@
 
     <div class="table-wrap">
       <table>
-        <thead><tr><th>תאריך</th><th>כיוון</th><th>גורם</th><th>נושא</th><th>קטגוריה</th><th>קשור ל</th><th>מסמכים</th><th></th></tr></thead>
+        <thead><tr><th>תאריך</th><th>כיוון</th><th>גורם</th><th>נושא</th><th>קטגוריה</th><th>מענה</th><th>קשור ל</th><th>מסמכים</th><th></th></tr></thead>
         <tbody id="tableBody">
           <tr class="empty-row"><td colspan="8"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
         </tbody>
@@ -97,6 +97,7 @@
           <label>קטגוריה</label>
           <select name="category">
             <option value="">בחר...</option>
+            <option value="דוח פיקוח עליון">דוח פיקוח עליון</option>
             <option value="אישור יציקה">אישור יציקה</option>
             <option value="פרט תכנון / איטום">פרט תכנון / איטום</option>
             <option value="אישור חומרים">אישור חומרים</option>
@@ -120,6 +121,8 @@
           </datalist>
         </div>
         <div class="field full"><label>נושא *</label><input type="text" name="subject" required></div>
+        <div class="field" id="replyDueField"><label>מועד לתשובה</label><input type="date" name="reply_due"></div>
+        <div class="field" id="replyToField" style="display:none;"><label>תשובה לפנייה</label><select name="reply_to"><option value="">—</option></select></div>
 
         <div class="field">
           <label>קישור לרשומה (אופציונלי)</label>
@@ -211,7 +214,7 @@
   function renderTable() {
     const tbody = document.getElementById('tableBody');
     if (!state.rows.length) {
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="8">אין רשומות עדיין</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="9">אין רשומות עדיין</td></tr>`;
       return;
     }
     tbody.innerHTML = state.rows.map(row => {
@@ -226,6 +229,7 @@
           <td>${esc(row.party || '—')}</td>
           <td>${esc(row.subject)}</td>
           <td>${esc(row.category || '—')}</td>
+          <td>${replyCell(row)}</td>
           <td>${esc(linkedLabel)}</td>
           <td>${docCell}</td>
           <td class="row-actions">
@@ -246,6 +250,33 @@
     tbody.querySelectorAll('[data-mail]').forEach(b => b.addEventListener('click', () => openMail(b.dataset.mail)));
     tbody.querySelectorAll('[data-docs]').forEach(b => b.addEventListener('click', () => showDocsPopup(b.dataset.docs)));
   }
+
+  // An outgoing request is answered when an incoming entry points back to it.
+  function replyCell(row) {
+    if (row.direction === 'incoming') {
+      const req = row.reply_to && state.rows.find(r => r.id === row.reply_to);
+      return req ? `<span class="corr-reply">תשובה ל"${esc(req.subject.slice(0, 30))}"</span>` : '—';
+    }
+    const answer = state.rows.find(r => r.direction === 'incoming' && r.reply_to === row.id);
+    if (answer) return `<span class="lic-status lic-status-done">נענה ${esc(fmtDate(answer.entry_date))}</span>`;
+    if (!row.reply_due) return '<span class="lic-status lic-status-open">ממתין</span>';
+    const late = row.reply_due < new Date().toISOString().slice(0, 10);
+    return `<span class="lic-status lic-status-${late ? 'fail' : 'progress'}">${late ? 'באיחור — ' : 'עד '}${esc(fmtDate(row.reply_due))}</span>`;
+  }
+  const replyDueField = document.getElementById('replyDueField'), replyToField = document.getElementById('replyToField');
+  function syncDirection(selectedReplyTo) {
+    const form = document.getElementById('recordForm');
+    const incoming = form.direction.value === 'incoming';
+    replyDueField.style.display = incoming ? 'none' : '';
+    replyToField.style.display = incoming ? '' : 'none';
+    if (incoming) {
+      const open = state.rows.filter(r => r.direction === 'outgoing' && r.id !== state.editingId);
+      form.reply_to.innerHTML = '<option value="">—</option>' + open.map(r =>
+        `<option value="${r.id}">${esc(fmtDate(r.entry_date))} · ${esc(r.party || '')} · ${esc(r.subject.slice(0, 40))}</option>`).join('');
+      form.reply_to.value = selectedReplyTo || '';
+    }
+  }
+  document.getElementById('recordForm').direction.addEventListener('change', () => syncDirection());
 
   function isImageFile(name) { return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || ''); }
   function openLightbox(url) {
@@ -306,6 +337,7 @@
     linkedTableSelect.value = '';
     linkedRecordField.style.display = 'none';
     document.getElementById('recordForm').entry_date.value = new Date().toISOString().slice(0, 10);
+    syncDirection();
 
     if (id) {
       const row = state.rows.find(r => r.id === id);
@@ -317,6 +349,8 @@
       form.subject.value = row.subject || '';
       form.party.value = row.party || '';
       form.body.value = row.body || '';
+      form.reply_due.value = row.reply_due || '';
+      syncDirection(row.reply_to);
       if (row.linked_table) {
         linkedTableSelect.value = row.linked_table;
         linkedTableSelect.dispatchEvent(new Event('change'));
@@ -347,6 +381,8 @@
       body: fd.get('body') || null,
       linked_table: linkedTableSelect.value || null,
       linked_record_id: linkedRecordSelect.value || null,
+      reply_due: fd.get('direction') === 'outgoing' ? (fd.get('reply_due') || null) : null,
+      reply_to: fd.get('direction') === 'incoming' ? (fd.get('reply_to') || null) : null,
     };
 
     const submitBtn = e.target.querySelector('[type=submit]');

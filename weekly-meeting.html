@@ -79,6 +79,13 @@
         <div class="field"><label>תאריך *</label><input type="date" name="meeting_date" required></div>
         <div class="field"><label>משתתפים</label><input type="text" name="attendees" placeholder="שמות המשתתפים, מופרדים בפסיק"></div>
         <div class="field full"><label>סיכום *</label><textarea name="summary" rows="6" required placeholder="נושאים שנדונו, החלטות, משימות שנקבעו..."></textarea></div>
+        <div class="field full" id="meetingOpenItems"></div>
+        <div class="field full">
+          <label>משימות מהישיבה — מי · מה · עד מתי</label>
+          <div id="meetingTasks" class="mt-list"></div>
+          <button type="button" class="btn btn-sm btn-outline" id="addMeetingTask" style="justify-self:start;margin-top:6px;">+ משימה</button>
+          <div class="field-hint">כל משימה נשמרת כמשימה אמיתית בעמוד המשימות, מקושרת לישיבה.</div>
+        </div>
       </div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary">שמירה</button>
@@ -100,6 +107,59 @@
 
   let meetings = [];
   let editingId = null;
+  let members = [];
+  let meetingTasks = {};          // meeting id → its tasks
+  let newTasks = [];              // action items typed in the open window
+
+  const TASK_STATUS = { todo: 'לביצוע', in_progress: 'בתהליך', done: 'הושלם' };
+  async function loadMembers() {
+    const { data } = await sb.from('profile_sites').select('profiles(id, full_name, username)').eq('site_id', site.id);
+    const seen = new Map();
+    (data || []).forEach(r => { if (r.profiles) seen.set(r.profiles.id, r.profiles); });
+    members = [...seen.values()];
+  }
+  async function loadMeetingTasks() {
+    const { data } = await sb.from('tasks').select('id, title, status, due_date, assignee_id, meeting_id')
+      .eq('site_id', site.id).not('meeting_id', 'is', null);
+    meetingTasks = {};
+    (data || []).forEach(t => { (meetingTasks[t.meeting_id] ||= []).push(t); });
+  }
+  const memberName = id => { const m = members.find(x => x.id === id); return m ? (m.full_name || m.username) : ''; };
+
+  // What the meeting should go over: open non-conformances and overdue tasks.
+  async function renderOpenItems() {
+    const host = document.getElementById('meetingOpenItems');
+    const today = new Date().toISOString().slice(0, 10);
+    const [{ data: ncr }, { data: late }] = await Promise.all([
+      sb.from('exceptions').select('id, location, description, severity, planned_close_date, status').eq('site_id', site.id).neq('status', 'נסגר')
+        .order('planned_close_date', { ascending: true }),
+      sb.from('tasks').select('id, title, due_date, status').eq('site_id', site.id).neq('status', 'done').lt('due_date', today)
+        .order('due_date', { ascending: true }),
+    ]);
+    const lines = [
+      ...(ncr || []).map(x => `<li><a href="exceptions.html?open=${x.id}">אי-התאמה${x.severity ? ' (חומרה ' + x.severity + ')' : ''}: ${esc((x.location ? x.location + ' — ' : '') + String(x.description || '').split('\n')[0].slice(0, 80))}</a>${x.planned_close_date && x.planned_close_date < today ? ' <span class="ncr-late">באיחור</span>' : ''}</li>`),
+      ...(late || []).map(t => `<li><a href="tasks.html">משימה באיחור: ${esc(t.title)}</a> <span class="ncr-late">מ-${esc(fmtDate(t.due_date))}</span></li>`),
+    ];
+    host.innerHTML = lines.length
+      ? `<label>נושאים פתוחים לדיון (נאסף אוטומטית)</label><ul class="mt-open">${lines.join('')}</ul>`
+      : '<label>נושאים פתוחים לדיון</label><div class="field-hint" style="display:block">אין אי-התאמות פתוחות ואין משימות באיחור.</div>';
+  }
+
+  function renderMeetingTasks() {
+    const host = document.getElementById('meetingTasks');
+    const existing = (editingId && meetingTasks[editingId]) || [];
+    const opts = sel => '<option value="">מי?</option>' + members.map(m => `<option value="${m.id}"${m.id === sel ? ' selected' : ''}>${esc(m.full_name || m.username)}</option>`).join('');
+    host.innerHTML = existing.map(t => `<div class="mt-row saved"><span class="mt-title">${esc(t.title)}</span>
+        <span class="mt-meta">${esc(memberName(t.assignee_id) || '—')} · ${t.due_date ? esc(fmtDate(t.due_date)) : 'ללא תאריך'} · ${TASK_STATUS[t.status] || t.status}</span></div>`).join('')
+      + newTasks.map((t, i) => `<div class="mt-row">
+        <input type="text" placeholder="מה צריך לעשות" value="${esc(t.title)}" data-i="${i}" data-k="title">
+        <select data-i="${i}" data-k="assignee_id">${opts(t.assignee_id)}</select>
+        <input type="date" value="${esc(t.due_date || '')}" data-i="${i}" data-k="due_date">
+        <button type="button" class="icon-btn" data-rm="${i}" aria-label="הסרה">${uiIcon('x', 14)}</button></div>`).join('');
+    host.querySelectorAll('[data-k]').forEach(el => el.addEventListener('input', () => { newTasks[+el.dataset.i][el.dataset.k] = el.value || null; }));
+    host.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { newTasks.splice(+b.dataset.rm, 1); renderMeetingTasks(); }));
+  }
+  document.getElementById('addMeetingTask').addEventListener('click', () => { newTasks.push({ title: '', assignee_id: null, due_date: null }); renderMeetingTasks(); });
 
   async function loadMeetings() {
     const { data, error } = await sb.from('weekly_meetings')
@@ -107,6 +167,7 @@
       .order('meeting_date', { ascending: false }).order('created_at', { ascending: false });
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
     meetings = data || [];
+    await loadMeetingTasks();
     renderList();
   }
 
@@ -119,6 +180,7 @@
           <div>
             <strong style="font-size:14px;">${esc(fmtDate(m.meeting_date))}</strong>
             ${m.attendees ? `<span style="color:var(--steel);font-size:12px;"> · ${esc(m.attendees)}</span>` : ''}
+            ${(meetingTasks[m.id] || []).length ? `<span class="mt-badge">${meetingTasks[m.id].length} משימות · ${meetingTasks[m.id].filter(t => t.status !== 'done').length} פתוחות</span>` : ''}
           </div>
           <div style="display:flex;gap:4px;">
             <button type="button" class="icon-btn" data-edit="${m.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
@@ -145,6 +207,9 @@
       form.attendees.value = m.attendees || '';
       form.summary.value = m.summary || '';
     }
+    newTasks = [];
+    renderMeetingTasks();
+    renderOpenItems();
     document.getElementById('modalBackdrop').classList.add('open');
   }
   function closeModal() { document.getElementById('modalBackdrop').classList.remove('open'); }
@@ -168,6 +233,7 @@
     const submitBtn = e.target.querySelector('[type=submit]');
     submitBtn.disabled = true;
     try {
+      let meetingId = editingId;
       if (editingId) {
         payload.updated_by = user.id;
         payload.updated_at = new Date().toISOString();
@@ -176,10 +242,24 @@
       } else {
         payload.site_id = site.id;
         payload.created_by = user.id;
-        const { error } = await sb.from('weekly_meetings').insert(payload);
+        const { data: saved, error } = await sb.from('weekly_meetings').insert(payload).select('id').single();
         if (error) throw error;
+        meetingId = saved.id;
+        editingId = meetingId;       // a retry must not save the meeting twice
       }
-      toast(editingId ? 'הסיכום עודכן' : 'הסיכום נשמר', 'success');
+      // the action items become tasks, linked to this meeting
+      const todo = newTasks.filter(t => t.title && t.title.trim());
+      if (todo.length) {
+        const { count } = await sb.from('tasks').select('id', { count: 'exact', head: true }).eq('site_id', site.id).eq('status', 'todo');
+        const rows = todo.map((t, i) => ({
+          site_id: site.id, title: t.title.trim(), status: 'todo', due_date: t.due_date || null, assignee_id: t.assignee_id || null,
+          sort_order: (count || 0) + i, meeting_id: meetingId, description: `מסיכום הישיבה מ-${fmtDate(payload.meeting_date)}`, created_by: user.id,
+        }));
+        const { error: tErr } = await sb.from('tasks').insert(rows);
+        if (tErr) throw new Error('הסיכום נשמר, אבל המשימות לא: ' + tErr.message);
+        newTasks = [];
+      }
+      toast(editingId && !todo.length ? 'הסיכום עודכן' : `הסיכום נשמר${todo.length ? ` · נפתחו ${todo.length} משימות` : ''}`, 'success');
       closeModal();
       await loadMeetings();
     } catch (err) {
@@ -227,6 +307,7 @@
   document.getElementById('exportAllBtn').addEventListener('click', () => exportMeetings('pdf'));
   document.getElementById('exportAllXlsxBtn').addEventListener('click', () => exportMeetings('xlsx'));
 
+  await loadMembers();
   await loadMeetings();
 })();
 </script>

@@ -42,6 +42,11 @@
 
   <div class="stats-row" id="statsRow"></div>
 
+  <section class="card" id="priceCompare" hidden>
+    <div class="card-header"><h2>השוואה לפי חומר ויחידה</h2><span class="lic-sub">רק הצעות באותה יחידה מושוות זו לזו · הצעה בת יותר מ-90 יום מסומנת</span></div>
+    <div id="priceGroups" class="pc-groups"></div>
+  </section>
+
   <div class="card">
     <div class="card-header">
       <h2>הצעות מחיר מספקים</h2>
@@ -102,6 +107,7 @@ initCrudPage({
   table: 'price_quotes', icon: '💰',
   activePage: 'prices.html',
   title: 'השוואת מחירים',
+  onLoaded: renderPriceComparison,
   dateField: 'quote_date',
   orderBy: { column: 'quote_date', ascending: false },
   columns: [
@@ -163,6 +169,42 @@ async function handleOcrFile(file) {
   } finally {
     ocrProgress.classList.remove('show');
   }
+}
+
+// The latest quote of each supplier, per material and unit. Different units are never
+// compared (a price per ton against a price per kg says nothing).
+function renderPriceComparison(rows) {
+  const card = document.getElementById('priceCompare');
+  const norm = s => String(s || '').trim().replace(/\s+/g, ' ');
+  const groups = new Map();
+  for (const r of rows) {
+    const key = norm(r.material) + '|' + norm(r.unit);
+    if (!groups.has(key)) groups.set(key, { material: norm(r.material), unit: norm(r.unit), bySupplier: new Map() });
+    const g = groups.get(key), s = norm(r.supplier), prev = g.bySupplier.get(s);
+    if (!prev || String(r.quote_date) > String(prev.quote_date)) g.bySupplier.set(s, r);
+  }
+  const list = [...groups.values()].filter(g => g.bySupplier.size);
+  card.hidden = !list.length;
+  if (!list.length) return;
+  const today = Date.now();
+  const unitsByMaterial = {};
+  list.forEach(g => { (unitsByMaterial[g.material] ||= new Set()).add(g.unit); });
+  document.getElementById('priceGroups').innerHTML = list.sort((a, b) => a.material.localeCompare(b.material, 'he')).map(g => {
+    const quotes = [...g.bySupplier.values()].sort((a, b) => Number(a.unit_price) - Number(b.unit_price));
+    const min = Number(quotes[0].unit_price), max = Number(quotes[quotes.length - 1].unit_price);
+    const spread = quotes.length > 1 && min > 0 ? Math.round(((max - min) / min) * 100) : null;
+    const mixed = unitsByMaterial[g.material].size > 1;
+    return `<div class="pc-group">
+      <div class="pc-head"><b>${esc(g.material)}</b><span>ל${esc(g.unit)}</span>${spread !== null ? `<span class="pc-spread">פער ${spread}%</span>` : ''}</div>
+      <ol class="pc-list">${quotes.map((q, i) => {
+        const old = (today - Date.parse(q.quote_date)) / 86400000 > 90;
+        return `<li class="${i === 0 && quotes.length > 1 ? 'best' : ''}"><span>${esc(q.supplier)}</span>
+          <span class="pc-price">${fmtNum(q.unit_price, 2)} ₪</span>
+          <span class="pc-date${old ? ' old' : ''}">${esc(fmtDate(q.quote_date))}${old ? ' · ישנה' : ''}</span></li>`;
+      }).join('')}</ol>
+      ${mixed ? '<div class="pc-note">לחומר הזה יש הצעות גם ביחידה אחרת — הן מוצגות בנפרד ולא הושוו.</div>' : ''}
+    </div>`;
+  }).join('');
 }
 </script>
 </body>

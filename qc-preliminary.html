@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>בקרה מקדימה | TADOK</title>
+<title>בקרה מוקדמת | TADOK</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -28,13 +28,13 @@
 <header class="app-header" id="app-header"></header>
 
 <main class="page">
-  <h1 class="page-title" id="pageTitle">בקרה מקדימה</h1>
+  <h1 class="page-title" id="pageTitle">בקרה מוקדמת</h1>
 
   <div class="stats-row" id="statsRow"></div>
 
   <div class="card">
     <div class="card-header">
-      <h2>יומן בקרה מקדימה</h2>
+      <h2>יומן בקרה מוקדמת</h2>
       <div class="header-actions">
         <button class="btn btn-primary" id="addBtn">+ בקרה חדשה</button>
         <button class="btn btn-outline" id="filterToggle">סינון</button>
@@ -78,6 +78,7 @@
 <script src="js/supabase-client.js"></script>
 <script src="js/app.js"></script>
 <script src="js/documents.js"></script>
+<script src="js/qc-checklists.js"></script>
 <script src="js/crud.js"></script>
 <script>
 initCrudPage({
@@ -85,25 +86,37 @@ initCrudPage({
   staticFilter: { column: 'stage', value: 'preliminary' },
   icon: '🔍',
   activePage: 'qc-preliminary.html',
-  title: 'בקרה מקדימה',
+  title: 'בקרה מוקדמת',
   dateField: 'control_date',
   orderBy: { column: 'control_date', ascending: false },
   columns: [
     { key: 'control_date', label: 'תאריך בקרה', type: 'date' },
-    { key: 'subject', label: 'בקרה מקדימה ל', type: 'text' },
+    { key: 'subject', label: 'בקרה מוקדמת ל', type: 'text' },
     { key: 'inspector', label: 'בודק / מבצע הבקרה', type: 'text' },
-    { key: 'result', label: 'תוצאה', type: 'text' },
+    { key: 'checklist', label: 'רשימת בדיקה', render: qcChecklistCell },
+    { key: 'result', label: 'תוצאה', render: r => r.result ? `<span class="lic-status lic-status-${{ 'תקין': 'done', 'לא תקין': 'fail', 'בטיפול': 'progress' }[r.result] || 'open'}">${esc(r.result)}</span>` : '' },
     { key: 'notes', label: 'הערות', type: 'text' },
   ],
   formFields: [
     { key: 'control_date', label: 'תאריך בקרה', type: 'date', required: true },
-    { key: 'subject', label: 'בקרה מקדימה ל', type: 'select', required: true,
+    { key: 'subject', label: 'בקרה מוקדמת ל', type: 'select', required: true,
       options: ['יסודות', 'רצפה', 'קיר', 'קיר דיפון', 'עמודים', 'קורות', 'תקרה', 'מדרגות', 'ממ״ד', 'איטום', 'אינסטלציה', 'חשמל'] },
     { key: 'inspector', label: 'בודק / מבצע הבקרה', type: 'text' },
-    { key: 'result', label: 'תוצאה', type: 'select', options: ['תקין', 'לא תקין', 'בטיפול'] },
+    { key: 'result', label: 'תוצאה (לפי רשימת הבדיקה)', type: 'select', options: ['תקין', 'לא תקין', 'בטיפול'] },
+    { key: 'approved_by', label: 'נקודת עצירה — אושר ע״י', type: 'text', placeholder: 'שם ותפקיד (מפקח / מתכנן / מנהל פרויקט)' },
+    { key: 'approval_date', label: 'תאריך האישור', type: 'date' },
     { key: 'notes', label: 'הערות', type: 'textarea', full: true },
   ],
+  formExtension: qcChecklistExtension('preliminary'),
+  afterSave: qcOpenNonConformance,
 });
+function qcChecklistCell(r) {
+  const list = r.checklist || [];
+  if (!list.length) return '';
+  const ok = list.filter(c => c.status === 'ok').length, fail = list.filter(c => c.status === 'fail').length;
+  const done = list.filter(c => c.status).length;
+  return `<span class="qc-mini">${done}/${list.length}${fail ? ` · <b class="qc-mini-fail">${fail} לא תקין</b>` : ok === list.length ? ' ✓' : ''}</span>`;
+}
 </script>
 </body>
 </html>

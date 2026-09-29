@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>חריגים | TADOK</title>
+<title>חריגים / אי-התאמות | TADOK</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -28,7 +28,7 @@
 <header class="app-header" id="app-header"></header>
 
 <main class="page">
-  <h1 class="page-title" id="pageTitle">חריגים</h1>
+  <h1 class="page-title" id="pageTitle">חריגים / אי-התאמות</h1>
 
   <div class="stats-row" id="statsRow"></div>
 
@@ -83,16 +83,18 @@
 initCrudPage({
   table: 'exceptions', icon: '⚠️',
   activePage: 'exceptions.html',
-  title: 'חריגים',
+  title: 'חריגים / אי-התאמות',
   dateField: 'exception_date',
   orderBy: { column: 'exception_date', ascending: false },
   columns: [
     { key: 'exception_date', label: 'תאריך', type: 'date' },
     { key: 'category', label: 'קטגוריה', type: 'text' },
     { key: 'location', label: 'מיקום / אלמנט', type: 'text' },
-    { key: 'description', label: 'תיאור החריג', type: 'text' },
-    { key: 'status', label: 'סטטוס', type: 'text' },
-    { key: 'notes', label: 'הערות', type: 'text' },
+    { key: 'description', label: 'תיאור', type: 'text' },
+    { key: 'severity', label: 'חומרה', render: r => r.severity ? `<span class="ncr-sev ncr-sev-${r.severity}" title="${esc(NCR_SEVERITY[r.severity])}">${r.severity}</span>` : '' },
+    { key: 'status', label: 'סטטוס', render: r => r.status ? `<span class="lic-status lic-status-${{ 'פתוח': 'fail', 'בטיפול': 'progress', 'נסגר': 'done' }[r.status] || 'open'}">${esc(r.status)}</span>` : '' },
+    { key: 'planned_close_date', label: 'סגירה מתוכננת', render: ncrDueCell },
+    { key: 'corrective_action', label: 'פעולה מתקנת', type: 'text' },
   ],
   formFields: [
     { key: 'exception_date', label: 'תאריך', type: 'date', required: true },
@@ -100,11 +102,33 @@ initCrudPage({
       options: ['יציקת בטון', 'ברזל', 'לוח\"דים', 'כמויות', 'בטיחות', 'תכנון', 'ביצוע', 'ספקים'] },
     { key: 'location', label: 'מיקום / אלמנט', type: 'text' },
     { key: 'description', label: 'תיאור החריג', type: 'textarea', full: true, required: true },
+    { key: 'severity', label: 'חומרה (1 קלה · 2 תיקון/קיזוז באישור · 3 חובת תיקון)', type: 'select', options: ['1', '2', '3'], numeric: true },
+    { key: 'cause', label: 'גורם', type: 'select', options: ['ספק', 'קבלן משנה', 'צוות הביצוע', 'תכנון'] },
     { key: 'status', label: 'סטטוס', type: 'select', required: true,
       options: ['פתוח', 'בטיפול', 'נסגר'] },
+    { key: 'planned_close_date', label: 'תאריך סגירה מתוכנן (באישור מנהל הפרויקט)', type: 'date' },
+    { key: 'closed_date', label: 'תאריך סגירה בפועל', type: 'date' },
+    { key: 'corrective_action', label: 'פעולה מתקנת / מונעת', type: 'textarea', full: true },
     { key: 'notes', label: 'הערות / עדכונים', type: 'textarea', full: true },
   ],
+  // the specification: severity, planned vs actual close date, corrective action; a closed
+  // item gets its close date
+  formExtension: {
+    collect(payload) {
+      if (payload.status === 'נסגר' && !payload.closed_date) payload.closed_date = new Date().toISOString().slice(0, 10);
+      if (payload.severity === 3 && payload.status === 'נסגר' && !payload.corrective_action) return 'אי-התאמה בחומרה 3 נסגרת רק עם פעולה מתקנת';
+      return null;
+    },
+  },
 });
+const NCR_SEVERITY = { 1: 'קלה — תיקון פשוט או קיזוז ללא תיקון', 2: 'בינונית — קיזוז או תיקון באישור', 3: 'חמורה — חובת תיקון, מעורבות מנהל הפרויקט / המתכנן' };
+function ncrDueCell(r) {
+  if (!r.planned_close_date) return '';
+  const end = r.closed_date || new Date().toISOString().slice(0, 10);
+  const late = Math.round((Date.parse(end) - Date.parse(r.planned_close_date)) / 86400000);
+  const tag = late > 0 ? ` <span class="ncr-late">${r.closed_date ? 'נסגר' : ''} באיחור ${late} ימים</span>` : '';
+  return esc(fmtDate(r.planned_close_date)) + tag;
+}
 </script>
 </body>
 </html>

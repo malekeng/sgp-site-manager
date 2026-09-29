@@ -13,7 +13,8 @@ const SGP_LONG_KEYS = ['notes', 'description', 'summary', 'body'];
 const SGP_STATUS_KEYS = ['status', 'approval_status', 'result', 'status_label', 'supply_status'];
 const SGP_STATUS_TONE = {
   'תקין': 'good', 'מאושר': 'good', 'הושלם': 'good', 'נסגר': 'good', 'כן': 'good',
-  'לא תקין': 'bad', 'נדחה': 'bad',
+  'לא תקין': 'bad', 'נדחה': 'bad', 'לא עומד': 'bad', 'באיחור': 'bad',
+  'עומד': 'good', 'לבדיקה': 'wait', 'ממתין': 'wait', 'טרם נקרא': 'wait',
   'בטיפול': 'wait', 'ממתין לאישור': 'wait', 'פתוח': 'wait', 'בתהליך': 'wait', 'לביצוע': 'wait', 'חלקית': 'wait', 'לא': 'wait',
 };
 function sgpStatusTone(col, v) {

@@ -129,7 +129,7 @@ function createAttachWidget(container, options = {}) {
     });
   }
 
-  function addFiles(fileList, typeOverride) {
+  function addFiles(fileList, typeOverride, extra) {
     for (const f of fileList) {
       if (f.size > 10 * 1024 * 1024) {
         toast(`הקובץ ${f.name} גדול מ-10MB ולא נוסף`, 'error');
@@ -137,7 +137,8 @@ function createAttachWidget(container, options = {}) {
       }
       const guessedType = typeOverride || fixedDocType || (isImageFileName(f.name) ? 'photo' : 'other');
       const defaultDate = guessedType === 'delivery_note' ? new Date().toISOString().slice(0, 10) : null;
-      entries.push({ file: f, docType: guessedType, selected: true, documentDate: defaultDate });
+      entries.push({ file: f, docType: guessedType, selected: true, documentDate: defaultDate,
+        extracted: (extra && extra.extracted) || null });
     }
     render();
   }
@@ -156,15 +157,17 @@ function createAttachWidget(container, options = {}) {
   return {
     getFiles: () => entries,
     clear: () => { entries = []; hideProgress(); render(); },
-    addFile: (file, typeOverride) => addFiles([file], typeOverride),
+    // extra.extracted: what the scan zone already read from this file (kept with it)
+    addFile: (file, typeOverride, extra) => addFiles([file], typeOverride, extra),
     async upload({ siteId, table, recordId, userId }) {
       const toUpload = entries.filter(e => e.selected !== false);
-      if (!toUpload.length) return;
+      const uploaded = [];
+      if (!toUpload.length) return uploaded;
       const total = toUpload.length;
       setProgress(0, `מעלה קובץ 1 מתוך ${total}...`);
 
       for (let i = 0; i < toUpload.length; i++) {
-        const { file, docType, documentDate } = toUpload[i];
+        const { file, docType, documentDate, extracted } = toUpload[i];
         const pctStart = (i / total) * 100;
         setProgress(pctStart, `מעלה: ${file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name} (${i + 1}/${total})`);
 
@@ -173,7 +176,7 @@ function createAttachWidget(container, options = {}) {
         const { error: upErr } = await sb.storage.from('documents').upload(path, file);
         if (upErr) throw upErr;
 
-        const { error: dbErr } = await sb.from('documents').insert({
+        const { data: inserted, error: dbErr } = await sb.from('documents').insert({
           site_id: siteId,
           doc_type: docType || fixedDocType || 'other',
           document_date: documentDate || null,
@@ -184,7 +187,8 @@ function createAttachWidget(container, options = {}) {
           linked_table: table,
           linked_record_id: recordId,
           uploaded_by: userId,
-        });
+          ...(extracted ? { extracted, extracted_at: new Date().toISOString() } : {}),
+        }).select('id').single();
         if (dbErr) {
           // Storage upload already succeeded but the DB row failed — remove the
           // orphaned file so it doesn't sit in storage with no record pointing to it.
@@ -200,6 +204,7 @@ function createAttachWidget(container, options = {}) {
         // that had already succeeded — duplicate storage objects and duplicate rows.
         const doneIndex = entries.indexOf(toUpload[i]);
         if (doneIndex !== -1) entries.splice(doneIndex, 1);
+        uploaded.push({ id: inserted.id, file, docType: docType || fixedDocType || 'other', extracted: !!extracted });
 
         setProgress(((i + 1) / total) * 100, i + 1 === total ? 'ההעלאה הושלמה' : `הועלה ${i + 1} מתוך ${total}`);
       }
@@ -207,6 +212,7 @@ function createAttachWidget(container, options = {}) {
 
       await new Promise(r => setTimeout(r, 350));
       hideProgress();
+      return uploaded;
     }
   };
 }
