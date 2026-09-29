@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>חריגים / אי-התאמות | TADOK</title>
+<title>חריגים | TADOK</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -28,9 +28,14 @@
 <header class="app-header" id="app-header"></header>
 
 <main class="page">
-  <h1 class="page-title" id="pageTitle">חריגים / אי-התאמות</h1>
+  <h1 class="page-title" id="pageTitle">חריגים — עבודות נוספות מעבר להצעת המחיר</h1>
 
   <div class="stats-row" id="statsRow"></div>
+
+  <section class="card xw-card" id="xwCard" hidden>
+    <div class="card-header"><h2>סיכום חריגים</h2><span class="lic-sub">לגבייה — אנחנו דורשים · לתשלום — דורשים מאיתנו</span></div>
+    <div id="xwSummary" class="xw-summary"></div>
+  </section>
 
   <div class="card">
     <div class="card-header">
@@ -80,54 +85,119 @@
 <script src="js/documents.js"></script>
 <script src="js/crud.js"></script>
 <script>
+const XW_STATUS_TONE = { 'טיוטה': 'open', 'הוגש': 'progress', 'בבדיקה': 'progress', 'אושר': 'done', 'אושר חלקית': 'done', 'נדחה': 'fail', 'שולם': 'done' };
+const XW_PENDING = ['הוגש', 'בבדיקה'];
+const xwMoney = v => (v === null || v === undefined || v === '' ? '' : `${fmtNum(v, 0)} ₪`);
+const xwToday = () => new Date().toISOString().slice(0, 10);
+const xwCount = k => (k === 1 ? "חריג אחד" : `${k} חריגים`);
+// a claim that has been waiting for a decision for more than 30 days
+function xwWaiting(r) {
+  if (!XW_PENDING.includes(r.status) || !r.submitted_date) return '';
+  const days = Math.round((Date.parse(xwToday()) - Date.parse(r.submitted_date)) / 86400000);
+  return days > 30 ? ` <span class="ncr-late">ממתין ${days} ימים</span>` : '';
+}
 initCrudPage({
   table: 'exceptions', icon: '⚠️',
   activePage: 'exceptions.html',
-  title: 'חריגים / אי-התאמות',
+  title: 'חריגים — עבודות נוספות מעבר להצעת המחיר',
   dateField: 'exception_date',
   orderBy: { column: 'exception_date', ascending: false },
   columns: [
     { key: 'exception_date', label: 'תאריך', type: 'date' },
-    { key: 'category', label: 'קטגוריה', type: 'text' },
-    { key: 'location', label: 'מיקום / אלמנט', type: 'text' },
-    { key: 'description', label: 'תיאור', type: 'text' },
-    { key: 'severity', label: 'חומרה', render: r => r.severity ? `<span class="ncr-sev ncr-sev-${r.severity}" title="${esc(NCR_SEVERITY[r.severity])}">${r.severity}</span>` : '' },
-    { key: 'status', label: 'סטטוס', render: r => r.status ? `<span class="lic-status lic-status-${{ 'פתוח': 'fail', 'בטיפול': 'progress', 'נסגר': 'done' }[r.status] || 'open'}">${esc(r.status)}</span>` : '' },
-    { key: 'planned_close_date', label: 'סגירה מתוכננת', render: ncrDueCell },
-    { key: 'corrective_action', label: 'פעולה מתקנת', type: 'text' },
+    { key: 'direction', label: 'כיוון', render: r => r.direction
+      ? `<span class="xw-dir xw-${r.direction === 'לגבייה' ? 'in' : 'out'}">${esc(r.direction)}</span>${r.party_name || r.party_type ? `<div class="xw-sub">${esc(r.party_name || r.party_type)}</div>` : ''}` : '' },
+    { key: 'description', label: 'העבודה הנוספת', render: r => `${esc(String(r.description || '').slice(0, 90))}${r.location ? `<div class="xw-sub">${esc(r.location)}</div>` : ''}` },
+    { key: 'instructed_by', label: 'הוראה', render: r => r.instructed_by
+      ? `${esc(r.instructed_by)}${r.instruction_ref ? `<div class="xw-sub">${esc(r.instruction_ref)}</div>` : ''}`
+      : '<span class="xw-noinst" title="בלי הוראה בכתב קשה לגבות חריג">אין הוראה</span>' },
+    { key: 'claimed_amount', label: 'נדרש', render: r => xwMoney(r.claimed_amount) },
+    { key: 'approved_amount', label: 'אושר', render: r => xwMoney(r.approved_amount) },
+    { key: 'status', label: 'סטטוס', render: r => r.status ? `<span class="lic-status lic-status-${XW_STATUS_TONE[r.status] || 'open'}">${esc(r.status)}</span>${xwWaiting(r)}` : '' },
   ],
   formFields: [
-    { key: 'exception_date', label: 'תאריך', type: 'date', required: true },
-    { key: 'category', label: 'קטגוריה', type: 'select', required: true,
-      options: ['יציקת בטון', 'ברזל', 'לוח\"דים', 'כמויות', 'בטיחות', 'תכנון', 'ביצוע', 'ספקים'] },
+    { key: 'exception_date', label: 'תאריך (ההוראה / הביצוע)', type: 'date', required: true },
+    { key: 'direction', label: 'כיוון', type: 'select', required: true, options: ['לגבייה', 'לתשלום'] },
+    { key: 'party_type', label: 'מול', type: 'select', options: ['יזם / מזמין', 'קבלן ראשי', 'קבלן משנה', 'ספק'] },
+    { key: 'party_name', label: 'שם הצד השני', type: 'text' },
+    { key: 'category', label: 'סוג העבודה', type: 'select',
+      options: ['עבודות עפר', 'יציקת בטון', 'ברזל', 'טפסנות', 'לוח\"דים', 'איטום', 'מערכות', 'פיתוח', 'כמויות'] },
     { key: 'location', label: 'מיקום / אלמנט', type: 'text' },
-    { key: 'description', label: 'תיאור החריג', type: 'textarea', full: true, required: true },
-    { key: 'severity', label: 'חומרה (1 קלה · 2 תיקון/קיזוז באישור · 3 חובת תיקון)', type: 'select', options: ['1', '2', '3'], numeric: true },
-    { key: 'cause', label: 'גורם', type: 'select', options: ['ספק', 'קבלן משנה', 'צוות הביצוע', 'תכנון'] },
-    { key: 'status', label: 'סטטוס', type: 'select', required: true,
-      options: ['פתוח', 'בטיפול', 'נסגר'] },
-    { key: 'planned_close_date', label: 'תאריך סגירה מתוכנן (באישור מנהל הפרויקט)', type: 'date' },
-    { key: 'closed_date', label: 'תאריך סגירה בפועל', type: 'date' },
-    { key: 'corrective_action', label: 'פעולה מתקנת / מונעת', type: 'textarea', full: true },
+    { key: 'description', label: 'תיאור העבודה הנוספת', type: 'textarea', full: true, required: true },
+    { key: 'instructed_by', label: 'מי הורה על העבודה', type: 'text', placeholder: 'שם ותפקיד — מפקח, מנהל פרויקט, יזם...' },
+    { key: 'instruction_ref', label: 'אסמכתא להוראה', type: 'text', placeholder: 'מס׳ הוראת שינוי / דף יומן / מייל' },
+    { key: 'quantity', label: 'כמות', type: 'number', step: '0.01' },
+    { key: 'unit', label: 'יחידה', type: 'datalist', options: ['מ\"ק', 'מ\"ר', 'מ\"א', 'טון', 'ק\"ג', 'יח\'', 'קומפלט', 'שעות עבודה', 'ימי עבודה'] },
+    { key: 'unit_price', label: 'מחיר ליחידה (₪)', type: 'number', step: '0.01' },
+    { key: 'claimed_amount', label: 'סכום נדרש (₪)', type: 'number', step: '0.01' },
+    { key: 'status', label: 'סטטוס', type: 'select', required: true, options: ['טיוטה', 'הוגש', 'בבדיקה', 'אושר', 'אושר חלקית', 'נדחה', 'שולם'] },
+    { key: 'submitted_date', label: 'תאריך הגשה', type: 'date' },
+    { key: 'decision_date', label: 'תאריך החלטה', type: 'date' },
+    { key: 'approved_amount', label: 'סכום שאושר (₪)', type: 'number', step: '0.01' },
     { key: 'notes', label: 'הערות / עדכונים', type: 'textarea', full: true },
   ],
-  // the specification: severity, planned vs actual close date, corrective action; a closed
-  // item gets its close date
   formExtension: {
+    // quantity × unit price fills the amount; an amount typed by hand is kept
+    mount(form) {
+      const q = form.querySelector('[name=quantity]'), p = form.querySelector('[name=unit_price]'), amt = form.querySelector('[name=claimed_amount]');
+      const hint = document.createElement('div');
+      hint.className = 'field-hint';
+      amt.insertAdjacentElement('afterend', hint);
+      const inst = form.querySelector('[name=instructed_by]');
+      const instHint = document.createElement('div');
+      instHint.className = 'field-hint';
+      instHint.textContent = 'הוראה בכתב (הוראת שינוי, דף יומן, מייל) היא מה שמאפשר לגבות — צרפו אותה למטה';
+      inst.insertAdjacentElement('afterend', instHint);
+      const update = () => {
+        const v = Number(q.value) * Number(p.value);
+        if (!q.value || !p.value || !isFinite(v)) { hint.textContent = ''; return; }
+        hint.textContent = `כמות × מחיר = ${fmtNum(v, 2)} ₪`;
+        if (amt.value && amt.dataset.auto !== amt.value) return;          // typed by the user
+        amt.value = String(Math.round(v * 100) / 100); amt.dataset.auto = amt.value;
+      };
+      q.addEventListener('input', update); p.addEventListener('input', update);
+      this.update = update;
+    },
+    fill() { const a = document.querySelector('[name=claimed_amount]'); if (a) delete a.dataset.auto; this.update && this.update(); },
     collect(payload) {
-      if (payload.status === 'נסגר' && !payload.closed_date) payload.closed_date = new Date().toISOString().slice(0, 10);
-      if (payload.severity === 3 && payload.status === 'נסגר' && !payload.corrective_action) return 'אי-התאמה בחומרה 3 נסגרת רק עם פעולה מתקנת';
+      const today = xwToday();
+      if (payload.status && payload.status !== 'טיוטה' && !payload.submitted_date) payload.submitted_date = today;
+      if (['אושר', 'אושר חלקית', 'נדחה'].includes(payload.status) && !payload.decision_date) payload.decision_date = today;
+      if (payload.status === 'אושר' && payload.approved_amount == null && payload.claimed_amount != null) payload.approved_amount = payload.claimed_amount;
+      if (payload.status === 'אושר חלקית' && payload.approved_amount == null) return 'באישור חלקי יש לציין את הסכום שאושר';
       return null;
     },
   },
+  onLoaded: renderXwSummary,
 });
-const NCR_SEVERITY = { 1: 'קלה — תיקון פשוט או קיזוז ללא תיקון', 2: 'בינונית — קיזוז או תיקון באישור', 3: 'חמורה — חובת תיקון, מעורבות מנהל הפרויקט / המתכנן' };
-function ncrDueCell(r) {
-  if (!r.planned_close_date) return '';
-  const end = r.closed_date || new Date().toISOString().slice(0, 10);
-  const late = Math.round((Date.parse(end) - Date.parse(r.planned_close_date)) / 86400000);
-  const tag = late > 0 ? ` <span class="ncr-late">${r.closed_date ? 'נסגר' : ''} באיחור ${late} ימים</span>` : '';
-  return esc(fmtDate(r.planned_close_date)) + tag;
+
+// Totals per direction: claimed, approved, waiting for a decision, paid.
+function renderXwSummary(rows) {
+  const card = document.getElementById('xwCard');
+  card.hidden = !rows.length;
+  if (!rows.length) return;
+  const sum = (list, k) => list.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  const block = dir => {
+    const all = rows.filter(r => r.direction === dir && r.status !== 'טיוטה');
+    const drafts = rows.filter(r => r.direction === dir && r.status === 'טיוטה').length;
+    const pending = all.filter(r => XW_PENDING.includes(r.status));
+    const approved = all.filter(r => ['אושר', 'אושר חלקית', 'שולם'].includes(r.status));
+    const late = pending.filter(r => xwWaiting(r)).length;
+    const noInst = rows.filter(r => r.direction === dir && !r.instructed_by).length;
+    if (!all.length && !drafts) return '';
+    return `<div class="xw-block xw-${dir === 'לגבייה' ? 'in' : 'out'}">
+      <div class="xw-title">${dir === 'לגבייה' ? 'לגבייה — אנחנו דורשים' : 'לתשלום — דורשים מאיתנו'}</div>
+      <dl>
+        <div><dt>הוגש</dt><dd>${xwMoney(sum(all, 'claimed_amount')) || '0 ₪'}</dd></div>
+        <div><dt>אושר</dt><dd>${xwMoney(sum(approved, 'approved_amount')) || '0 ₪'}</dd></div>
+        <div><dt>ממתין להחלטה</dt><dd>${xwMoney(sum(pending, 'claimed_amount')) || '0 ₪'}<small>${xwCount(pending.length)}</small></dd></div>
+        <div><dt>שולם</dt><dd>${xwMoney(sum(all.filter(r => r.status === 'שולם'), 'approved_amount')) || '0 ₪'}</dd></div>
+      </dl>
+      ${late ? `<p class="xw-warn">${late === 1 ? "חריג אחד ממתין" : late + " חריגים ממתינים"} להחלטה יותר מ-30 יום</p>` : ''}
+      ${noInst ? `<p class="xw-warn">${xwCount(noInst)} בלי הוראה בכתב</p>` : ''}
+      ${drafts ? `<p class="xw-note">${drafts === 1 ? "טיוטה אחת עוד לא הוגשה" : drafts + " טיוטות עוד לא הוגשו"}</p>` : ''}
+    </div>`;
+  };
+  document.getElementById('xwSummary').innerHTML = block('לגבייה') + block('לתשלום');
 }
 </script>
 </body>

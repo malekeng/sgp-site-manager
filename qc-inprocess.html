@@ -94,7 +94,7 @@ initCrudPage({
     { key: 'subject', label: 'בקרה שוטפת ל', type: 'text' },
     { key: 'inspector', label: 'בודק / מבצע הבקרה', type: 'text' },
     { key: 'checklist', label: 'רשימת בדיקה', render: qcChecklistCell },
-    { key: 'result', label: 'תוצאה', render: r => r.result ? `<span class="lic-status lic-status-${{ 'תקין': 'done', 'לא תקין': 'fail', 'בטיפול': 'progress' }[r.result] || 'open'}">${esc(r.result)}</span>` : '' },
+    { key: 'result', label: 'תוצאה', render: r => r.result ? `<span class="lic-status lic-status-${{ 'תקין': 'done', 'לא תקין': 'fail', 'בטיפול': 'progress' }[r.result] || 'open'}">${esc(r.result)}</span>${r.result === 'לא תקין' ? (r.closed_date ? ` <span class="qc-fixed">תוקן ${esc(fmtDate(r.closed_date))}</span>` : r.planned_close_date ? ` <span class="${r.planned_close_date < new Date().toISOString().slice(0, 10) ? 'ncr-late' : 'qc-due'}">תיקון עד ${esc(fmtDate(r.planned_close_date))}</span>` : '') : ''}` : '' },
     { key: 'notes', label: 'הערות', type: 'text' },
   ],
   formFields: [
@@ -105,10 +105,13 @@ initCrudPage({
     { key: 'result', label: 'תוצאה (לפי רשימת הבדיקה)', type: 'select', options: ['תקין', 'לא תקין', 'בטיפול'] },
     { key: 'approved_by', label: 'נקודת עצירה — אושר ע״י', type: 'text', placeholder: 'שם ותפקיד (מפקח / מתכנן / מנהל פרויקט)' },
     { key: 'approval_date', label: 'תאריך האישור', type: 'date' },
+    { key: 'severity', label: 'חומרת הליקוי (1 קל · 2 תיקון/קיזוז באישור · 3 חובת תיקון)', type: 'select', options: ['1', '2', '3'], numeric: true },
+    { key: 'planned_close_date', label: 'תיקון עד', type: 'date' },
+    { key: 'corrective_action', label: 'פעולה מתקנת', type: 'textarea', full: true },
+    { key: 'closed_date', label: 'תוקן בתאריך', type: 'date' },
     { key: 'notes', label: 'הערות', type: 'textarea', full: true },
   ],
   formExtension: qcChecklistExtension('inprocess'),
-  afterSave: qcOpenNonConformance,
 });
 function qcChecklistCell(r) {
   const list = r.checklist || [];

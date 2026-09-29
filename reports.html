@@ -350,6 +350,8 @@
         { key: 'inspector', label: 'בודק / מבצע הבקרה', type: 'text' },
         { key: 'result', label: 'תוצאה', type: 'text' },
         { key: 'approved_by', label: 'נקודת עצירה אושרה ע״י', type: 'text' },
+        { key: 'severity', label: 'חומרת ליקוי', type: 'text' },
+        { key: 'closed_date', label: 'תוקן', type: 'date' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
@@ -364,6 +366,8 @@
         { key: 'inspector', label: 'בודק / מבצע הבקרה', type: 'text' },
         { key: 'result', label: 'תוצאה', type: 'text' },
         { key: 'approved_by', label: 'נקודת עצירה אושרה ע״י', type: 'text' },
+        { key: 'severity', label: 'חומרת ליקוי', type: 'text' },
+        { key: 'closed_date', label: 'תוקן', type: 'date' },
         { key: 'notes', label: 'הערות', type: 'text' },
       ],
     },
@@ -507,17 +511,16 @@
       {
         const { data } = await dateRange(sb.from('exceptions').select('*').in('site_id', filterState.siteIds), 'exception_date').order('exception_date', { ascending: false });
         sections.push({
-          title: 'חריגים / אי-התאמות', ico: 'exceptions',
+          title: 'חריגים — עבודות נוספות', ico: 'exceptions',
           columns: [
             { key: 'exception_date', label: 'תאריך', type: 'date' },
-            { key: 'category', label: 'קטגוריה', type: 'text' },
-            { key: 'location', label: 'מיקום', type: 'text' },
-            { key: 'severity', label: 'חומרה', type: 'text' },
+            { key: 'direction', label: 'כיוון', type: 'text' },
+            { key: 'party_name', label: 'מול', type: 'text' },
+            { key: 'description', label: 'העבודה', type: 'text' },
+            { key: 'instructed_by', label: 'הוראה', type: 'text' },
+            { key: 'claimed_amount', label: 'נדרש ₪', type: 'number', total: true },
+            { key: 'approved_amount', label: 'אושר ₪', type: 'number', total: true },
             { key: 'status', label: 'סטטוס', type: 'text' },
-            { key: 'planned_close_date', label: 'סגירה מתוכננת', type: 'date' },
-            { key: 'closed_date', label: 'נסגר', type: 'date' },
-            { key: 'description', label: 'תיאור', type: 'text' },
-            { key: 'corrective_action', label: 'פעולה מתקנת', type: 'text' },
           ],
           rows: data || [],
         });

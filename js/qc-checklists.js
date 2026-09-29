@@ -3,7 +3,8 @@
 // משרד הבינוי והשיכון): 3.2.1 בקרה מוקדמת before an activity starts, 3.2.2 בקרה שוטפת with
 // its check points and hold points (נקודות עצירה — work does not go on without approval).
 // The inspector ticks each item; the result follows from the ticks, a hold point needs the
-// name of whoever approved it, and a failed check opens a non-conformance (אי-התאמה).
+// name of whoever approved it, and a failed check carries its own non-conformance record
+// (severity, fix-by date, corrective action, fixed on) — 3.2.4 of the specification.
 
 const QC_PRELIMINARY = [
   { item: 'נלמדו דרישות החוזה, המפרט והתכניות לפעילות' },
@@ -72,6 +73,16 @@ function qcChecklistExtension(stage) {
     if (!sel || !list.length) return;
     const statuses = list.map(c => c.status);
     sel.value = statuses.includes('fail') ? 'לא תקין' : statuses.every(s => s === 'ok' || s === 'na') ? 'תקין' : 'בטיפול';
+    syncDefect();
+  }
+  // a failed check is a non-conformance: severity, fix-by date, corrective action, fixed on
+  const DEFECT_FIELDS = ['severity', 'planned_close_date', 'corrective_action', 'closed_date'];
+  function syncDefect() {
+    const failed = form().querySelector('[name=result]')?.value === 'לא תקין';
+    DEFECT_FIELDS.forEach(k => {
+      const wrap = form().querySelector(`[name="${k}"]`)?.closest('.field');
+      if (wrap) wrap.hidden = !failed;
+    });
   }
   function load(subject, saved) {
     const tpl = qcTemplate(stage, subject);
@@ -86,33 +97,25 @@ function qcChecklistExtension(stage) {
       host.className = 'qc-checklist';
       formEl.querySelector('#formGrid').insertAdjacentElement('afterend', host);
       formEl.querySelector('[name=subject]').addEventListener('change', e => load(e.target.value, list.filter(c => c.status)));
+      formEl.querySelector('[name=result]').addEventListener('change', syncDefect);
     },
-    fill(row) { load(row ? row.subject : null, row ? row.checklist : null); },
+    fill(row) { load(row ? row.subject : null, row ? row.checklist : null); syncDefect(); },
     collect(payload) {
       payload.checklist = list.length ? list.map(c => ({ item: c.item, hold: !!c.hold, status: c.status || null })) : null;
       const heldOk = list.some(c => c.hold && c.status === 'ok');
       if (heldOk && !payload.approved_by) return 'אושרה נקודת עצירה — יש לציין מי אישר (שדה "אושר ע״י")';
       if (heldOk && !payload.approval_date) payload.approval_date = payload.control_date;
+      if (payload.result === 'לא תקין') {
+        if (!payload.severity) payload.severity = 2;
+        if (!payload.planned_close_date) {
+          const d = new Date(payload.control_date || Date.now()); d.setDate(d.getDate() + 7);
+          payload.planned_close_date = d.toISOString().slice(0, 10);
+        }
+        if (payload.closed_date && payload.severity === 3 && !payload.corrective_action) return 'ליקוי בחומרה 3 נסגר רק עם פעולה מתקנת';
+      } else {
+        DEFECT_FIELDS.forEach(k => { payload[k] = null; });
+      }
       return null;
     },
   };
-}
-
-// A failed check opens a non-conformance with the failed items — once per check.
-async function qcOpenNonConformance({ id, payload }, api) {
-  if (payload.result !== 'לא תקין') return;
-  const { data: existing } = await sb.from('exceptions').select('id').eq('source_table', 'quality_controls').eq('source_id', id);
-  if (existing && existing.length) return;
-  const failed = (payload.checklist || []).filter(c => c.status === 'fail').map(c => '• ' + c.item);
-  if (!confirm(`הבקרה סומנה "לא תקין".\n\nלפתוח אי-התאמה${failed.length ? ' עם הליקויים:\n' + failed.join('\n') : ''}?`)) return;
-  const plan = new Date(); plan.setDate(plan.getDate() + 7);
-  const { data, error } = await sb.from('exceptions').insert({
-    site_id: api.site.id, exception_date: payload.control_date, category: 'ביצוע', location: payload.subject,
-    description: `${payload.stage === 'preliminary' ? 'בקרה מוקדמת' : 'בקרה שוטפת'} ל"${payload.subject}" — לא תקין` + (failed.length ? ':\n' + failed.join('\n') : ''),
-    status: 'פתוח', severity: 2, planned_close_date: plan.toISOString().slice(0, 10),
-    source_table: 'quality_controls', source_id: id, created_by: api.user.id,
-  }).select('id').single();
-  if (error) { toast('לא ניתן היה לפתוח אי-התאמה: ' + error.message, 'error'); return; }
-  toast('נפתחה אי-התאמה — עוברים לרשימה', 'success');
-  setTimeout(() => { location.href = `exceptions.html?open=${data.id}`; }, 900);
 }

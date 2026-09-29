@@ -92,21 +92,33 @@ async function sgpWeeklyQualityReport({ siteIds, siteNames, from, to }) {
     }),
   });
 
-  // 5. non-conformances: opened this week, and everything still open
-  const { data: ncr } = await sb.from('exceptions').select('*').in('site_id', siteIds).order('exception_date');
+  // 5. failed checks (non-conformances): found this week, and every one not fixed yet
+  const { data: defects } = await sb.from('quality_controls').select('*').in('site_id', siteIds).eq('result', 'לא תקין').order('control_date');
   sections.push({
-    title: 'אי-התאמות — שנפתחו השבוע ופתוחות', ico: 'exceptions',
+    title: 'ליקויים מבקרת איכות — שנמצאו השבוע ופתוחים', ico: 'quality',
     columns: [
-      { key: 'exception_date', label: 'נפתח', type: 'date' }, { key: 'location', label: 'מיקום', type: 'text' },
-      { key: 'severity', label: 'חומרה', type: 'text' }, { key: 'status', label: 'סטטוס', type: 'text' },
-      { key: 'planned_close_date', label: 'סגירה מתוכננת', type: 'date' }, { key: 'late', label: 'איחור', type: 'text' },
-      { key: 'corrective_action', label: 'פעולה מתקנת', type: 'text' },
+      { key: 'control_date', label: 'נמצא', type: 'date' }, { key: 'subject', label: 'נושא', type: 'text' },
+      { key: 'severity', label: 'חומרה', type: 'text' }, { key: 'planned_close_date', label: 'תיקון עד', type: 'date' },
+      { key: 'status', label: 'סטטוס', type: 'text' }, { key: 'corrective_action', label: 'פעולה מתקנת', type: 'text' },
     ],
-    rows: (ncr || []).filter(x => x.status !== 'נסגר' || (x.exception_date >= from && x.exception_date <= to)).map(x => {
-      const late = x.planned_close_date && x.status !== 'נסגר' && x.planned_close_date < today
-        ? `${Math.round((Date.parse(today) - Date.parse(x.planned_close_date)) / 86400000)} ימים` : '';
-      return { ...x, severity: x.severity ? String(x.severity) : '—', late };
-    }),
+    rows: (defects || []).filter(q => !q.closed_date || (q.control_date >= from && q.control_date <= to)).map(q => ({
+      ...q, severity: q.severity ? String(q.severity) : '—',
+      status: q.closed_date ? 'נסגר' : (q.planned_close_date && q.planned_close_date < today ? 'באיחור' : 'פתוח'),
+    })),
+  });
+
+  // 5b. extra work (חריגים): what was submitted or decided this week, and what is waiting
+  const { data: xw } = await sb.from('exceptions').select('*').in('site_id', siteIds).order('exception_date');
+  sections.push({
+    title: 'חריגים — עבודות נוספות', ico: 'exceptions',
+    columns: [
+      { key: 'exception_date', label: 'תאריך', type: 'date' }, { key: 'direction', label: 'כיוון', type: 'text' },
+      { key: 'party_name', label: 'מול', type: 'text' }, { key: 'description', label: 'העבודה', type: 'text' },
+      { key: 'claimed_amount', label: 'נדרש ₪', type: 'number', total: true }, { key: 'approved_amount', label: 'אושר ₪', type: 'number', total: true },
+      { key: 'status', label: 'סטטוס', type: 'text' },
+    ],
+    rows: (xw || []).filter(x => ['הוגש', 'בבדיקה'].includes(x.status)
+      || (x.submitted_date >= from && x.submitted_date <= to) || (x.decision_date >= from && x.decision_date <= to)),
   });
 
   // 6. deliveries of the week

@@ -126,23 +126,27 @@
   }
   const memberName = id => { const m = members.find(x => x.id === id); return m ? (m.full_name || m.username) : ''; };
 
-  // What the meeting should go over: open non-conformances and overdue tasks.
+  // What the meeting should go over: failed checks not fixed yet, extra-work claims waiting
+  // for a decision, and overdue tasks.
   async function renderOpenItems() {
     const host = document.getElementById('meetingOpenItems');
     const today = new Date().toISOString().slice(0, 10);
-    const [{ data: ncr }, { data: late }] = await Promise.all([
-      sb.from('exceptions').select('id, location, description, severity, planned_close_date, status').eq('site_id', site.id).neq('status', 'נסגר')
-        .order('planned_close_date', { ascending: true }),
+    const [{ data: defects }, { data: xw }, { data: late }] = await Promise.all([
+      sb.from('quality_controls').select('id, stage, subject, control_date, severity, planned_close_date').eq('site_id', site.id)
+        .eq('result', 'לא תקין').is('closed_date', null).order('control_date', { ascending: true }),
+      sb.from('exceptions').select('id, description, direction, party_name, claimed_amount, submitted_date').eq('site_id', site.id)
+        .in('status', ['הוגש', 'בבדיקה']).order('submitted_date', { ascending: true }),
       sb.from('tasks').select('id, title, due_date, status').eq('site_id', site.id).neq('status', 'done').lt('due_date', today)
         .order('due_date', { ascending: true }),
     ]);
     const lines = [
-      ...(ncr || []).map(x => `<li><a href="exceptions.html?open=${x.id}">אי-התאמה${x.severity ? ' (חומרה ' + x.severity + ')' : ''}: ${esc((x.location ? x.location + ' — ' : '') + String(x.description || '').split('\n')[0].slice(0, 80))}</a>${x.planned_close_date && x.planned_close_date < today ? ' <span class="ncr-late">באיחור</span>' : ''}</li>`),
+      ...(defects || []).map(q => `<li><a href="${q.stage === 'preliminary' ? 'qc-preliminary' : 'qc-inprocess'}.html?open=${q.id}">ליקוי בבקרה ל"${esc(q.subject)}"${q.severity ? ' (חומרה ' + q.severity + ')' : ''}</a>${q.planned_close_date && q.planned_close_date < today ? ' <span class="ncr-late">באיחור</span>' : ''}</li>`),
+      ...(xw || []).map(x => `<li><a href="exceptions.html?open=${x.id}">חריג ${esc(x.direction || '')}${x.party_name ? ' מול ' + esc(x.party_name) : ''}: ${esc(String(x.description || '').slice(0, 60))}</a>${x.claimed_amount ? ' · ' + esc(fmtNum(x.claimed_amount, 0)) + ' ₪' : ''} <span class="xw-sub-inline">ממתין להחלטה</span></li>`),
       ...(late || []).map(t => `<li><a href="tasks.html">משימה באיחור: ${esc(t.title)}</a> <span class="ncr-late">מ-${esc(fmtDate(t.due_date))}</span></li>`),
     ];
     host.innerHTML = lines.length
       ? `<label>נושאים פתוחים לדיון (נאסף אוטומטית)</label><ul class="mt-open">${lines.join('')}</ul>`
-      : '<label>נושאים פתוחים לדיון</label><div class="field-hint" style="display:block">אין אי-התאמות פתוחות ואין משימות באיחור.</div>';
+      : '<label>נושאים פתוחים לדיון</label><div class="field-hint" style="display:block">אין ליקויים פתוחים, אין חריגים שממתינים להחלטה ואין משימות באיחור.</div>';
   }
 
   function renderMeetingTasks() {

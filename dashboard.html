@@ -375,7 +375,7 @@ function greetingByHour() {
   }
   async function loadTileCounts() {
     const [ex, tk] = await Promise.all([
-      sb.from('exceptions').select('id', { count: 'exact', head: true }).eq('site_id', site.id).in('status', ['פתוח', 'בטיפול']),
+      sb.from('exceptions').select('id', { count: 'exact', head: true }).eq('site_id', site.id).in('status', ['הוגש', 'בבדיקה']),
       sb.from('tasks').select('id', { count: 'exact', head: true }).eq('site_id', site.id).neq('status', 'done'),
     ]);
     if (ex.count) tileState.attention['exceptions.html'] = (tileState.attention['exceptions.html'] || 0) + ex.count;
@@ -450,13 +450,15 @@ function greetingByHour() {
     });
 
     const todayIso = new Date().toISOString().slice(0, 10);
-    const { data: lateNcr } = await sb.from('exceptions')
-      .select('id, location, description, severity, planned_close_date, status')
-      .eq('site_id', site.id).neq('status', 'נסגר').lt('planned_close_date', todayIso)
-      .order('planned_close_date', { ascending: true });
-    (lateNcr || []).forEach(x => items.push({
-      ico: 'exceptions', dot: x.severity === 3 ? 'red' : 'orange',
-      text: `אי-התאמה${x.severity ? ' (חומרה ' + x.severity + ')' : ''} ב"${x.location || ''}" — הייתה אמורה להיסגר ב-${fmtDate(x.planned_close_date)}`,
+    // extra-work claims waiting more than 30 days for a decision
+    const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const { data: waitingXw } = await sb.from('exceptions')
+      .select('id, description, direction, party_name, claimed_amount, submitted_date')
+      .eq('site_id', site.id).in('status', ['הוגש', 'בבדיקה']).lt('submitted_date', monthAgo)
+      .order('submitted_date', { ascending: true });
+    (waitingXw || []).forEach(x => items.push({
+      ico: 'exceptions', dot: 'orange',
+      text: `חריג ${x.direction || ''}${x.party_name ? ' מול ' + x.party_name : ''}: "${String(x.description || '').slice(0, 50)}"${x.claimed_amount ? ' (' + fmtNum(x.claimed_amount, 0) + ' ₪)' : ''} — ממתין להחלטה מ-${fmtDate(x.submitted_date)}`,
       href: `exceptions.html?open=${x.id}`, tile: 'exceptions.html',
     }));
 
@@ -471,15 +473,21 @@ function greetingByHour() {
       href: 'correspondence.html', tile: 'correspondence.html',
     }));
 
+    // failed checks not fixed yet (a fixed one carries its fix date)
     const { data: failedQc } = await sb.from('quality_controls')
-      .select('id, stage, subject, control_date')
-      .eq('site_id', site.id).eq('result', 'לא תקין')
+      .select('id, stage, subject, control_date, severity, planned_close_date, closed_date')
+      .eq('site_id', site.id).eq('result', 'לא תקין').is('closed_date', null)
       .order('control_date', { ascending: false });
-    (failedQc || []).forEach(q => items.push({
-      ico: q.stage === 'preliminary' ? 'qc-preliminary' : 'qc-inprocess', dot: 'red',
-      text: `בקרה ${q.stage === 'preliminary' ? 'מוקדמת' : 'שוטפת'} ל"${q.subject}" מ-${fmtDate(q.control_date)} — לא תקין`,
-      href: q.stage === 'preliminary' ? 'qc-preliminary.html' : 'qc-inprocess.html',
-    }));
+    (failedQc || []).forEach(q => {
+      const page = q.stage === 'preliminary' ? 'qc-preliminary.html' : 'qc-inprocess.html';
+      const late = q.planned_close_date && q.planned_close_date < todayIso;
+      items.push({
+        ico: q.stage === 'preliminary' ? 'qc-preliminary' : 'qc-inprocess', dot: late || q.severity === 3 ? 'red' : 'orange',
+        text: `בקרה ${q.stage === 'preliminary' ? 'מוקדמת' : 'שוטפת'} ל"${q.subject}" מ-${fmtDate(q.control_date)} — לא תקין`
+          + (q.planned_close_date ? `, ${late ? 'היה אמור להיות מתוקן עד' : 'תיקון עד'} ${fmtDate(q.planned_close_date)}` : ''),
+        href: `${page}?open=${q.id}`, tile: page,
+      });
+    });
 
     items.forEach(it => { const k = it.tile || it.href; tileState.attention[k] = (tileState.attention[k] || 0) + 1; });
     renderTileBadges();
