@@ -29,8 +29,6 @@
     </div>
   </div>
 
-  <section class="home-tiles" id="homeTiles" aria-label="מודולים"></section>
-
   <div class="welcome-block" id="welcomeBlock">
     <div class="welcome-left">
       <div class="avatar-md" id="welcomeAvatar"><span id="welcomeInitials">?</span></div>
@@ -41,6 +39,8 @@
     </div>
     <a href="profile.html" class="btn btn-outline btn-sm">עריכת פרופיל</a>
   </div>
+
+  <section class="home-tiles" id="homeTiles" aria-label="מודולים"></section>
 
   <div class="dashboard-grid">
   <div class="dashboard-main">
@@ -339,6 +339,10 @@ function greetingByHour() {
       else rest.items.push(item);
     }
     groups.push(rest);
+    const manage = [];
+    if (profile.role === 'owner' || profile.role === 'admin') manage.push(ADMIN_NAV_ITEM);
+    if (profile.role === 'owner') manage.push(ORG_SETTINGS_NAV_ITEM);
+    if (manage.length) groups.push({ title: 'ניהול', items: manage });
     document.getElementById('homeTiles').innerHTML = groups.map(g => `
       <div class="tiles-title">${esc(g.title)}</div>
       <div class="tiles-grid">${g.items.map(it => `
