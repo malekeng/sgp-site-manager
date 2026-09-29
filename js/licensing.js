@@ -15,7 +15,7 @@ const LIC_STAGES = [
   { label: 'תעודת גמר', hint: 'תקנה 95(א) — הבנייה בוצעה לפי ההיתר' },
 ];
 
-// [stage index, item, issuer / responsible, basis, category]
+// Commercial and office buildings. [stage index, item, issuer / responsible, basis, category]
 const LIC_TEMPLATE_COMMERCIAL = [
   [0, 'היתר בנייה בתוקף', 'ועדה מקומית', 'חוק התכנון והבנייה', 'רשויות ואישורים'],
   [0, 'הודעת מינויים: עורך ראשי, מתכננים, אחראי לביצוע, קבלן רשום, מנהל עבודה', 'ועדה מקומית', 'תקנה 76', 'רשויות ואישורים'],
@@ -52,9 +52,12 @@ const LIC_TEMPLATE_COMMERCIAL = [
   [5, 'שחרור ערבויות', 'רשות מקומית', 'תנאי ההיתר', 'רשויות ואישורים'],
 ];
 
-function licTemplateRows() {
+// institute: the site's control institute (e.g. "איזוטופ"), written into its items
+function licTemplateRows(institute) {
+  const name = String(institute || '').trim();
   return LIC_TEMPLATE_COMMERCIAL.map(([st, item_name, responsible, basis, category], i) => ({
-    stage: LIC_STAGES[st].label, item_name, responsible, basis, category, status: 'פתוח', sort_order: (i + 1) * 10,
+    stage: LIC_STAGES[st].label, item_name, basis, category, status: 'פתוח', sort_order: (i + 1) * 10,
+    responsible: name && responsible === 'מכון בקרה' ? `מכון בקרה ${name}` : responsible,
   }));
 }
 

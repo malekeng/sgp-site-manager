@@ -150,19 +150,24 @@ function renderPath(api) {
 function renderTemplateOffer(rows, api) {
   const host = document.getElementById('licTemplate');
   const have = new Set(rows.map(r => r.item_name));
-  const missing = licTemplateRows().filter(t => !have.has(t.item_name));
+  // the institute already named on the list (if any) is used for the items added later
+  const known = (rows.find(r => /^מכון בקרה .+/.test(r.responsible || '')) || {}).responsible;
+  const institute = () => (document.getElementById('licInstitute')?.value || (known ? known.replace(/^מכון בקרהs*/, '') : ''));
+  const missing = licTemplateRows(institute()).filter(t => !have.has(t.item_name));
   if (!missing.length) { host.innerHTML = ''; return; }
   host.innerHTML = rows.length
-    ? `<div class="lic-offer small"><span>${missing.length} פריטים מרשימת האישורים לבניין מסחרי עוד לא ברשימה שלכם.</span>
+    ? `<div class="lic-offer small"><span>${missing.length} פריטים מרשימת האישורים למבני מסחר ומשרדים עוד לא ברשימה שלכם.</span>
         <button type="button" class="btn btn-sm btn-outline" id="licLoad">הוספת ${missing.length} הפריטים החסרים</button></div>`
     : `<div class="lic-offer">
         <div><b>רשימת האישורים לטופס 4 ותעודת גמר — מוכנה</b>
-        <p>${missing.length} אישורים ומסמכים בשישה שלבים, לפי תקנות רישוי בנייה (76–78, 87, 89, 95), נוהל מכוני הבקרה (ISRAC) ורשימות הרשויות — כל אחד עם הגורם המאשר והבסיס שלו. מותאם לבניין מסחרי; אפשר להוסיף, לשנות ולמחוק לפי רשימת הוועדה המקומית.</p></div>
+        <p>${missing.length} אישורים ומסמכים בשישה שלבים, לפי תקנות רישוי בנייה (76–78, 87, 89, 95), נוהל מכוני הבקרה (ISRAC) ורשימות הרשויות — כל אחד עם הגורם המאשר והבסיס שלו. מותאם למבני מסחר ומשרדים; אפשר להוסיף, לשנות ולמחוק לפי רשימת הוועדה המקומית.</p>
+        <label class="lic-inst">מכון הבקרה של האתר <input type="text" id="licInstitute" placeholder="לדוגמה: איזוטופ" autocomplete="off"></label></div>
         <button type="button" class="btn btn-primary" id="licLoad">טעינת הרשימה</button></div>`;
   document.getElementById('licLoad').addEventListener('click', async e => {
     e.target.disabled = true;
     const now = new Date().toISOString();
-    const payload = missing.map(m => ({ ...m, site_id: api.site.id, created_by: api.user.id, updated_by: api.user.id, updated_at: now }));
+    const payload = licTemplateRows(institute()).filter(t => !have.has(t.item_name))
+      .map(m => ({ ...m, site_id: api.site.id, created_by: api.user.id, updated_by: api.user.id, updated_at: now }));
     const { error } = await sb.from('facility_file_items').insert(payload);
     if (error) { toast('שגיאה בטעינת הרשימה: ' + error.message, 'error'); e.target.disabled = false; return; }
     toast(`נוספו ${missing.length} פריטים לרשימה`, 'success');
