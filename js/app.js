@@ -72,6 +72,9 @@ const UI_ICONS = {
   'check': '<path d="M20 6 9 17l-5-5"/>',
   'chevron-left': '<path d="m15 18-6-6 6-6"/>',
   'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+  'house': '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  'list-checks': '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
+  'chart-column': '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
 };
 function uiIcon(name, size = 16) {
   return `<svg class="ui-ico ui-ico-${name}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${UI_ICONS[name] || ''}</svg>`;
@@ -322,6 +325,40 @@ async function renderHeader(activePage, profile, site, org) {
     host.classList.remove('open');
     backdrop.classList.remove('open');
   };
+
+  // Phones: a tab bar at the bottom, in thumb reach. "תפריט" opens the full sidebar, so
+  // the floating menu button is hidden there (see .has-tab-bar in the stylesheet).
+  let tabBar = document.getElementById('tabBar');
+  if (!tabBar) {
+    tabBar = document.createElement('nav');
+    tabBar.id = 'tabBar';
+    tabBar.className = 'tab-bar';
+    tabBar.setAttribute('aria-label', 'ניווט מהיר');
+    document.body.appendChild(tabBar);
+    document.body.classList.add('has-tab-bar');
+  }
+  const TABS = [
+    { href: 'dashboard.html', label: 'בית', icon: 'house' },
+    { href: 'tasks.html', label: 'משימות', icon: 'list-checks', badge: 'tasks' },
+    { href: 'reports.html', label: 'דוחות', icon: 'chart-column' },
+  ];
+  tabBar.innerHTML = TABS.map(t => `
+    <a href="${t.href}" class="tab${t.href === activePage ? ' active' : ''}"${t.href === activePage ? ' aria-current="page"' : ''}>
+      ${uiIcon(t.icon, 22)}<span>${t.label}</span>${t.badge ? `<span class="tab-badge" data-tab-badge="${t.badge}" hidden></span>` : ''}
+    </a>`).join('') + `
+    <button type="button" class="tab" id="tabMenuBtn" aria-label="פתיחת התפריט">${uiIcon('menu', 22)}<span>תפריט</span></button>`;
+  document.getElementById('tabMenuBtn').onclick = () => {
+    host.classList.add('open');
+    backdrop.classList.add('open');
+  };
+  // open tasks on this site, like the red counts on BiltOn's tiles
+  if (site?.id) {
+    sb.from('tasks').select('id', { count: 'exact', head: true }).eq('site_id', site.id).neq('status', 'done')
+      .then(({ count }) => {
+        const b = tabBar.querySelector('[data-tab-badge="tasks"]');
+        if (b && count) { b.textContent = count > 99 ? '99+' : count; b.hidden = false; b.setAttribute('aria-label', `${count} פתוחות`); }
+      }, () => {});
+  }
 
   // Re-sync desktop-collapse vs mobile-open state when crossing the 900px
   // breakpoint via window resize (not just page reload), so the two states

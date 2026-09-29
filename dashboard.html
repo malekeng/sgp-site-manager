@@ -29,6 +29,8 @@
     </div>
   </div>
 
+  <section class="home-tiles" id="homeTiles" aria-label="מודולים"></section>
+
   <div class="welcome-block" id="welcomeBlock">
     <div class="welcome-left">
       <div class="avatar-md" id="welcomeAvatar"><span id="welcomeInitials">?</span></div>
@@ -324,6 +326,47 @@ function greetingByHour() {
     });
   }
 
+  // ===== Home tiles (phones): every module, grouped as in the sidebar =====
+  // A red count = items that need attention (the same ones listed under "דורש תשומת לב",
+  // plus open exceptions and tasks); a green check = something was recorded there today.
+  const tileState = { attention: {}, today: new Set() };
+  function renderHomeTiles() {
+    const groups = [];
+    const rest = { title: 'ניהול האתר', items: [] };
+    for (const item of NAV_ITEMS) {
+      if (item.href === 'dashboard.html') continue;
+      if (item.group) groups.push({ title: item.group, items: item.items });
+      else rest.items.push(item);
+    }
+    groups.push(rest);
+    document.getElementById('homeTiles').innerHTML = groups.map(g => `
+      <div class="tiles-title">${esc(g.title)}</div>
+      <div class="tiles-grid">${g.items.map(it => `
+        <a class="tile" href="${it.href}" data-tile="${it.href}" data-label="${esc(it.label)}">
+          ${ico3d(it.ico, 46)}<span class="tile-label">${esc(it.label)}</span><span class="tile-badge" aria-hidden="true"></span>
+        </a>`).join('')}</div>`).join('');
+  }
+  function renderTileBadges() {
+    document.querySelectorAll('#homeTiles [data-tile]').forEach(a => {
+      const n = tileState.attention[a.dataset.tile] || 0;
+      const today = tileState.today.has(a.dataset.tile);
+      const b = a.querySelector('.tile-badge');
+      b.className = 'tile-badge' + (n ? ' count' : today ? ' done' : '');
+      b.innerHTML = n ? (n > 99 ? '99+' : String(n)) : today ? uiIcon('check', 14) : '';
+      a.setAttribute('aria-label', a.dataset.label + (n ? ` — ${n} דורשים תשומת לב` : today ? ' — עודכן היום' : ''));
+    });
+  }
+  async function loadTileCounts() {
+    const [ex, tk] = await Promise.all([
+      sb.from('exceptions').select('id', { count: 'exact', head: true }).eq('site_id', site.id).in('status', ['פתוח', 'בטיפול']),
+      sb.from('tasks').select('id', { count: 'exact', head: true }).eq('site_id', site.id).neq('status', 'done'),
+    ]);
+    if (ex.count) tileState.attention['exceptions.html'] = (tileState.attention['exceptions.html'] || 0) + ex.count;
+    if (tk.count) tileState.attention['tasks.html'] = (tileState.attention['tasks.html'] || 0) + tk.count;
+    renderTileBadges();
+  }
+  renderHomeTiles();
+
   async function loadAttention() {
     const items = [];
 
@@ -378,6 +421,9 @@ function greetingByHour() {
       href: q.stage === 'preliminary' ? 'qc-preliminary.html' : 'qc-inprocess.html',
     }));
 
+    items.forEach(it => { tileState.attention[it.href] = (tileState.attention[it.href] || 0) + 1; });
+    renderTileBadges();
+
     const host = document.getElementById('attentionList');
     if (!items.length) {
       host.innerHTML = '<p class="all-clear"><img class="ico3d" src="icons/nav/done.webp" alt="" aria-hidden="true" width="22" height="22">אין פריטים שדורשים תשומת לב כרגע</p>';
@@ -418,6 +464,11 @@ function greetingByHour() {
     results.forEach((res, i) => {
       (res.data || []).forEach(row => merged.push({ ...sources[i], row }));
     });
+    // anything recorded today puts a green check on its tile
+    const todayStart = new Date(new Date().toDateString());
+    merged.filter(m => m.row.created_at && new Date(m.row.created_at) >= todayStart)
+      .forEach(m => tileState.today.add(m.hrefFn ? m.hrefFn(m.row) : m.href));
+    renderTileBadges();
     merged.sort((a, b) => new Date(b.row.created_at || 0) - new Date(a.row.created_at || 0));
     merged = merged.slice(0, 10);
 
@@ -555,7 +606,7 @@ function greetingByHour() {
     }
   });
 
-  await Promise.all([loadAttention(), loadRecent(), loadStats(), loadProgressGallery()]);
+  await Promise.all([loadAttention(), loadRecent(), loadStats(), loadProgressGallery(), loadTileCounts()]);
 })();
 </script>
 </body>
