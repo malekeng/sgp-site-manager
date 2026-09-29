@@ -688,7 +688,8 @@ function sgpEnsureExcelJs() {
 }
 function sgpCellValue(v) {
   if (v == null) return null;
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  // (toString, not instanceof: a Date made by the Excel library may come from another realm)
+  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v) ? null : v.toISOString().slice(0, 10);
   if (typeof v === 'object') {
     if ('result' in v) return sgpCellValue(v.result);
     if (v.richText) return v.richText.map(r => r.text).join('').trim() || null;
@@ -714,7 +715,8 @@ function sgpValueAfter(rows, labelRe) {
   for (const r of rows) {
     const k = sgpFindCol(r.cells, labelRe);
     if (k < 0) continue;
-    const v = r.cells.slice(k + 1).find(x => x != null && x !== '');
+    // merged cells repeat the label itself; skip it and any other label (ends with ":")
+    const v = r.cells.slice(k + 1).find(x => x != null && x !== '' && !(typeof x === 'string' && (labelRe.test(x) || /:s*$/.test(x))));
     if (v != null) return v;
   }
   return null;
@@ -753,10 +755,11 @@ function sgpExtractSlabWorkbook(sheets) {
       const h = sh.rows[ti].cells;
       const col = re => sgpFindCol(h, re);
       const c = { no: col(/^מס['"׳]?$/), od: col(/תאריך\s*הזמנה/), sd: col(/תאריך\s*אספקה/), id: col(/תאריך\s*הנחה|התקנה/),
-        sup: col(/ספק|יצרן/), floor: col(/קומה|מיקום/), plan: col(/תכנית/), m: col(/סה["'״]{1,2}כ/), note: col(/תעודת\s*משלוח/), rem: col(/הערות/) };
+        sup: col(/^ספק|יצרן/), floor: col(/קומה|מיקום/), plan: col(/תכנית/), m: col(/סה["'״]{1,2}כ/), note: col(/תעודת\s*משלוח/), rem: col(/הערות/) };
       for (const r of sh.rows.slice(ti + 1)) {
         const v = k => (k >= 0 ? r.cells[k] : null);
         if (!v(c.od) && !v(c.note)) continue;
+        if (/סה["'״]{0,2}כ/.test(String(v(c.no) || ''))) continue;          // the sheet's total row
         tracking.push({ order_no: v(c.no), order_date: v(c.od), supply_date: v(c.sd), install_date: v(c.id),
           supplier: v(c.sup), floor: v(c.floor), plan: v(c.plan), total_m: v(c.m), note: v(c.note), remarks: v(c.rem) });
       }
@@ -787,7 +790,11 @@ function sgpExtract(doc, fileName) {
   if (kind === 'rebar_note') return { ...base, ...sgpExtractRebarNote(doc) };
   if (kind === 'rebar_order') return { ...base, ...sgpExtractRebarOrder(doc, fileName) };
   if (kind === 'slab_note') return { ...base, ...sgpExtractSlabNote(doc) };
-  if (kind === 'contractor_cert') return { ...base, ...sgpExtractContractorCert(doc.text) };
+  if (kind === 'contractor_cert') {
+    // a company profile mentions "קבלן מוכר" and "סיווג" too; a certificate lists branches or a validity
+    const c = sgpExtractContractorCert(doc.text);
+    return c.branches.length || c.valid_until ? { ...base, ...c } : { ...base, kind: 'unknown' };
+  }
   if (kind === 'approval') return { ...base, ...sgpExtractApproval(doc.text) };
   if (kind === 'inspection') return { ...base, ...sgpExtractInspection(doc.text) };
   return base;

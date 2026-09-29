@@ -88,6 +88,9 @@ function sgpConcreteInsights(rec, by, add) {
   // quantity: the trucks of this pour's date against the form
   const own = rec.pour_date ? trucks.filter(t => !t.date || t.date === rec.pour_date) : trucks;
   const vol = rec.volume_m3 !== null && rec.volume_m3 !== undefined && rec.volume_m3 !== '' ? Number(rec.volume_m3) : null;
+  // every page of the notes was recognised as a truck (a page the reader could not make out
+  // may be a truck it missed, so a difference then is only reported, not flagged)
+  const allPagesRead = by('concrete_note').every(d => (d.extracted.trucks || []).length >= (d.extracted.pages || 0));
   if (own.length) {
     const withQty = own.filter(t => t.qty != null);
     const sum = sgpR(sgpSum(withQty.map(t => t.qty)));
@@ -95,7 +98,9 @@ function sgpConcreteInsights(rec, by, add) {
     if (withQty.length === own.length) {
       if (vol === null) add('info', `${n} בתעודות: ${fmtNum(sum, 1)} מ"ק (ברשומה לא הוזנה כמות)`);
       else if (Math.abs(sum - vol) <= 0.5) add('ok', `${n} בתעודות: ${fmtNum(sum, 1)} מ"ק — תואם לכמות ברשומה`);
-      else add('warn', `${n} בתעודות: ${fmtNum(sum, 1)} מ"ק — ברשומה ${fmtNum(vol, 1)} מ"ק`);
+      else if (sum < vol) add(allPagesRead ? 'warn' : 'info', `התעודות המצורפות מכסות ${fmtNum(sum, 1)} מ"ק מתוך ${fmtNum(vol, 1)} מ"ק ברשומה`
+        + (allPagesRead ? ' — ייתכן שחסרות תעודות' : ' — חלק מהעמודים לא נקראו, בדקו בתעודה'));
+      else add(allPagesRead ? 'warn' : 'info', `${n} בתעודות: ${fmtNum(sum, 1)} מ"ק — יותר מהכמות ברשומה (${fmtNum(vol, 1)} מ"ק)`);
     } else {
       const txt = `${n} בתעודות; הכמות נקראה ב-${withQty.length} מהן: ${fmtNum(sum, 1)} מ"ק`
         + (vol !== null ? ` (ברשומה ${fmtNum(vol, 1)} מ"ק)` : '') + ' — את השאר בדקו בתעודה';
@@ -173,13 +178,18 @@ function sgpRebarInsights(rec, by, add) {
   }
   const orders = by('rebar_order').map(d => ({ ...d.extracted, docId: d.id }));
   if (notes.length) {
-    const kg = sgpR(sgpSum(notes.map(n => n.total_kg)), 0);
+    // a note whose weight came out implausibly small (e.g. "5") was not really read
+    const readable = notes.filter(n => n.total_kg >= 100);
+    const kg = sgpR(sgpSum(readable.map(n => n.total_kg)), 0);
     const count = sgpUniq(notes.flatMap(n => n.notes)).length || notes.length;
-    const txt = `${count === 1 ? 'תעודת משלוח אחת' : count + ' תעודות משלוח'}: ${fmtNum(kg, 0)} ק"ג`;
+    const unread = notes.length - readable.length;
+    const txt = `${count === 1 ? 'תעודת משלוח אחת' : count + ' תעודות משלוח'}: ${fmtNum(kg, 0)} ק"ג`
+      + (unread ? ` (המשקל של ${unread === 1 ? 'תעודה אחת' : unread + ' תעודות'} לא נקרא — בדקו בתעודה)` : '');
     const w = rec.weight_kg !== null && rec.weight_kg !== undefined && rec.weight_kg !== '' ? Number(rec.weight_kg) : null;
-    if (w === null) add('info', txt);
-    else if (Math.abs(kg - w) <= Math.max(5, w * 0.01)) add('ok', `${txt} — תואם לכמות ברשומה`);
-    else add(kg > w ? 'warn' : 'info', `${txt} · ברשומה ${fmtNum(w, 0)} ק"ג${rec.supply_status === 'חלקית' ? ' (סומן: סופק חלקית)' : ''}`);
+    // what the record's weight stands for varies (the whole order, one item…), so a
+    // difference is shown for information, never raised as a warning
+    if (w !== null && !unread && Math.abs(kg - w) <= Math.max(5, w * 0.01)) add('ok', `${txt} — תואם לכמות ברשומה`);
+    else add('info', w === null ? `סופק לפי התעודות — ${txt}` : `סופק לפי התעודות — ${txt} · ברשומה ${fmtNum(w, 0)} ק"ג`);
     const dates = sgpUniq(notes.map(n => n.date));
     if (rec.delivery_date && dates.length && !dates.includes(rec.delivery_date)) {
       add('info', `תאריך התעודה ${dates.map(fmtDate).join(', ')} — תאריך האספקה ברשומה ${fmtDate(rec.delivery_date)}`);
@@ -219,8 +229,9 @@ function sgpSlabInsights(rec, by, add) {
   }
   const track = books.flatMap(b => b.tracking || []);
   const q = rec.quantity_m2 !== null && rec.quantity_m2 !== undefined && rec.quantity_m2 !== '' ? Number(rec.quantity_m2) : null;
-  if (q !== null && track.some(t => typeof t.total_m === 'number' && Math.abs(t.total_m - q) < 0.01)) {
-    add('warn', `הכמות ברשומה (${fmtNum(q, 2)}) היא הערך שבגליון המעקב בעמודת סה"כ מ"א — מטר אורך, לא מ"ר`);
+  // the order's own area (quantity × length × width of every line) against the record
+  if (q !== null && ord && ord.total_m2 && Math.abs(q - ord.total_m2) / ord.total_m2 < 0.01) {
+    add('ok', `הכמות ברשומה (${fmtNum(q, 2)} מ"ר) תואמת לשטח ההזמנה לפי קובץ ההזמנה`);
   }
   const recNotes = String(rec.delivery_note_number || '').split(/[\s,]+/).filter(Boolean);
   const missing = sgpUniq(notes.flatMap(n => n.notes || [])).filter(n => !recNotes.includes(n));
