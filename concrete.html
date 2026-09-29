@@ -12,6 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="js/ocr.js"></script>
 <style>
 .ocr-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center; cursor: pointer; margin-bottom: 16px; }
 .ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(34, 216, 107,0.06); }
@@ -67,7 +68,7 @@
     <div class="ocr-progress" id="ocrProgress"><div class="spinner"></div><span id="ocrProgressText">מעבד...</span></div>
     <details id="ocrRawWrap" style="display:none;margin-bottom:16px;">
       <summary style="cursor:pointer;font-size:12px;color:var(--steel);font-weight:600;"><svg class="ui-ico ui-ico-file-text" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg> טקסט גולמי שזוהה (למקרה שלא כל השדות התמלאו)</summary>
-      <div id="ocrRawText" style="max-height:140px;overflow-y:auto;background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;font-size:11.5px;white-space:pre-wrap;margin-top:6px;direction:ltr;text-align:right;font-family:monospace;"></div>
+      <div id="ocrRawText" style="max-height:140px;overflow-y:auto;background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;font-size:11.5px;white-space:pre-wrap;margin-top:6px;direction:rtl;text-align:right;unicode-bidi:plaintext;"></div>
     </details>
     <div id="ocrAttachChoice" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;">
       <div style="font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:8px;">לאיזה סוג מסמך שייך הקובץ שנסרק?</div>
@@ -161,73 +162,6 @@ ocrInput.addEventListener('change', () => {
   ocrInput.value = '';
 });
 
-async function pdfToImageDataUrl(file) {
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-  const page = await pdf.getPage(1);
-  const viewport = page.getViewport({ scale: 2.2 });
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-  return canvas.toDataURL('image/png');
-}
-
-function toIsoDate(d, m, y) {
-  if (y.length === 2) y = '20' + y;
-  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-}
-
-function parseConcreteText(text) {
-  const result = {
-    supplier: null, concrete_grade: null, volume_m3: null,
-    delivery_note_number: null, lab_test_number: null,
-    strength_7d: null, strength_28d: null, location: null, element: null,
-    pour_date: null,
-  };
-
-  const knownSuppliers = ['מוואסי', 'רדימיקס', 'הנקל'];
-  for (const s of knownSuppliers) {
-    if (text.includes(s)) { result.supplier = s; break; }
-  }
-  if (!result.supplier) {
-    const candidates = [...text.matchAll(/([א-ת][א-ת\s.]{2,30}(?:בע["']?מ|בעמ))/g)];
-    const match = candidates.find(m => !looksLikeOwnCompany(m[1]));
-    if (match) result.supplier = match[1].trim();
-  }
-
-  const gradeMatch = text.match(/ב-?\s?(20|25|30|40|50)\b/);
-  if (gradeMatch) result.concrete_grade = `ב-${gradeMatch[1]}`;
-
-  // Prefer the actual delivered quantity ("כמות:") over the requested quantity
-  // ("כמות מבוקשת") when a document shows both.
-  const actualVolMatch = text.match(/כמות\s*:?\s*(?:מ["']?ק)?\s*(\d+(?:[.,]\d+)?)\s*מ["']?ק/i)
-    || text.match(/(\d+(?:[.,]\d+)?)\s*(?:מ["']?ק|קוב)/i);
-  if (actualVolMatch) result.volume_m3 = parseFloat(actualVolMatch[1].replace(',', '.'));
-
-  const noteMatch = text.match(/(?:תעודת משלוח|מספר תעודה|תעודה)\s*(?:מספר|מס['"]?)?[:\s]*([A-Za-z]{0,4}[0-9]{4,10})/);
-  if (noteMatch) result.delivery_note_number = noteMatch[1];
-
-  const labMatch = text.match(/(?:מס['"]? בדיקה|בדיקה מס['"]?|דוח בדיקה)[:\s]*([0-9A-Za-z\-/]{2,15})/);
-  if (labMatch) result.lab_test_number = labMatch[1];
-
-  const strength7Match = text.match(/7\s?(?:יום|ימים)[^\d]{0,10}(\d{1,3}(?:[.,]\d+)?)/);
-  if (strength7Match) result.strength_7d = parseFloat(strength7Match[1].replace(',', '.'));
-  const strength28Match = text.match(/28\s?(?:יום|ימים)[^\d]{0,10}(\d{1,3}(?:[.,]\d+)?)/);
-  if (strength28Match) result.strength_28d = parseFloat(strength28Match[1].replace(',', '.'));
-
-  const locationMatch = text.match(/\b(מרתף\s?-?\d*|קומה\s?\d*|גרעין\s?\d*)\b[^\n]{0,20}/);
-  if (locationMatch) result.location = locationMatch[0].trim();
-
-  const elementMatch = text.match(/\b(יסודות|רצפה|קיר\s?דיפון|קיר|עמודים|קורות|תקרה|מדרגות|ממ["']?ד)\b/);
-  if (elementMatch) result.element = elementMatch[1];
-
-  const dateMatches = [...text.matchAll(/(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})/g)];
-  if (dateMatches.length >= 1) result.pour_date = toIsoDate(dateMatches[0][1], dateMatches[0][2], dateMatches[0][3]);
-
-  return result;
-}
-
 let lastOcrFile = null;
 
 async function handleOcrFile(file) {
@@ -237,25 +171,11 @@ async function handleOcrFile(file) {
   ocrProgress.classList.add('show');
   ocrProgressText.textContent = 'טוען קובץ...';
   try {
-    let imageSource = file;
-    if (file.type === 'application/pdf') {
-      ocrProgressText.textContent = 'ממיר PDF לתמונה...';
-      imageSource = await pdfToImageDataUrl(file);
-    }
-
-    ocrProgressText.textContent = 'מזהה טקסט (OCR)...';
-    const { data } = await Tesseract.recognize(imageSource, 'heb+eng', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          ocrProgressText.textContent = `מזהה טקסט... ${Math.round(m.progress * 100)}%`;
-        }
-      },
-    });
-
-    document.getElementById('ocrRawText').textContent = data.text;
+    const doc = await sgpReadDocument(file, { onProgress: t => { ocrProgressText.textContent = t; } });
+    document.getElementById('ocrRawText').textContent = sgpDocumentRawText(doc);
     document.getElementById('ocrRawWrap').style.display = 'block';
 
-    const parsed = parseConcreteText(data.text);
+    const parsed = sgpParse.concrete(doc.text);
     const form = document.getElementById('recordForm');
     if (parsed.supplier) form.querySelector('[name=supplier]').value = parsed.supplier;
     if (parsed.concrete_grade) form.querySelector('[name=concrete_grade]').value = parsed.concrete_grade;
@@ -267,8 +187,9 @@ async function handleOcrFile(file) {
     if (parsed.location) form.querySelector('[name=location]').value = parsed.location;
     if (parsed.element) form.querySelector('[name=element]').value = parsed.element;
     if (parsed.pour_date) form.querySelector('[name=pour_date]').value = parsed.pour_date;
+    if (parsed.lab_test_number) form.querySelector('[name=lab_tested]').value = 'כן';
 
-    toast('הזיהוי הושלם — בדקו ותקנו את השדות לפני שמירה', 'success');
+    toast(parsed._summary ? `${parsed._summary} — בדקו ותקנו לפני שמירה` : 'הזיהוי הושלם — בדקו ותקנו את השדות לפני שמירה', 'success');
     document.getElementById('ocrAttachChoice').style.display = 'block';
   } catch (err) {
     console.error(err);

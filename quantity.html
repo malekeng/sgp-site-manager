@@ -12,6 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="js/ocr.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
@@ -374,18 +375,6 @@
     ocrInput.value = '';
   });
 
-  async function pdfToImageDataUrl(file) {
-    const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 2.2 });
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-    return canvas.toDataURL('image/png');
-  }
-
   // Heuristic: a BOQ line typically ends with a quantity number (with optional decimal).
   // Everything before that number is treated as the item description.
   function parseBoqLines(text) {
@@ -438,22 +427,8 @@
     ocrProgress.classList.add('show');
     ocrProgressText.textContent = 'טוען קובץ...';
     try {
-      let imageSource = file;
-      if (file.type === 'application/pdf') {
-        ocrProgressText.textContent = 'ממיר PDF לתמונה...';
-        imageSource = await pdfToImageDataUrl(file);
-      }
-
-      ocrProgressText.textContent = 'מזהה טקסט (OCR)...';
-      const { data } = await Tesseract.recognize(imageSource, 'heb+eng', {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            ocrProgressText.textContent = `מזהה טקסט... ${Math.round(m.progress * 100)}%`;
-          }
-        },
-      });
-
-      const parsed = parseBoqLines(data.text);
+      const doc = await sgpReadDocument(file, { onProgress: t => { ocrProgressText.textContent = t; } });
+      const parsed = parseBoqLines(doc.text);
       if (!parsed.length) {
         toast('לא זוהו שורות אוטומטית — ניתן להוסיף שורות ידנית', 'error');
         ocrRows = [];

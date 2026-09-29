@@ -12,6 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="js/ocr.js"></script>
 <style>
 .ocr-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center; cursor: pointer; margin-bottom: 16px; }
 .ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(26,225,132,0.06); }
@@ -132,53 +133,14 @@ ocrInput.addEventListener('change', () => {
   ocrInput.value = '';
 });
 
-async function pdfToImageDataUrl(file) {
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-  const page = await pdf.getPage(1);
-  const viewport = page.getViewport({ scale: 2.2 });
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-  return canvas.toDataURL('image/png');
-}
-
-function parseQuoteText(text) {
-  const result = { material: null, supplier: null, unit_price: null, unit: null };
-  const priceMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:₪|ש[\"']?ח)/) ||
-                      text.match(/מחיר[:\s]*[^\d]{0,10}(\d+(?:[.,]\d+)?)/);
-  if (priceMatch) result.unit_price = parseFloat(priceMatch[1].replace(',', '.'));
-  const unitMatch = text.match(/\\b(טון|מ[\"']?ק|מ[\"']?ר|יחידה|יח['\"]?|ק[\"']?ג|מטר)\\b/);
-  if (unitMatch) result.unit = unitMatch[1];
-  const supplierMatch = text.match(/([א-ת][א-ת\\s]{2,30}(?:בע[\"']?מ|בעמ))/);
-  if (supplierMatch) result.supplier = supplierMatch[1].trim();
-  const materialMatch = text.match(/\\b(ברזל|פלדה|בטון|טרום|חול|חצץ|בלוקים|מלט|רשת)\\b[^\\n]{0,20}/);
-  if (materialMatch) result.material = materialMatch[0].trim();
-  return result;
-}
-
 async function handleOcrFile(file) {
   ocrProgress.classList.add('show');
   ocrProgressText.textContent = 'טוען קובץ...';
   try {
-    let imageSource = file;
-    if (file.type === 'application/pdf') {
-      ocrProgressText.textContent = 'ממיר PDF לתמונה...';
-      imageSource = await pdfToImageDataUrl(file);
-    }
-    ocrProgressText.textContent = 'מזהה טקסט (OCR)...';
-    const { data } = await Tesseract.recognize(imageSource, 'heb+eng', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          ocrProgressText.textContent = `מזהה טקסט... ${Math.round(m.progress * 100)}%`;
-        }
-      },
-    });
-    const parsed = parseQuoteText(data.text);
+    const doc = await sgpReadDocument(file, { onProgress: t => { ocrProgressText.textContent = t; } });
+    const parsed = sgpParse.quote(doc.text);
     const form = document.getElementById('recordForm');
     if (parsed.material) form.querySelector('[name=material]').value = parsed.material;
-    if (parsed.supplier) form.querySelector('[name=unit_price]') && (form.querySelector('[name=unit_price]').value = parsed.unit_price);
     if (parsed.supplier) form.querySelector('[name=supplier]').value = parsed.supplier;
     if (parsed.unit_price) form.querySelector('[name=unit_price]').value = parsed.unit_price;
     if (parsed.unit) form.querySelector('[name=unit]').value = parsed.unit;
