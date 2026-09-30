@@ -181,6 +181,18 @@ function greetingByHour() {
       ${esc(policyNotice.summary || '')} <a href="terms.html" target="_blank" rel="noopener">לקריאה</a>`;
     document.querySelector('main.page').prepend(bar);
   }
+  // A closing notice from the platform operator, shown to the company's owners and admins.
+  if (typeof tadokClosingNoticeHtml === 'function' && (profile.role === 'owner' || profile.role === 'admin')) {
+    sb.from('organization_closures').select('closing_on, reason').eq('organization_id', org.id).is('cancelled_at', null).maybeSingle()
+      .then(({ data }) => {
+        if (!data) return;
+        const bar = document.createElement('div');
+        bar.className = 'card';
+        bar.style.cssText = 'background:#FDECEC;border-color:#F3B4B4;';
+        bar.innerHTML = tadokClosingNoticeHtml(data);
+        document.querySelector('main.page').prepend(bar);
+      }, () => {});
+  }
   const canEditCover = true; // any internal role reaching this dashboard (owner/admin/site_user) can set the site cover photo
 
   // ===== Notice board: anyone on this site can post; owner/admin or the author can delete =====

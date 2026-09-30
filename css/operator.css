@@ -1,0 +1,40 @@
+/* Operator console — platform-admin.html */
+.op-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; overflow-x: auto; }
+.op-tabs button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; font: inherit;
+                  font-weight: 700; color: var(--steel); cursor: pointer; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+.op-tabs button[aria-selected="true"] { color: var(--navy); border-bottom-color: var(--green); }
+section[data-panel][hidden] { display: none; }
+
+.op-metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.op-metric { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: grid; gap: 2px; }
+.op-metric-label { font-size: 12.5px; color: var(--steel); }
+.op-metric strong { font-size: 26px; color: var(--navy); line-height: 1.2; }
+.op-metric small { font-size: 11.5px; color: var(--steel); }
+.op-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 18px; }
+@media (max-width: 1000px) { .op-two { grid-template-columns: minmax(0, 1fr); } }
+.op-waiting { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.op-waiting a { color: inherit; text-decoration: none; }
+.op-waiting a:hover { text-decoration: underline; }
+.op-waiting strong { color: var(--danger); margin-inline-end: 6px; }
+.op-chart { width: 100%; height: auto; }
+.op-bar { fill: var(--green); }
+.op-bar-label { font-size: 10px; fill: var(--steel); }
+
+.op-table td, .op-table th { vertical-align: top; }
+.op-table small { color: var(--steel); }
+.status-badge.closing { background: #FFF1D6; color: #9A5B0B; }
+.op-company-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 10px; }
+.op-company-head h3 { margin: 0 0 4px; }
+.op-modal-wide { max-width: 860px; width: 100%; min-width: 0; overflow-x: hidden; }
+.op-company-head .header-actions { flex-wrap: wrap; }
+.op-modal-wide h4 { margin: 18px 0 8px; color: var(--navy); }
+.op-closing { background: #FFF1D6; color: #9A5B0B; border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.op-modules { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 0; list-style: none; font-size: 13px; margin: 0; }
+.op-audit { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 13px; }
+.op-audit time { color: var(--steel); margin-inline-end: 8px; font-size: 12px; }
+.op-search { max-width: 280px; width: 100%; }
+/* the app gives every table min-width 640px; inside this window they must fit a phone */
+.op-modal-wide table { min-width: 0; }
+/* the hidden "פעולות" header (.sr-only) is position:absolute; without a positioned table it escapes
+   the scrolling .table-wrap and widens the whole page on a phone */
+.op-table { position: relative; }

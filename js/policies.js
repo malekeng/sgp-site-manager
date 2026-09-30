@@ -129,3 +129,13 @@ async function tadokEnsureAccepted(userId, organizationId, signOutTo = 'index.ht
     });
   });
 }
+
+// The notice owners see when the operator has scheduled their company's closing
+// (organization_closures): the date, the reason, and where to export everything first.
+function tadokClosingNoticeHtml(closure) {
+  if (!closure) return '';
+  const e = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const [y, m, d] = String(closure.closing_on).slice(0, 10).split('-').map(Number);
+  return `<strong>החשבון של החברה ייסגר ב-${d}.${m}.${y}.</strong> ${e(closure.reason || '')}
+    עד אז הכול עובד כרגיל. כדאי לשמור עותק של כל המידע: <a href="org-settings.html">הגדרות החברה ← ייצוא כל המידע</a>.`;
+}

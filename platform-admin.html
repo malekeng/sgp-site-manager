@@ -22,6 +22,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="css/styles.css">
 <link rel="stylesheet" href="css/support.css">
+<link rel="stylesheet" href="css/operator.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 .pa-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; align-items: start; }
@@ -42,28 +43,43 @@
 <main class="page">
   <h1 class="page-title">ניהול הפלטפורמה</h1>
 
-  <div class="pa-grid">
+  <nav class="op-tabs" role="tablist" aria-label="ניהול הפלטפורמה">
+    <button type="button" role="tab" data-tab="overview" aria-selected="true">סקירה</button>
+    <button type="button" role="tab" data-tab="companies" aria-selected="false">חברות</button>
+    <button type="button" role="tab" data-tab="users" aria-selected="false">משתמשים</button>
+    <button type="button" role="tab" data-tab="support" aria-selected="false">תמיכה <span class="nav-count" id="supportTabCount" hidden></span></button>
+  </nav>
 
+  <section data-panel="overview" role="tabpanel">
+    <div id="opOverview"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </section>
+
+  <section data-panel="companies" role="tabpanel" hidden>
   <div class="card">
     <div class="card-header">
       <h2>חברות</h2>
       <button class="btn btn-primary btn-sm" id="newCompanyBtn">+ חברה חדשה</button>
     </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>שם החברה</th><th>קוד</th><th>סטטוס</th><th>אתרים</th><th>משתמשים</th><th><span class="sr-only">פעולות</span></th></tr></thead>
-        <tbody id="orgsBody"><tr class="empty-row"><td colspan="6"><div class="loading-overlay"><div class="spinner"></div></div></td></tr></tbody>
-      </table>
-    </div>
+    <div id="orgsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
 
   <div class="card">
     <div class="card-header"><h2>בקשות לפתיחת חברה</h2></div>
     <div id="requestsList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
+  </section>
 
+  <section data-panel="users" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-header">
+      <h2>כל המשתמשים</h2>
+      <input type="search" id="userSearch" class="op-search" placeholder="חיפוש לפי שם, דוא״ל או חברה" aria-label="חיפוש משתמשים">
+    </div>
+    <div id="opUsers"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
+  </section>
 
+  <section data-panel="support" role="tabpanel" hidden>
   <div class="card" id="supportCard">
     <div class="card-header">
       <h2>פניות תמיכה <span class="nav-count" id="supportNewCount" hidden></span></h2>
@@ -73,7 +89,32 @@
     </div>
     <div id="supportList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
+  </section>
 </main>
+
+<div class="modal-backdrop" id="opCompanyBackdrop">
+  <div class="modal op-modal-wide" role="dialog" aria-modal="true" aria-label="פרטי חברה">
+    <div id="opCompanyBody"></div>
+    <div class="modal-actions"><button type="button" class="btn btn-ghost" id="opCompanyCloseBtn">סגירת החלון</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="opActionBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="opActionTitle">
+    <h3 id="opActionTitle"></h3>
+    <p id="opActionText" style="font-size:13px;color:var(--steel);line-height:1.6;"></p>
+    <form id="opActionForm">
+      <div class="field full" id="opActionMemberField" hidden><label for="opActionMember">הבעלים החדש</label><select id="opActionMember"></select></div>
+      <div class="field full" id="opActionDateField" hidden><label for="opActionDate">תאריך סגירה</label><input type="date" id="opActionDate"></div>
+      <div class="field full"><label for="opActionReason">סיבה (נרשמת ביומן הפעולות)</label><textarea id="opActionReason" rows="2" required maxlength="500"></textarea></div>
+      <div id="opActionMsg" class="msg"></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="opActionOk">אישור</button>
+        <button type="button" class="btn btn-outline" id="opActionCancel">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <div class="modal-backdrop" id="companyModalBackdrop">
   <div class="modal">
@@ -125,6 +166,7 @@
 <script src="js/policies.js"></script>
 <script src="js/app.js"></script>
 <script src="js/support.js"></script>
+<script src="js/operator.js"></script>
 <script>
 (async function () {
   const auth = await requireAuth('platform-admin.html');
@@ -138,41 +180,156 @@
     return;
   }
 
+  const VERSIONS = typeof tadokRequiredPolicy === 'function' ? tadokRequiredPolicy() : { terms: null, privacy: null };
+  const rpc = async (name, args) => {
+    const { data, error } = await sb.rpc(name, args);
+    if (error) throw new Error(opErrorText(error.message));
+    return data;
+  };
+
+  // ---- tabs (the hash keeps the tab on reload and makes the "waiting" links work) ----
+  const loaded = {};
+  function showTab(name) {
+    if (!document.querySelector(`[data-panel="${name}"]`)) name = 'overview';
+    document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== name; });
+    document.querySelectorAll('.op-tabs [data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    if (!loaded[name]) { loaded[name] = true; ({ overview: loadOverview, companies: loadOrgs, users: loadUsers, support: () => {} })[name](); }
+  }
+  document.querySelectorAll('.op-tabs [data-tab]').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.tab; }));
+  window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+
+  async function loadOverview() {
+    const host = document.getElementById('opOverview');
+    try { host.innerHTML = opOverviewHtml(await rpc('op_overview', { p_terms: VERSIONS.terms, p_privacy: VERSIONS.privacy })); }
+    catch (err) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; }
+  }
+
   async function loadOrgs() {
-    const body = document.getElementById('orgsBody');
-    const { data, error } = await sb.from('organizations')
-      .select('*, sites(count), organization_members(count)')
-      .order('created_at', { ascending: true });
-    if (error) { body.innerHTML = `<tr class="empty-row"><td colspan="6">שגיאה: ${esc(error.message)}</td></tr>`; return; }
-    if (!data || !data.length) { body.innerHTML = `<tr class="empty-row"><td colspan="6">אין חברות עדיין</td></tr>`; return; }
+    const host = document.getElementById('orgsList');
+    try { host.innerHTML = opCompaniesHtml(await rpc('op_companies')); }
+    catch (err) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; return; }
+    host.querySelectorAll('[data-company]').forEach(b => b.addEventListener('click', () => openCompany(b.dataset.company)));
+  }
 
-    body.innerHTML = data.map(o => `
-      <tr>
-        <td>${esc(o.name)}</td>
-        <td><span class="slug-chip">${esc(o.slug)}</span></td>
-        <td><span class="status-badge ${esc(o.status)}">${o.status === 'active' ? 'פעילה' : 'מושעית'}</span></td>
-        <td class="num-cell">${o.sites?.[0]?.count ?? 0}</td>
-        <td class="num-cell">${o.organization_members?.[0]?.count ?? 0}</td>
-        <td class="row-actions"><div class="row-actions-inner">
-          <button class="btn btn-sm btn-outline" data-toggle="${o.id}" data-status="${esc(o.status)}">
-            ${o.status === 'active' ? 'השעיה' : 'הפעלה'}
-          </button>
-        </div></td>
-      </tr>`).join('');
+  // ---- the reason dialog every operator action goes through ----
+  function askAction({ title, text, members = null, date = null, okLabel = 'אישור' }) {
+    return new Promise(resolve => {
+      const back = document.getElementById('opActionBackdrop');
+      const form = document.getElementById('opActionForm');
+      form.reset();
+      hideMsg(document.getElementById('opActionMsg'));
+      document.getElementById('opActionTitle').textContent = title;
+      document.getElementById('opActionText').textContent = text || '';
+      document.getElementById('opActionOk').textContent = okLabel;
+      document.getElementById('opActionMemberField').hidden = !members;
+      document.getElementById('opActionMember').innerHTML = (members || []).map(m =>
+        `<option value="${esc(m.user_id)}">${esc(m.full_name || m.username || m.email)} — ${esc(OP_ROLE_LABELS[m.role] || m.role)}</option>`).join('');
+      document.getElementById('opActionDateField').hidden = !date;
+      if (date) { const d = document.getElementById('opActionDate'); d.value = date; d.min = new Date(Date.now() + 86400000).toISOString().slice(0, 10); }
+      back.classList.add('open');
+      const done = value => { back.classList.remove('open'); form.onsubmit = null; resolve(value); };
+      document.getElementById('opActionCancel').onclick = () => done(null);
+      form.onsubmit = e => {
+        e.preventDefault();
+        const reason = document.getElementById('opActionReason').value.trim();
+        if (!reason) { showMsg(document.getElementById('opActionMsg'), 'נדרשת סיבה', 'error'); return; }
+        done({ reason, member: members ? document.getElementById('opActionMember').value : null,
+               date: date ? document.getElementById('opActionDate').value : null });
+      };
+    });
+  }
 
-    body.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
-      const toSuspended = btn.dataset.status === 'active';
-      const msg = toSuspended
-        ? 'להשעות את החברה?\n\nכל המשתמשים שלה יאבדו גישה מיידית. הנתונים נשארים במקומם וניתן להחזיר את החברה בכל רגע.'
-        : 'להחזיר את החברה לפעילות?';
-      if (!confirm(msg)) return;
-      const { data: upd, error } = await sb.from('organizations')
-        .update({ status: toSuspended ? 'suspended' : 'active' }).eq('id', btn.dataset.toggle).select('id');
-      if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
-      if (!upd || !upd.length) { toast('הפעולה לא בוצעה — אין הרשאה', 'error'); return; }
-      toast(toSuspended ? 'החברה הושעתה' : 'החברה הופעלה', 'success');
-      loadOrgs();
-    }));
+  let companyOpen = null;
+  async function openCompany(id) {
+    const back = document.getElementById('opCompanyBackdrop');
+    const body = document.getElementById('opCompanyBody');
+    body.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+    back.classList.add('open');
+    let c;
+    try { c = await rpc('op_company', { p_org: id, p_terms: VERSIONS.terms, p_privacy: VERSIONS.privacy }); }
+    catch (err) { body.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; return; }
+    companyOpen = c;
+    body.innerHTML = opCompanyHtml(c);
+    body.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => companyAction(b.dataset.act)));
+  }
+  document.getElementById('opCompanyCloseBtn').addEventListener('click', () => document.getElementById('opCompanyBackdrop').classList.remove('open'));
+
+  async function companyAction(act) {
+    const org = companyOpen.org;
+    let ask, run, done;
+    if (act === 'suspend') {
+      ask = { title: `השעיית ${org.name}`, text: 'כל המשתמשים של החברה יאבדו גישה מיידית. הנתונים נשארים במקומם, ואפשר להחזיר את החברה בכל רגע.', okLabel: 'השעיה' };
+      run = a => rpc('op_set_company_status', { p_org: org.id, p_status: 'suspended', p_reason: a.reason }); done = 'החברה הושעתה';
+    } else if (act === 'activate') {
+      ask = { title: `הפעלת ${org.name}`, text: 'המשתמשים של החברה יקבלו שוב גישה.', okLabel: 'הפעלה' };
+      run = a => rpc('op_set_company_status', { p_org: org.id, p_status: 'active', p_reason: a.reason }); done = 'החברה הופעלה';
+    } else if (act === 'transfer') {
+      const members = (companyOpen.members || []).filter(m => m.role === 'admin' || m.role === 'site_user');
+      if (!members.length) { toast('אין בחברה חבר שיכול לקבל בעלות (מנהל או משתמש אתר)', 'error'); return; }
+      ask = { title: `העברת בעלות — ${org.name}`, text: 'הבעלים הנוכחיים יהפכו למנהלים. השתמשו בזה רק כשהבעלים עזב או אינו זמין.', members, okLabel: 'העברה' };
+      run = a => rpc('op_transfer_ownership', { p_org: org.id, p_user: a.member, p_reason: a.reason }); done = 'הבעלות הועברה';
+    } else if (act === 'close') {
+      const in90 = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+      ask = { title: `הודעת סגירה — ${org.name}`, text: 'הבעלים יראו הודעה עם התאריך וקישור לייצוא כל המידע. בתאריך הזה תשעו את החברה בעצמכם. שום מידע לא נמחק.', date: in90, okLabel: 'שליחת הודעה' };
+      run = a => rpc('op_schedule_closing', { p_org: org.id, p_closing_on: a.date, p_reason: a.reason }); done = 'הודעת הסגירה נשמרה';
+    } else if (act === 'cancel-close') {
+      ask = { title: `ביטול הודעת הסגירה — ${org.name}`, okLabel: 'ביטול ההודעה' };
+      run = a => rpc('op_cancel_closing', { p_org: org.id, p_reason: a.reason }); done = 'הודעת הסגירה בוטלה';
+    } else return;
+    const answer = await askAction(ask);
+    if (!answer) return;
+    try { await run(answer); toast(done, 'success'); }
+    catch (err) { toast('הפעולה נכשלה: ' + err.message, 'error'); return; }
+    loaded.overview = false; loadOrgs(); openCompany(org.id);
+  }
+
+  // ---- users ----
+  let allUsers = [];
+  async function loadUsers() {
+    const host = document.getElementById('opUsers');
+    try { allUsers = await rpc('op_users', { p_terms: VERSIONS.terms, p_privacy: VERSIONS.privacy }); }
+    catch (err) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; return; }
+    renderUsers();
+  }
+  function renderUsers() {
+    const host = document.getElementById('opUsers');
+    host.innerHTML = opUsersHtml(opFilterUsers(allUsers, document.getElementById('userSearch').value), user.id);
+    host.querySelectorAll('[data-code]').forEach(b => b.addEventListener('click', () => userAction('code', b.dataset.code)));
+    host.querySelectorAll('[data-block]').forEach(b => b.addEventListener('click', () => userAction('block', b.dataset.block)));
+    host.querySelectorAll('[data-unblock]').forEach(b => b.addEventListener('click', () => userAction('unblock', b.dataset.unblock)));
+  }
+  document.getElementById('userSearch').addEventListener('input', renderUsers);
+
+  async function userAction(kind, id) {
+    const u = allUsers.find(x => x.id === id);
+    if (!u) return;
+    const name = u.full_name || u.username || u.email;
+    const asks = {
+      code: { title: `שליחת קוד כניסה — ${name}`, text: `קוד כניסה / איפוס סיסמה יישלח ל-${u.email}.`, okLabel: 'שליחה' },
+      block: { title: `חסימת ${name}`, text: 'המשתמש לא יוכל להתחבר. חיבור פתוח יסתיים תוך כשעה. הנתונים שלו נשארים.', okLabel: 'חסימה' },
+      unblock: { title: `שחרור החסימה — ${name}`, okLabel: 'שחרור' },
+    };
+    const answer = await askAction(asks[kind]);
+    if (!answer) return;
+    try {
+      if (kind === 'code') {
+        const { error } = await sb.auth.resetPasswordForEmail(u.email);
+        if (error) throw new Error(error.message);
+        await rpc('op_log', { p_action: 'user.send_code', p_org: u.memberships?.[0]?.org_id || null, p_target_type: 'user', p_target_id: u.id, p_reason: answer.reason, p_details: {} });
+        toast('הקוד נשלח', 'success');
+      } else {
+        const { data: { session } } = await sb.auth.getSession();
+        const res = await fetch(SUPABASE_FUNCTIONS_URL + '/op-user-action', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ action: kind, user_id: u.id, reason: answer.reason }),
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || String(res.status));
+        toast(kind === 'block' ? 'המשתמש נחסם' : 'החסימה שוחררה', 'success');
+        loaded.overview = false;
+        await loadUsers();
+      }
+    } catch (err) { toast('הפעולה נכשלה: ' + err.message, 'error'); }
   }
 
   async function loadRequests() {
@@ -288,6 +445,8 @@
     const { count } = await sb.from('support_tickets').select('id', { count: 'exact', head: true }).eq('operator_has_unread', true);
     const badge = document.getElementById('supportNewCount');
     badge.textContent = count || ''; badge.hidden = !count;
+    const tabBadge = document.getElementById('supportTabCount');
+    tabBadge.textContent = count || ''; tabBadge.hidden = !count;
     if (!supportRows.length) { host.innerHTML = '<p class="empty-state">אין פניות</p>'; return; }
     host.innerHTML = supportRows.map(t => `
       <button type="button" class="sp-ticket" data-op-open="${t.id}">
@@ -350,7 +509,7 @@
   document.getElementById('opThreadBackdrop').addEventListener('click', e => { if (e.target.id === 'opThreadBackdrop') opClose(); });
   loadSupport();
 
-  await loadOrgs();
+  showTab(location.hash.slice(1) || 'overview');
   await loadRequests();
 })();
 </script>
