@@ -40,7 +40,7 @@ const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים', icon: '�
 const ORG_SETTINGS_NAV_ITEM = { href: 'org-settings.html', label: 'הגדרות החברה', icon: '🏢', ico: 'org-settings' };
 const PLATFORM_NAV_ITEM = { href: 'platform-admin.html', label: 'ניהול הפלטפורמה', icon: '🛠️', ico: 'platform', count: true };
 const PROFILE_NAV_ITEM = { href: 'profile.html', label: 'הפרופיל שלי', icon: '👤', ico: 'profile' };
-const SUPPORT_NAV_ITEM = { href: 'support.html', label: 'תמיכה', icon: '🛟', count: true };
+const SUPPORT_NAV_ITEM = { href: 'support.html', label: 'תמיכה', icon: '🛟', ico: 'support', count: true };
 
 // The icon a page has in the sidebar, so the page itself can reuse it (e.g. on its stat cards).
 function pageIco(href) {
