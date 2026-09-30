@@ -150,13 +150,13 @@
   </div>
 </main>
 
-<footer class="app-footer"><span id="footerOrg"></span> © <span id="year"></span></footer>
+<footer class="app-footer" data-app-footer>© 2026 TADOK</footer>
 
 <script src="js/supabase-client.js"></script>
+<script src="js/policies.js"></script>
 <script src="js/app.js"></script>
 <script src="js/doc-insights.js"></script>
 <script>
-document.getElementById('year').textContent = new Date().getFullYear();
 
 function greetingByHour() {
   const h = new Date().getHours();
@@ -170,7 +170,6 @@ function greetingByHour() {
   const auth = await requireAuth('dashboard.html');
   if (!auth) return;
   const { user, profile, site, org } = auth;
-  document.getElementById('footerOrg').textContent = org.name;
   const canEditSite = profile.role === 'owner' || profile.role === 'admin';
   const canEditCover = true; // any internal role reaching this dashboard (owner/admin/site_user) can set the site cover photo
 
