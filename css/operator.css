@@ -38,3 +38,6 @@ section[data-panel][hidden] { display: none; }
 /* the hidden "פעולות" header (.sr-only) is position:absolute; without a positioned table it escapes
    the scrolling .table-wrap and widens the whole page on a phone */
 .op-table { position: relative; }
+.op-ann-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.op-ann-item { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.op-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

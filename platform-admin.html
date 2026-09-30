@@ -47,6 +47,8 @@
     <button type="button" role="tab" data-tab="overview" aria-selected="true">סקירה</button>
     <button type="button" role="tab" data-tab="companies" aria-selected="false">חברות</button>
     <button type="button" role="tab" data-tab="users" aria-selected="false">משתמשים</button>
+    <button type="button" role="tab" data-tab="monitor" aria-selected="false">ניטור</button>
+    <button type="button" role="tab" data-tab="announce" aria-selected="false">הודעות</button>
     <button type="button" role="tab" data-tab="support" aria-selected="false">תמיכה <span class="nav-count" id="supportTabCount" hidden></span></button>
   </nav>
 
@@ -76,6 +78,51 @@
       <input type="search" id="userSearch" class="op-search" placeholder="חיפוש לפי שם, דוא״ל או חברה" aria-label="חיפוש משתמשים">
     </div>
     <div id="opUsers"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+  </section>
+
+  <section data-panel="monitor" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-header">
+      <h2>תקלות אצל משתמשים</h2>
+      <select id="evDays" class="site-badge" style="color:var(--ink);background:var(--bg);" aria-label="תקופה">
+        <option value="7">7 ימים</option><option value="30">30 יום</option><option value="90">90 יום</option>
+      </select>
+    </div>
+    <div id="opEvents"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <h2>יומן פעולות</h2>
+      <select id="auditAction" class="site-badge" style="color:var(--ink);background:var(--bg);" aria-label="סוג פעולה"></select>
+    </div>
+    <div id="opAuditLog"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h2>כניסה ותנאים</h2></div>
+    <div id="opPeople"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
+  </section>
+
+  <section data-panel="announce" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-header"><h2>הודעה חדשה</h2></div>
+    <form id="annForm">
+      <div class="form-grid">
+        <div class="field full"><label for="annTitle">כותרת</label><input id="annTitle" required maxlength="120"></div>
+        <div class="field full"><label for="annBody">פירוט (לא חובה)</label><textarea id="annBody" rows="2" maxlength="1000"></textarea></div>
+        <div class="field"><label for="annLevel">סוג</label><select id="annLevel"><option value="info">מידע</option><option value="warn">חשוב</option></select></div>
+        <div class="field"><label for="annOrg">למי</label><select id="annOrg"><option value="">כל המשתמשים</option></select></div>
+        <div class="field"><label for="annStart">מתי מתחילה</label><input id="annStart" type="datetime-local" required></div>
+        <div class="field"><label for="annEnd">מתי נגמרת</label><input id="annEnd" type="datetime-local" required></div>
+      </div>
+      <div id="annMsg" class="msg"></div>
+      <div class="modal-actions"><button type="submit" class="btn btn-primary" id="annSubmit">פרסום</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <div class="card-header"><h2>הודעות</h2></div>
+    <div id="opAnnList"><div class="loading-overlay"><div class="spinner"></div></div></div>
   </div>
   </section>
 
@@ -193,7 +240,9 @@
     if (!document.querySelector(`[data-panel="${name}"]`)) name = 'overview';
     document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== name; });
     document.querySelectorAll('.op-tabs [data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
-    if (!loaded[name]) { loaded[name] = true; ({ overview: loadOverview, companies: loadOrgs, users: loadUsers, support: () => {} })[name](); }
+    // on a phone the tab bar scrolls sideways; keep the chosen tab visible
+    document.querySelector(`.op-tabs [data-tab="${name}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (!loaded[name]) { loaded[name] = true; ({ overview: loadOverview, companies: loadOrgs, users: loadUsers, monitor: loadMonitor, announce: loadAnnouncements, support: () => {} })[name](); }
   }
   document.querySelectorAll('.op-tabs [data-tab]').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.tab; }));
   window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
@@ -282,6 +331,79 @@
     catch (err) { toast('הפעולה נכשלה: ' + err.message, 'error'); return; }
     loaded.overview = false; loadOrgs(); openCompany(org.id);
   }
+
+  // ---- monitoring ----
+  document.getElementById('auditAction').innerHTML = '<option value="">כל הפעולות</option>'
+    + Object.entries(OP_ACTION_LABELS).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('');
+  async function loadEvents() {
+    const host = document.getElementById('opEvents');
+    try { host.innerHTML = opEventsHtml(await rpc('op_app_events', { p_days: +document.getElementById('evDays').value || 7 })); }
+    catch (err) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; }
+  }
+  async function loadAuditLog() {
+    const host = document.getElementById('opAuditLog');
+    try { host.innerHTML = opAuditTableHtml(await rpc('op_audit', { p_limit: 200, p_action: document.getElementById('auditAction').value || null, p_org: null })); }
+    catch (err) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; }
+  }
+  async function loadMonitor() {
+    loadEvents(); loadAuditLog();
+    const host = document.getElementById('opPeople');
+    try {
+      const people = allUsers.length ? allUsers : await rpc('op_users', { p_terms: VERSIONS.terms, p_privacy: VERSIONS.privacy });
+      host.innerHTML = opPeopleListsHtml(people);
+    } catch (err) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; }
+  }
+  document.getElementById('evDays').addEventListener('change', loadEvents);
+  document.getElementById('auditAction').addEventListener('change', loadAuditLog);
+
+  // ---- announcements ----
+  const localInput = ms => new Date(ms - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  function resetAnnForm() {
+    document.getElementById('annForm').reset();
+    document.getElementById('annStart').value = localInput(Date.now());
+    document.getElementById('annEnd').value = localInput(Date.now() + 3 * 86400000);
+  }
+  let orgNames = {};
+  async function loadAnnouncements() {
+    const host = document.getElementById('opAnnList');
+    try {
+      const [{ data: rows, error }, companies] = await Promise.all([
+        sb.from('platform_announcements').select('*').order('starts_at', { ascending: false }).limit(50),
+        rpc('op_companies'),
+      ]);
+      if (error) throw new Error(error.message);
+      orgNames = Object.fromEntries(companies.map(c => [c.id, c.name]));
+      const sel = document.getElementById('annOrg');
+      if (sel.options.length === 1) sel.innerHTML += companies.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+      host.innerHTML = opAnnouncementsHtml(rows || [], orgNames);
+      host.querySelectorAll('[data-ann-end]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('לסיים את ההודעה עכשיו?')) return;
+        try { await rpc('op_end_announcement', { p_id: b.dataset.annEnd }); toast('ההודעה הסתיימה', 'success'); loadAnnouncements(); }
+        catch (err) { toast('הפעולה נכשלה: ' + err.message, 'error'); }
+      }));
+    } catch (err) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; }
+  }
+  resetAnnForm();
+  document.getElementById('annForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('annMsg');
+    hideMsg(msgEl);
+    const start = new Date(document.getElementById('annStart').value), end = new Date(document.getElementById('annEnd').value);
+    if (!(end > start)) { showMsg(msgEl, 'תאריך הסיום חייב להיות אחרי ההתחלה', 'error'); return; }
+    const btn = document.getElementById('annSubmit');
+    btn.disabled = true;
+    try {
+      await rpc('op_announce', {
+        p_title: document.getElementById('annTitle').value.trim(), p_body: document.getElementById('annBody').value.trim() || null,
+        p_level: document.getElementById('annLevel').value, p_org: document.getElementById('annOrg').value || null,
+        p_starts_at: start.toISOString(), p_ends_at: end.toISOString(),
+      });
+      toast('ההודעה פורסמה', 'success');
+      resetAnnForm();
+      loadAnnouncements();
+    } catch (err) { showMsg(msgEl, 'הפרסום נכשל: ' + err.message, 'error'); }
+    btn.disabled = false;
+  });
 
   // ---- users ----
   let allUsers = [];

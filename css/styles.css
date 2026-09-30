@@ -1388,3 +1388,10 @@ footer.app-footer {
              display: inline-flex; align-items: center; justify-content: center; }
 .tab .tab-dot { position: absolute; top: 6px; inset-inline-end: 28%; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
 .nav-count[hidden] { display: none; }
+
+/* announcements from the platform operator, under the header */
+.tadok-ann { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; border-radius: 12px;
+             padding: 10px 14px; margin-bottom: 12px; font-size: 14px; line-height: 1.6; }
+.tadok-ann.info { background: #E6EFFA; color: #1F3F66; }
+.tadok-ann.warn { background: #FFF1D6; color: #7A4A06; }
+.tadok-ann-x { background: none; border: 0; font-size: 20px; line-height: 1; cursor: pointer; color: inherit; padding: 0 4px; flex-shrink: 0; }

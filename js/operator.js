@@ -207,3 +207,60 @@ function opErrorText(msg) {
   const hit = OP_ERRORS.find(([re]) => re.test(String(msg || '')));
   return hit ? hit[1] : String(msg || '');
 }
+
+// ---- monitoring tab ----
+const OP_EVENT_KINDS = { permission: 'הרשאה', save: 'שמירה', load: 'טעינה', script: 'שגיאת קוד', other: 'אחר' };
+Object.assign(OP_ACTION_LABELS, { 'announcement.create': 'פרסום הודעה', 'announcement.end': 'סיום הודעה' });
+
+function opTime(iso) {
+  return new Date(iso).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function opEventsHtml(d) {
+  if (!d || !d.groups || !d.groups.length) return '<p class="empty-state">אין תקלות בתקופה הזו</p>';
+  return `<div class="table-wrap"><table class="op-table">
+    <thead><tr><th>סוג</th><th>דף</th><th>הודעה</th><th>פעמים</th><th>משתמשים</th><th>אחרונה</th></tr></thead>
+    <tbody>${d.groups.map(g => `<tr>
+      <td>${opEsc(OP_EVENT_KINDS[g.kind] || g.kind)}</td><td>${opEsc(g.page || '')}</td><td>${opEsc(g.message)}</td>
+      <td class="num-cell">${opEsc(g.n)}</td><td class="num-cell">${opEsc(g.users)}</td><td>${opEsc(opAgo(g.last_at))}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+function opAuditTableHtml(rows) {
+  if (!rows || !rows.length) return '<p class="empty-state">אין פעולות רשומות</p>';
+  return `<div class="table-wrap"><table class="op-table">
+    <thead><tr><th>מתי</th><th>פעולה</th><th>חברה</th><th>מי</th><th>סיבה</th></tr></thead>
+    <tbody>${rows.map(a => `<tr>
+      <td>${opEsc(opTime(a.at))}</td><td>${opEsc(OP_ACTION_LABELS[a.action] || a.action)}</td>
+      <td>${opEsc(a.org || '—')}</td><td>${opEsc(a.actor || '—')}</td><td>${opEsc(a.reason || '')}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+function opPeopleListsHtml(users) {
+  const never = users.filter(u => !u.last_sign_in_at);
+  const notAccepted = users.filter(u => u.accepted === false);
+  const list = rows => rows.length
+    ? `<ul class="op-audit">${rows.map(u => `<li>${opEsc(u.full_name || u.username || '')} <small>${opEsc(u.email || '')}</small></li>`).join('')}</ul>`
+    : '<p class="empty-state">אין</p>';
+  return `<div class="op-two">
+    <div><h4>לא נכנסו מעולם (${never.length})</h4>${list(never)}</div>
+    <div><h4>לא אישרו את התנאים (${notAccepted.length})</h4>${list(notAccepted)}</div>
+  </div>`;
+}
+
+// ---- announcements tab ----
+function opAnnouncementsHtml(rows, orgNames = {}, now = Date.now()) {
+  if (!rows || !rows.length) return '<p class="empty-state">עדיין לא פורסמו הודעות</p>';
+  return `<ul class="op-ann-list">${rows.map(a => {
+    const starts = Date.parse(a.starts_at), ends = Date.parse(a.ends_at);
+    const status = ends <= now ? 'הסתיימה' : starts > now ? 'מתוזמנת' : 'פעילה';
+    return `<li class="op-ann-item">
+      <div><span class="status-badge ${status === 'פעילה' ? 'active' : status === 'מתוזמנת' ? 'closing' : 'suspended'}">${status}</span>
+        ${a.level === 'warn' ? '<span class="status-badge closing">חשוב</span>' : ''}
+        <strong>${opEsc(a.title)}</strong>
+        <div><small>${opEsc(a.organization_id ? (orgNames[a.organization_id] || 'חברה') : 'כל המשתמשים')} · ${opEsc(opTime(a.starts_at))} — ${opEsc(opTime(a.ends_at))}</small></div>
+        ${a.body ? `<div style="font-size:13px;">${opEsc(a.body)}</div>` : ''}</div>
+      ${ends > now ? `<button class="btn btn-sm btn-outline" data-ann-end="${opEsc(a.id)}">סיום</button>` : ''}
+    </li>`;
+  }).join('')}</ul>`;
+}

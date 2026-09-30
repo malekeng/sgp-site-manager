@@ -115,6 +115,8 @@ function esc(s) {
 }
 
 function toast(message, type = '') {
+  // errors the user sees are also reported to the operator (js/policies.js)
+  if (type === 'error' && typeof tadokReportError === 'function') tadokReportError(message);
   let host = document.querySelector('.toast-host');
   if (!host) {
     host = document.createElement('div');
@@ -130,6 +132,7 @@ function toast(message, type = '') {
 
 function showMsg(el, text, type) {
   if (!el) return;
+  if (type === 'error' && typeof tadokReportError === 'function') tadokReportError(text);
   el.textContent = text;
   el.className = 'msg show ' + type;
 }
@@ -366,6 +369,7 @@ async function renderHeader(activePage, profile, site, org) {
       }, () => {});
   }
   refreshSupportCounts(profile?.id);
+  if (typeof tadokShowAnnouncements === 'function') tadokShowAnnouncements();
 
   // Re-sync desktop-collapse vs mobile-open state when crossing the 900px
   // breakpoint via window resize (not just page reload), so the two states

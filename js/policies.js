@@ -139,3 +139,77 @@ function tadokClosingNoticeHtml(closure) {
   return `<strong>החשבון של החברה ייסגר ב-${d}.${m}.${y}.</strong> ${e(closure.reason || '')}
     עד אז הכול עובד כרגיל. כדאי לשמור עותק של כל המידע: <a href="org-settings.html">הגדרות החברה ← ייצוא כל המידע</a>.`;
 }
+
+// ---- error reports (app_events) ----
+// What an error toast or a script error becomes when reported: the kind (for grouping), the
+// message cut to 500 characters, and the page's file name only.
+function tadokEventFromError(message, page) {
+  const text = String(message || '').trim();
+  const kind = /הרשאה|permission|row-level security|42501/i.test(text) ? 'permission'
+             : /נכשל/.test(text) ? 'save' : 'other';
+  return { kind, message: text.slice(0, 500) || '—', page: String(page || '').split('/').pop().slice(0, 80) };
+}
+
+// ---- announcements from the platform operator ----
+function tadokActiveAnnouncements(rows, dismissedIds = [], now = Date.now()) {
+  return (rows || [])
+    .filter(a => Date.parse(a.starts_at) <= now && Date.parse(a.ends_at) > now && !dismissedIds.includes(a.id))
+    .sort((x, y) => (x.level === 'warn' ? 0 : 1) - (y.level === 'warn' ? 0 : 1) || Date.parse(y.starts_at) - Date.parse(x.starts_at));
+}
+
+function tadokAnnouncementHtml(a) {
+  const e = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return `<div class="tadok-ann ${a.level === 'warn' ? 'warn' : 'info'}" role="status">
+    <div><strong>${e(a.title)}</strong>${a.body ? ` <span>${e(a.body)}</span>` : ''}</div>
+    <button type="button" class="tadok-ann-x" data-ann-dismiss="${e(a.id)}" aria-label="סגירת ההודעה">×</button>
+  </div>`;
+}
+
+// Sends one report per distinct message per page load. Never throws and never shows anything:
+// reporting is for the operator, the user already saw the error.
+const TADOK_REPORTED = new Set();
+async function tadokReportError(message, kind = null, details = {}) {
+  try {
+    const ev = tadokEventFromError(message, location.pathname);
+    if (kind) ev.kind = kind;
+    const key = ev.kind + '|' + ev.message;
+    if (TADOK_REPORTED.has(key) || TADOK_REPORTED.size >= 20) return;
+    TADOK_REPORTED.add(key);
+    const { data } = await sb.auth.getSession();
+    if (!data || !data.session) return;
+    const org = typeof activeOrg !== 'undefined' && activeOrg ? activeOrg.id : null;
+    await sb.from('app_events').insert({ organization_id: org, page: ev.page, kind: ev.kind, message: ev.message, details });
+  } catch (_) { /* the report itself failing must never bother the user */ }
+}
+
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('error', e => { if (e && e.message) tadokReportError(e.message, 'script', { source: String(e.filename || '').split('/').pop(), line: e.lineno || null }); });
+  window.addEventListener('unhandledrejection', e => tadokReportError(String(e && e.reason && (e.reason.message || e.reason)), 'script'));
+}
+
+// Banner(s) under the header for active announcements. Row security already limits what the
+// user can read to everyone's and their own company's; the time window is checked here too.
+const TADOK_DISMISSED_KEY = 'tadok_dismissed_announcements';
+function tadokDismissed() {
+  try { return JSON.parse(localStorage.getItem(TADOK_DISMISSED_KEY) || '[]'); } catch (_) { return []; }
+}
+async function tadokShowAnnouncements() {
+  try {
+    const main = document.querySelector('main.page');
+    if (!main) return;
+    const { data } = await sb.from('platform_announcements')
+      .select('id, title, body, level, starts_at, ends_at').order('starts_at', { ascending: false }).limit(20);
+    const active = tadokActiveAnnouncements(data || [], tadokDismissed());
+    if (!active.length) return;
+    const host = document.createElement('div');
+    host.id = 'tadokAnnouncements';
+    host.innerHTML = active.map(tadokAnnouncementHtml).join('');
+    main.prepend(host);
+    host.addEventListener('click', e => {
+      const id = e.target.closest('[data-ann-dismiss]')?.dataset.annDismiss;
+      if (!id) return;
+      try { localStorage.setItem(TADOK_DISMISSED_KEY, JSON.stringify([...tadokDismissed(), id].slice(-50))); } catch (_) {}
+      e.target.closest('.tadok-ann')?.remove();
+    });
+  } catch (_) { /* announcements are a convenience; never break the page */ }
+}
