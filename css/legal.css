@@ -90,3 +90,11 @@ mark.ph { background: #FFF1B8; color: inherit; padding: 0 3px; border-radius: 4p
   .legal h1 { font-size: 25px; }
   .legal-toc ol { columns: 1; }
 }
+
+/* "בקצרה" box at the top of the privacy policy, and tables in the processing appendix */
+.legal-summary { background: #E3F6EA; border-radius: 12px; padding: 14px 18px; margin: 18px 0 8px; }
+.legal-summary h2 { margin-top: 0; }
+.legal .table-wrap { overflow-x: auto; margin: 10px 0 14px; }
+.legal table { width: 100%; border-collapse: collapse; font-size: 14.5px; min-width: 520px; }
+.legal th, .legal td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.legal th { background: var(--bg); font-size: 13px; color: var(--steel); font-weight: 500; }

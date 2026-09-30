@@ -68,7 +68,7 @@
   <h1 id="greeting">המשימות שלי</h1>
   <button class="ct-logout" id="logoutBtn">יציאה</button>
 </div>
-<div class="auth-legal" data-legal-links style="text-align:center;padding:8px 0 0;font-size:12px;"></div>
+<div class="auth-legal" style="text-align:center;padding:8px 0 0;font-size:12px;"><a href="support.html?ct=1">תמיכה</a> <span aria-hidden="true">·</span> <span data-legal-links="documents"></span></div>
 
 <div class="ct-page" id="tasksList">
   <div class="loading-overlay"><div class="spinner"></div></div>
@@ -124,6 +124,9 @@ const CT_ICON = {
     });
     return;
   }
+
+  if (typeof tadokEnsureAccepted === 'function'
+      && !(await tadokEnsureAccepted(session.user.id, contractorOf[0].organization_id, 'contractor-login.html'))) return;
 
   document.getElementById('greeting').textContent = `שלום ${profile.full_name || ''}`;
   document.getElementById('logoutBtn').addEventListener('click', async () => {

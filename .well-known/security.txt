@@ -1,0 +1,5 @@
+Contact: mailto:malek.pg@hotmail.com
+Expires: 2027-09-30T00:00:00.000Z
+Preferred-Languages: he, en, ar
+Policy: https://tadok.vercel.app/terms.html
+Canonical: https://tadok.vercel.app/.well-known/security.txt

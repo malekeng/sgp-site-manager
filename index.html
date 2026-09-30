@@ -325,6 +325,7 @@ companySignupForm.addEventListener('submit', async e => {
     p_email: fd.get('email'),
     p_phone: fd.get('phone') || null,
     p_note: fd.get('note') || null,
+    p_terms_version: typeof TADOK_POLICY !== 'undefined' ? TADOK_POLICY.terms : null,
   });
 
   setBusy(btn, btnText, false, '', 'שליחת בקשה');

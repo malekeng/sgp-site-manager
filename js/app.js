@@ -38,13 +38,14 @@ const NAV_ITEMS = [
 ];
 const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים', icon: '👥', ico: 'users' };
 const ORG_SETTINGS_NAV_ITEM = { href: 'org-settings.html', label: 'הגדרות החברה', icon: '🏢', ico: 'org-settings' };
-const PLATFORM_NAV_ITEM = { href: 'platform-admin.html', label: 'ניהול הפלטפורמה', icon: '🛠️', ico: 'platform' };
+const PLATFORM_NAV_ITEM = { href: 'platform-admin.html', label: 'ניהול הפלטפורמה', icon: '🛠️', ico: 'platform', count: true };
 const PROFILE_NAV_ITEM = { href: 'profile.html', label: 'הפרופיל שלי', icon: '👤', ico: 'profile' };
+const SUPPORT_NAV_ITEM = { href: 'support.html', label: 'תמיכה', icon: '🛟', count: true };
 
 // The icon a page has in the sidebar, so the page itself can reuse it (e.g. on its stat cards).
 function pageIco(href) {
   const all = [...NAV_ITEMS.flatMap(i => i.items ? [i, ...i.items] : [i]),
-    ADMIN_NAV_ITEM, ORG_SETTINGS_NAV_ITEM, PLATFORM_NAV_ITEM, PROFILE_NAV_ITEM];
+    ADMIN_NAV_ITEM, ORG_SETTINGS_NAV_ITEM, PLATFORM_NAV_ITEM, PROFILE_NAV_ITEM, SUPPORT_NAV_ITEM];
   return all.find(i => i.href === href)?.ico || null;
 }
 
@@ -200,6 +201,7 @@ async function renderHeader(activePage, profile, site, org) {
     if (isPlatformAdmin) items.push(PLATFORM_NAV_ITEM);
   } catch (_) { /* never block the header on this */ }
   items.push(PROFILE_NAV_ITEM);
+  items.push(SUPPORT_NAV_ITEM);
 
   // Each company sees its own name in the tab title.
   if (org?.name) {
@@ -214,7 +216,11 @@ async function renderHeader(activePage, profile, site, org) {
     ? `<img class="nav-ico" src="icons/nav/${item.ico}.webp" alt="" aria-hidden="true" width="28" height="28">`
     : `<span class="nav-icon">${item.icon}</span>`;
   function navLinkHtml(item, extraClass) {
-    return `<a href="${item.href}" class="${extraClass || ''} ${item.href === activePage ? 'active' : ''}">${navIcon(item)}${item.label}</a>`;
+    // Support learns which page the user came from, to attach it to a new request.
+    const href = item.href === 'support.html' && activePage !== 'support.html'
+      ? `support.html?from=${encodeURIComponent(activePage)}` : item.href;
+    const count = item.count ? `<span class="nav-count" data-nav-count="${item.href}" hidden></span>` : '';
+    return `<a href="${href}" class="${extraClass || ''} ${item.href === activePage ? 'active' : ''}">${navIcon(item)}${item.label}${count}</a>`;
   }
   const navHtml = items.map(item => {
     if (item.group) {
@@ -359,6 +365,7 @@ async function renderHeader(activePage, profile, site, org) {
         if (b && count) { b.textContent = count > 99 ? '99+' : count; b.hidden = false; b.setAttribute('aria-label', `${count} פתוחות`); }
       }, () => {});
   }
+  refreshSupportCounts(profile?.id);
 
   // Re-sync desktop-collapse vs mobile-open state when crossing the 900px
   // breakpoint via window resize (not just page reload), so the two states
@@ -405,6 +412,31 @@ async function renderHeader(activePage, profile, site, org) {
     await sb.auth.signOut();
     window.location.href = 'index.html';
   });
+}
+
+// Red counts: replies waiting for this user, and — for the operator — requests waiting for an answer.
+async function refreshSupportCounts(userId) {
+  if (!userId) return;
+  const set = (key, n) => document.querySelectorAll(`[data-nav-count="${key}"]`).forEach(b => {
+    b.textContent = n > 99 ? '99+' : String(n); b.hidden = !n;
+  });
+  try {
+    const mine = await sb.from('support_tickets').select('id', { count: 'exact', head: true })
+      .eq('user_id', userId).eq('user_has_unread', true);
+    set('support.html', mine.count || 0);
+    let waiting = 0;
+    if (document.querySelector('[data-nav-count="platform-admin.html"]')) {
+      const op = await sb.from('support_tickets').select('id', { count: 'exact', head: true }).eq('operator_has_unread', true);
+      waiting = op.count || 0;
+      set('platform-admin.html', waiting);
+    }
+    const menuBtn = document.getElementById('tabMenuBtn');
+    if (menuBtn) {
+      let dot = menuBtn.querySelector('.tab-dot');
+      if (!dot) { dot = document.createElement('span'); dot.className = 'tab-dot'; menuBtn.appendChild(dot); }
+      dot.hidden = !((mine.count || 0) + waiting);
+    }
+  } catch (_) { /* counts are a convenience; never break the page */ }
 }
 
 // Platform name — deliberately generic, since the platform now serves many companies.
@@ -617,6 +649,9 @@ async function requireAuth(activePage) {
   // now means "owner of this company" rather than "owner of everything".
   activeOrgName = org.name || PLATFORM_NAME;
   activeOrg = org;
+
+  // Terms and privacy acceptance: once per user and again after a change (js/policies.js).
+  if (typeof tadokEnsureAccepted === 'function' && !(await tadokEnsureAccepted(session.user.id, org.id))) return null;
 
   profile.legacy_role = profile.role;
   profile.role = org.role;

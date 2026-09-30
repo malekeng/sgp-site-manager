@@ -171,6 +171,16 @@ function greetingByHour() {
   if (!auth) return;
   const { user, profile, site, org } = auth;
   const canEditSite = profile.role === 'owner' || profile.role === 'admin';
+  // Owners hear about a coming change to the terms before it applies (js/policies.js).
+  const policyNotice = typeof tadokUpcomingNotice === 'function' ? tadokUpcomingNotice() : null;
+  if (policyNotice && profile.role === 'owner') {
+    const bar = document.createElement('div');
+    bar.className = 'card';
+    bar.style.cssText = 'background:#FFF6E0;border-color:#F0C36D;';
+    bar.innerHTML = `<strong>תנאי השימוש ומדיניות הפרטיות מתעדכנים ב-${esc(fmtDate(policyNotice.effective))}.</strong>
+      ${esc(policyNotice.summary || '')} <a href="terms.html" target="_blank" rel="noopener">לקריאה</a>`;
+    document.querySelector('main.page').prepend(bar);
+  }
   const canEditCover = true; // any internal role reaching this dashboard (owner/admin/site_user) can set the site cover photo
 
   // ===== Notice board: anyone on this site can post; owner/admin or the author can delete =====

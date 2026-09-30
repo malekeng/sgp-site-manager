@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>תמיכה</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="application-name" content="TADOK">
+<meta name="apple-mobile-web-app-title" content="TADOK">
+<meta name="theme-color" content="#0E1A20">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TADOK">
+<meta property="og:title" content="TADOK — תיעוד, בקרת איכות ושליטה באתר הבנייה">
+<meta property="og:description" content="פלטפורמה לניהול אתר בנייה: יציקות, ברזל, מסמכים, בקרת איכות ודוחות.">
+<meta property="og:image" content="https://tadok.vercel.app/brand/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="he_IL">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/support.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<header class="app-header" id="app-header"></header>
+
+<main class="page" id="supportMain">
+  <h1 class="page-title">תמיכה</h1>
+  <div class="sp-grid">
+    <div>
+      <section class="card" id="spNewCard" hidden>
+        <div class="card-header"><h2>פנייה חדשה</h2></div>
+        <div id="spNewMsg" class="msg"></div>
+        <form id="spNewForm">
+          <div class="form-grid">
+            <div class="field"><label for="spCat">נושא</label><select id="spCat" name="category" required></select></div>
+            <div class="field"><label for="spSubject">כותרת</label><input id="spSubject" name="subject" required maxlength="120"></div>
+            <div class="field full"><label for="spBody">מה קרה? מה ניסיתם לעשות?</label><textarea id="spBody" name="body" rows="5" required maxlength="5000"></textarea></div>
+            <div class="field full"><label for="spFiles">צילומי מסך או קבצים (עד 3, תמונות או PDF, עד 10MB)</label><input id="spFiles" type="file" multiple accept="image/*,application/pdf"></div>
+          </div>
+          <details><summary style="cursor:pointer;font-size:12.5px;color:var(--steel);">פרטים טכניים שיצורפו לפנייה</summary><div id="spCtx"></div></details>
+          <div class="modal-actions"><button type="submit" class="btn btn-primary" id="spSendBtn">שליחת פנייה</button></div>
+        </form>
+        <p style="font-size:12px;color:var(--steel);margin-top:10px;">הפנייה גלויה לכם ולצוות TADOK בלבד. אנו משתדלים לענות בדרך כלל תוך 2 ימי עסקים.</p>
+      </section>
+
+      <section class="card" id="spContactCard" hidden>
+        <div class="card-header"><h2>לא מצליחים להתחבר?</h2></div>
+        <p style="line-height:1.7;">בעמוד הכניסה לחצו "שכחת סיסמה, או קיבלת קוד הזמנה?" וקבלו קוד לדוא"ל. אם זה לא עוזר, כתבו לנו: <a id="spMail"></a></p>
+        <p style="line-height:1.7;">משתמשים מחוברים יכולים לפתוח פנייה ישירות מכאן. <a href="index.html">לכניסה</a></p>
+      </section>
+
+      <section class="card" id="spMineCard" hidden>
+        <div class="card-header"><h2>הפניות שלי</h2></div>
+        <div id="spMine"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="card-header"><h2>שאלות נפוצות</h2></div>
+      <div id="spFaq"></div>
+    </section>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="spThreadBackdrop">
+  <div class="modal sp-thread-modal" role="dialog" aria-modal="true" aria-labelledby="spThreadTitle">
+    <h3 id="spThreadTitle"></h3>
+    <div id="spThreadMeta" style="font-size:12.5px;color:var(--steel);"></div>
+    <div id="spThread" class="sp-thread"></div>
+    <div id="spReplyMsg" class="msg"></div>
+    <form id="spReplyForm">
+      <div class="field full"><label for="spReplyBody">תגובה</label><textarea id="spReplyBody" name="body" rows="3" required maxlength="5000"></textarea></div>
+      <div class="field full"><input id="spReplyFiles" type="file" multiple accept="image/*,application/pdf"></div>
+      <p id="spClosedNote" style="font-size:12px;color:var(--steel);" hidden>הפנייה סגורה. הודעה חדשה תפתח אותה מחדש.</p>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="spReplyBtn">שליחה</button>
+        <button type="button" class="btn btn-outline" id="spCloseTicketBtn">סגירת הפנייה</button>
+        <button type="button" class="btn btn-ghost" id="spThreadCloseBtn">סגירת החלון</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/policies.js"></script>
+<script src="js/app.js"></script>
+<script src="js/support.js"></script>
+<script src="js/support-faq.js"></script>
+<script>
+(async function () {
+  const params = new URLSearchParams(location.search);
+  renderSupportFaq(document.getElementById('spFaq'));
+  const mail = document.getElementById('spMail');
+  mail.href = 'mailto:' + SUPPORT_EMAIL; mail.textContent = SUPPORT_EMAIL;
+
+  function standalone(backHref, backLabel) {
+    document.getElementById('app-header').remove();
+    document.body.classList.add('sp-standalone');
+    const bar = document.createElement('div');
+    bar.className = 'sp-topbar';
+    bar.innerHTML = `<a href="${backHref}">${esc(backLabel)}</a><img src="brand/tadok-logo-transparent.png" alt="TADOK">`;
+    document.body.prepend(bar);
+  }
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    standalone('index.html', 'לכניסה');
+    document.getElementById('spContactCard').hidden = false;
+    return;
+  }
+
+  let me;
+  if (params.get('ct') === '1') {
+    const { data: prof } = await sb.from('profiles').select('full_name, username').eq('id', session.user.id).maybeSingle();
+    const { data: mem } = await sb.from('organization_members').select('organization_id, organizations(name)')
+      .eq('user_id', session.user.id).eq('role', 'contractor').limit(1);
+    if (!mem || !mem.length) { location.href = 'support.html'; return; }
+    standalone('contractor-tasks.html', 'חזרה למשימות');
+    me = { userId: session.user.id, email: session.user.email, name: prof?.full_name || prof?.username || '',
+           org: { id: mem[0].organization_id, name: mem[0].organizations?.name }, site: null };
+  } else {
+    const auth = await requireAuth('support.html');
+    if (!auth) return;
+    me = { userId: auth.user.id, email: auth.user.email, name: profileDisplayName(auth.profile), org: auth.org, site: auth.site };
+  }
+
+  document.getElementById('spNewCard').hidden = false;
+  document.getElementById('spMineCard').hidden = false;
+  document.getElementById('spCat').innerHTML = SUPPORT_CATEGORIES.map(c => `<option>${esc(c)}</option>`).join('');
+
+  const context = supportContext({ page: params.get('from'), orgName: me.org?.name, siteName: me.site?.name,
+                                   userName: me.name, email: me.email, appVersion: await supportAppVersion() });
+  document.getElementById('spCtx').innerHTML = supportContextHtml(context);
+
+  let tickets = [];
+  async function loadMine() {
+    const host = document.getElementById('spMine');
+    const { data, error } = await sb.from('support_tickets').select('*').eq('user_id', me.userId).order('updated_at', { ascending: false });
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; return; }
+    tickets = data || [];
+    if (!tickets.length) { host.innerHTML = '<p class="empty-state">עדיין לא פתחתם פניות</p>'; return; }
+    host.innerHTML = tickets.map(t => `
+      <button type="button" class="sp-ticket" data-open="${t.id}">
+        <span class="sp-sub">${t.user_has_unread ? '<i class="sp-unread" aria-label="תשובה חדשה"></i>' : ''}<span>${esc(t.subject)}</span></span>
+        <span class="sp-status ${SUPPORT_STATUS_CLASS[t.status] || ''}">${esc(t.status)}</span>
+        <span class="sp-meta-line">${esc(t.category)} · עודכנה ${esc(supportTime(t.updated_at))}</span>
+      </button>`).join('');
+    host.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openThread(b.dataset.open)));
+  }
+
+  let current = null;
+  async function openThread(id) {
+    current = tickets.find(t => t.id === id);
+    if (!current) return;
+    document.getElementById('spThreadTitle').textContent = current.subject;
+    document.getElementById('spThreadMeta').textContent = `${current.category} · ${current.status}`;
+    document.getElementById('spClosedNote').hidden = current.status !== 'סגורה';
+    document.getElementById('spCloseTicketBtn').hidden = current.status === 'סגורה';
+    hideMsg(document.getElementById('spReplyMsg'));
+    const host = document.getElementById('spThread');
+    host.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+    document.getElementById('spThreadBackdrop').classList.add('open');
+    try {
+      const { messages, fileUrls } = await supportLoadThread(id);
+      host.innerHTML = supportThreadHtml(messages, { viewerIsOperator: false, fileUrls });
+      host.scrollTop = host.scrollHeight;
+      if (current.user_has_unread) { await supportMarkSeen(id, false); refreshSupportCounts(me.userId); loadMine(); }
+    } catch (err) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; }
+  }
+
+  document.getElementById('spNewForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('spNewMsg');
+    hideMsg(msgEl);
+    const fd = new FormData(e.target);
+    const files = document.getElementById('spFiles').files;
+    const fileErr = supportCheckFiles(files);
+    if (fileErr) { showMsg(msgEl, fileErr, 'error'); return; }
+    const btn = document.getElementById('spSendBtn');
+    btn.disabled = true;
+    try {
+      const id = await supportOpenTicket({ userId: me.userId, category: fd.get('category'),
+        subject: String(fd.get('subject')).trim(), body: String(fd.get('body')).trim(), files,
+        organizationId: me.org?.id, siteId: me.site?.id, context });
+      e.target.reset();
+      toast('הפנייה נשלחה', 'success');
+      await loadMine();
+      openThread(id);
+    } catch (err) { showMsg(msgEl, 'השליחה נכשלה: ' + err.message, 'error'); }
+    btn.disabled = false;
+  });
+
+  document.getElementById('spReplyForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('spReplyMsg');
+    hideMsg(msgEl);
+    const files = document.getElementById('spReplyFiles').files;
+    const fileErr = supportCheckFiles(files);
+    if (fileErr) { showMsg(msgEl, fileErr, 'error'); return; }
+    const btn = document.getElementById('spReplyBtn');
+    btn.disabled = true;
+    try {
+      await supportReply(current, String(new FormData(e.target).get('body')).trim(), files);
+      e.target.reset();
+      await loadMine();
+      await openThread(current.id);
+    } catch (err) { showMsg(msgEl, 'השליחה נכשלה: ' + err.message, 'error'); }
+    btn.disabled = false;
+  });
+
+  document.getElementById('spCloseTicketBtn').addEventListener('click', async () => {
+    if (!confirm('לסגור את הפנייה?')) return;
+    try { await supportSetStatus(current.id, 'סגורה'); toast('הפנייה נסגרה', 'success'); await loadMine(); await openThread(current.id); }
+    catch (err) { toast('שגיאה: ' + err.message, 'error'); }
+  });
+  const closeModal = () => document.getElementById('spThreadBackdrop').classList.remove('open');
+  document.getElementById('spThreadCloseBtn').addEventListener('click', closeModal);
+  document.getElementById('spThreadBackdrop').addEventListener('click', e => { if (e.target.id === 'spThreadBackdrop') closeModal(); });
+
+  await loadMine();
+})();
+</script>
+</body>
+</html>

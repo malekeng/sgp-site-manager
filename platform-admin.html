@@ -21,6 +21,7 @@
 <meta property="og:locale" content="he_IL">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/support.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 .pa-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; align-items: start; }
@@ -62,6 +63,16 @@
   </div>
 
   </div>
+
+  <div class="card" id="supportCard">
+    <div class="card-header">
+      <h2>פניות תמיכה <span class="nav-count" id="supportNewCount" hidden></span></h2>
+      <select id="supportFilter" class="site-badge" style="color:var(--ink);background:var(--bg);">
+        <option value="פתוחה">פתוחות</option><option value="נענתה">נענו</option><option value="סגורה">סגורות</option><option value="">הכל</option>
+      </select>
+    </div>
+    <div id="supportList"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </div>
 </main>
 
 <div class="modal-backdrop" id="companyModalBackdrop">
@@ -91,9 +102,29 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="opThreadBackdrop">
+  <div class="modal sp-thread-modal" role="dialog" aria-modal="true" aria-labelledby="opThreadTitle">
+    <h3 id="opThreadTitle"></h3>
+    <details><summary style="cursor:pointer;font-size:12.5px;color:var(--steel);">פרטי הפונה והפרטים הטכניים</summary><div id="opThreadCtx"></div></details>
+    <div id="opThread" class="sp-thread"></div>
+    <div id="opReplyMsg" class="msg"></div>
+    <form id="opReplyForm">
+      <div class="field full"><label for="opReplyBody">תשובה</label><textarea id="opReplyBody" name="body" rows="3" required maxlength="5000"></textarea></div>
+      <div class="field full"><input id="opReplyFiles" type="file" multiple accept="image/*,application/pdf"></div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">שליחת תשובה</button>
+        <button type="button" class="btn btn-outline" id="opCloseBtn">סגירת הפנייה</button>
+        <button type="button" class="btn btn-outline" id="opReopenBtn">פתיחה מחדש</button>
+        <button type="button" class="btn btn-ghost" id="opThreadCloseBtn">סגירת החלון</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="js/supabase-client.js"></script>
 <script src="js/policies.js"></script>
 <script src="js/app.js"></script>
+<script src="js/support.js"></script>
 <script>
 (async function () {
   const auth = await requireAuth('platform-admin.html');
@@ -244,6 +275,72 @@
     }
     btn.disabled = false;
   });
+
+  let supportRows = [], opCurrent = null;
+  async function loadSupport() {
+    const host = document.getElementById('supportList');
+    const status = document.getElementById('supportFilter').value;
+    let q = sb.from('support_tickets').select('*').order('updated_at', { ascending: false }).limit(200);
+    if (status) q = q.eq('status', status);
+    const { data, error } = await q;
+    if (error) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(error.message)}</p>`; return; }
+    supportRows = data || [];
+    const { count } = await sb.from('support_tickets').select('id', { count: 'exact', head: true }).eq('operator_has_unread', true);
+    const badge = document.getElementById('supportNewCount');
+    badge.textContent = count || ''; badge.hidden = !count;
+    if (!supportRows.length) { host.innerHTML = '<p class="empty-state">אין פניות</p>'; return; }
+    host.innerHTML = supportRows.map(t => `
+      <button type="button" class="sp-ticket" data-op-open="${t.id}">
+        <span class="sp-sub">${t.operator_has_unread ? '<i class="sp-unread" aria-label="הודעה חדשה"></i>' : ''}<span>${esc(t.subject)}</span></span>
+        <span class="sp-status ${SUPPORT_STATUS_CLASS[t.status] || ''}">${esc(t.status)}</span>
+        <span class="sp-meta-line">${esc(t.context?.user || '')} · ${esc(t.context?.org || 'ללא חברה')} · ${esc(t.category)} · ${esc(supportTime(t.updated_at))}</span>
+      </button>`).join('');
+    host.querySelectorAll('[data-op-open]').forEach(b => b.addEventListener('click', () => openOpThread(b.dataset.opOpen)));
+  }
+
+  async function openOpThread(id) {
+    // A request that just left the filtered list (closed while viewing "open") is read directly.
+    opCurrent = supportRows.find(t => t.id === id)
+      || (await sb.from('support_tickets').select('*').eq('id', id).maybeSingle()).data;
+    if (!opCurrent) return;
+    document.getElementById('opThreadTitle').textContent = `${opCurrent.subject} — ${opCurrent.status}`;
+    document.getElementById('opThreadCtx').innerHTML = supportContextHtml(opCurrent.context);
+    document.getElementById('opCloseBtn').hidden = opCurrent.status === 'סגורה';
+    document.getElementById('opReopenBtn').hidden = opCurrent.status !== 'סגורה';
+    hideMsg(document.getElementById('opReplyMsg'));
+    const host = document.getElementById('opThread');
+    host.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+    document.getElementById('opThreadBackdrop').classList.add('open');
+    try {
+      const { messages, fileUrls } = await supportLoadThread(id);
+      host.innerHTML = supportThreadHtml(messages, { viewerIsOperator: true, fileUrls, requesterName: opCurrent.context?.user });
+      host.scrollTop = host.scrollHeight;
+      if (opCurrent.operator_has_unread) { await supportMarkSeen(id, true); refreshSupportCounts(user.id); loadSupport(); }
+    } catch (err) { host.innerHTML = `<p style="color:var(--danger);">שגיאה: ${esc(err.message)}</p>`; }
+  }
+
+  document.getElementById('supportFilter').addEventListener('change', loadSupport);
+  document.getElementById('opReplyForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgEl = document.getElementById('opReplyMsg');
+    const files = document.getElementById('opReplyFiles').files;
+    const fileErr = supportCheckFiles(files);
+    if (fileErr) { showMsg(msgEl, fileErr, 'error'); return; }
+    try {
+      await supportReply(opCurrent, String(new FormData(e.target).get('body')).trim(), files);
+      e.target.reset(); await loadSupport(); await openOpThread(opCurrent.id);
+    } catch (err) { showMsg(msgEl, 'השליחה נכשלה: ' + err.message, 'error'); }
+  });
+  const opSetStatus = async status => {
+    try { await supportSetStatus(opCurrent.id, status); await loadSupport(); await openOpThread(opCurrent.id); }
+    catch (err) { toast('שגיאה: ' + err.message, 'error'); }
+  };
+  document.getElementById('opCloseBtn').addEventListener('click', () => opSetStatus('סגורה'));
+  document.getElementById('opReopenBtn').addEventListener('click', () => opSetStatus('פתוחה'));
+  const opClose = () => document.getElementById('opThreadBackdrop').classList.remove('open');
+  document.getElementById('opThreadCloseBtn').addEventListener('click', opClose);
+  document.getElementById('opThreadBackdrop').addEventListener('click', e => { if (e.target.id === 'opThreadBackdrop') opClose(); });
+  loadSupport();
 
   await loadOrgs();
   await loadRequests();
