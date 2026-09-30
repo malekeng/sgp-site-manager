@@ -41,3 +41,5 @@ section[data-panel][hidden] { display: none; }
 .op-ann-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .op-ann-item { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
 .op-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* .field is display:flex, which beats the hidden attribute: the action dialog's optional fields need this */
+#opActionForm .field[hidden] { display: none; }

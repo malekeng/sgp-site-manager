@@ -172,6 +172,7 @@ async function tadokReportError(message, kind = null, details = {}) {
   try {
     const ev = tadokEventFromError(message, location.pathname);
     if (kind) ev.kind = kind;
+    if (typeof activeOrg !== 'undefined' && activeOrg && activeOrg.__support) return; // support mode: not the company's error
     const key = ev.kind + '|' + ev.message;
     if (TADOK_REPORTED.has(key) || TADOK_REPORTED.size >= 20) return;
     TADOK_REPORTED.add(key);
@@ -212,4 +213,39 @@ async function tadokShowAnnouncements() {
       e.target.closest('.tadok-ann')?.remove();
     });
   } catch (_) { /* announcements are a convenience; never break the page */ }
+}
+
+// ---- support mode: the platform operator viewing one company, read only, for up to an hour ----
+function tadokSupportRemaining(expiresAt, now = Date.now()) {
+  const s = Math.max(0, Math.floor((Date.parse(expiresAt) - now) / 1000));
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+
+function tadokSupportBarHtml(session, now = Date.now()) {
+  const e = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return `<div class="tadok-support-bar" role="status">
+    <span><strong>מצב תמיכה — צפייה בלבד</strong> · ${e(session.organizations?.name)}</span>
+    <span>נותרו <b id="tadokSupportLeft">${tadokSupportRemaining(session.expires_at, now)}</b></span>
+    <button type="button" class="btn btn-sm" id="tadokSupportExit">יציאה ממצב תמיכה</button>
+  </div>`;
+}
+
+// The database refuses every write in support mode; say so instead of a raw policy error.
+function tadokSupportErrorText(message) {
+  return tadokEventFromError(message).kind === 'permission' ? 'מצב תמיכה: צפייה בלבד — אי אפשר לשמור שינויים' : message;
+}
+
+// The owner's "יומן גישת תמיכה": every time TADOK support viewed the company.
+function tadokSupportLogHtml(rows, now = Date.now()) {
+  if (!rows || !rows.length) return '<p style="color:var(--steel);margin:0;">עדיין לא הייתה כניסת תמיכה לנתוני החברה.</p>';
+  const e = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const t = iso => new Date(iso).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const body = rows.map(r => {
+    const active = !r.ended_at && Date.parse(r.expires_at) > now;
+    const until = r.ended_at && Date.parse(r.ended_at) < Date.parse(r.expires_at) ? r.ended_at : r.expires_at;
+    return `<tr><td>${t(r.started_at)}</td><td>${active ? 'עד ' : ''}${t(until)}</td><td>${e(r.reason)}</td>
+      <td>${r.ticket_id ? 'פנייה ' + e(String(r.ticket_id).slice(0, 8)) : '—'}</td><td>צוות התמיכה של TADOK</td>
+      <td><span class="support-log-state${active ? ' on' : ''}">${active ? 'פעילה' : 'הסתיימה'}</span></td></tr>`;
+  }).join('');
+  return `<div class="table-wrap"><table class="support-log"><thead><tr><th>מתי</th><th>עד</th><th>סיבה</th><th>פנייה</th><th>מי</th><th>מצב</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }

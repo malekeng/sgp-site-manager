@@ -115,8 +115,10 @@ function esc(s) {
 }
 
 function toast(message, type = '') {
+  // In support mode the database refuses every write: say so plainly, and don't report it.
+  if (type === 'error' && inSupportMode()) message = tadokSupportErrorText(message);
   // errors the user sees are also reported to the operator (js/policies.js)
-  if (type === 'error' && typeof tadokReportError === 'function') tadokReportError(message);
+  else if (type === 'error' && typeof tadokReportError === 'function') tadokReportError(message);
   let host = document.querySelector('.toast-host');
   if (!host) {
     host = document.createElement('div');
@@ -132,7 +134,8 @@ function toast(message, type = '') {
 
 function showMsg(el, text, type) {
   if (!el) return;
-  if (type === 'error' && typeof tadokReportError === 'function') tadokReportError(text);
+  if (type === 'error' && inSupportMode()) text = tadokSupportErrorText(text);
+  else if (type === 'error' && typeof tadokReportError === 'function') tadokReportError(text);
   el.textContent = text;
   el.className = 'msg show ' + type;
 }
@@ -159,6 +162,7 @@ function systemRoleLabel(role) {
   if (role === 'admin') return 'מנהל מערכת';
   if (role === 'site_user') return 'משתמש אתר';
   if (role === 'contractor') return 'קבלן';
+  if (role === 'support') return 'תמיכת TADOK — צפייה בלבד';
   return role || '';
 }
 
@@ -370,6 +374,11 @@ async function renderHeader(activePage, profile, site, org) {
   }
   refreshSupportCounts(profile?.id);
   if (typeof tadokShowAnnouncements === 'function') tadokShowAnnouncements();
+  if (org?.__support) showSupportBar(org.__support);
+  else if (sessionStorage.getItem('tadok_support_ended')) {
+    sessionStorage.removeItem('tadok_support_ended');
+    toast('מצב התמיכה הסתיים');
+  }
 
   // Re-sync desktop-collapse vs mobile-open state when crossing the 900px
   // breakpoint via window resize (not just page reload), so the two states
@@ -497,6 +506,61 @@ async function pdfLogoHtml(height = 38) {
 }
 
 const SGP_ACTIVE_ORG_KEY = 'sgp_active_org_id';
+
+// ---- support mode: the platform operator viewing one company, read only (op_start_support_session) ----
+// Looked up only when the console set the key, so ordinary page loads pay nothing for it.
+const SUPPORT_SESSION_KEY = 'tadok_support_session';
+function inSupportMode() { return !!(activeOrg && activeOrg.__support); }
+function clearSupportMode() {
+  sessionStorage.removeItem(SUPPORT_SESSION_KEY);
+  sessionStorage.removeItem(SGP_ACTIVE_ORG_KEY);
+  sessionStorage.removeItem('sgp_active_site_id');
+}
+async function tadokSupportSession(userId) {
+  if (!sessionStorage.getItem(SUPPORT_SESSION_KEY)) return null;
+  const { data, error } = await sb.from('support_sessions')
+    .select('id, organization_id, expires_at, organizations(id, name, slug, logo_path, status)')
+    .eq('operator_id', userId).is('ended_at', null).gt('expires_at', new Date().toISOString())
+    .order('started_at', { ascending: false }).limit(1);
+  const s = !error && data && data[0];
+  if (s && s.organizations) return s;
+  // ended elsewhere or timed out: back to the operator's own company, with a note
+  clearSupportMode();
+  sessionStorage.setItem('tadok_support_ended', '1');
+  return null;
+}
+async function exitSupportMode() {
+  try { await sb.rpc('op_end_support_session'); } catch (_) { /* the session also expires by itself */ }
+  clearSupportMode();
+  location.href = 'platform-admin.html#companies';
+}
+// The bar at the top of every page while in support mode, with the time left; at zero the page
+// reloads and requireAuth finds no session.
+function showSupportBar(session) {
+  document.body.classList.add('support-mode');
+  const host = document.querySelector('main.page') || document.body;
+  let bar = document.getElementById('tadokSupportBar');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'tadokSupportBar'; host.prepend(bar); }
+  bar.innerHTML = tadokSupportBarHtml(session);
+  document.getElementById('tadokSupportExit').onclick = exitSupportMode;
+  const tick = setInterval(() => {
+    if (Date.parse(session.expires_at) <= Date.now()) { clearInterval(tick); location.reload(); return; }
+    const left = document.getElementById('tadokSupportLeft');
+    if (left) left.textContent = tadokSupportRemaining(session.expires_at);
+  }, 1000);
+}
+function supportNoSites(org) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;direction:rtl;">
+      <div class="card" style="max-width:440px;text-align:center;">
+        <h2 style="margin:0 0 8px;color:var(--navy);">ל${esc(org.name)} אין עדיין אתרים</h2>
+        <p style="color:var(--steel);">אין נתונים להציג במצב תמיכה.</p>
+        <button type="button" class="btn btn-primary" id="tadokSupportExit">יציאה ממצב תמיכה</button>
+      </div>
+    </div>`;
+  document.getElementById('tadokSupportExit').onclick = exitSupportMode;
+  return null;
+}
 
 // Which company is the user acting in right now, and with which role there?
 // Roles are per company (organization_members), not global — the same person can be an
@@ -645,7 +709,10 @@ async function requireAuth(activePage) {
     return null;
   };
 
-  const org = await resolveActiveOrg(session.user.id);
+  // Support mode: the company comes from the operator's live support session, with role 'support'.
+  // The database lets that role read the company and refuses every write.
+  const support = await tadokSupportSession(session.user.id);
+  const org = support ? { ...support.organizations, role: 'support', __support: support } : await resolveActiveOrg(session.user.id);
   if (!org) return stop('החשבון אינו משויך לחברה פעילה', 'פנו למנהל המערכת כדי לשייך את החשבון לחברה.');
 
   // The role that matters is the role IN THE ACTIVE COMPANY. Overlaying it onto
@@ -655,13 +722,15 @@ async function requireAuth(activePage) {
   activeOrg = org;
 
   // Terms and privacy acceptance: once per user and again after a change (js/policies.js).
-  if (typeof tadokEnsureAccepted === 'function' && !(await tadokEnsureAccepted(session.user.id, org.id))) return null;
+  // (the operator accepted as themselves; nothing is recorded for a company viewed as support)
+  if (!support && typeof tadokEnsureAccepted === 'function' && !(await tadokEnsureAccepted(session.user.id, org.id))) return null;
 
   profile.legacy_role = profile.role;
   profile.role = org.role;
 
   const site = await resolveActiveSite(profile, org);
   if (!site) {
+    if (support) return supportNoSites(org);
     // A brand-new company has no sites yet. Every page — including users.html, where
     // sites are otherwise created — sits behind this check, so without this its owner
     // would be stopped at first sign-in with no way forward.

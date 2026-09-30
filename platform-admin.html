@@ -152,6 +152,7 @@
     <p id="opActionText" style="font-size:13px;color:var(--steel);line-height:1.6;"></p>
     <form id="opActionForm">
       <div class="field full" id="opActionMemberField" hidden><label for="opActionMember">הבעלים החדש</label><select id="opActionMember"></select></div>
+      <div class="field full" id="opActionTicketField" hidden><label for="opActionTicket">פנייה (לא חובה)</label><select id="opActionTicket"></select></div>
       <div class="field full" id="opActionDateField" hidden><label for="opActionDate">תאריך סגירה</label><input type="date" id="opActionDate"></div>
       <div class="field full"><label for="opActionReason">סיבה (נרשמת ביומן הפעולות)</label><textarea id="opActionReason" rows="2" required maxlength="500"></textarea></div>
       <div id="opActionMsg" class="msg"></div>
@@ -261,7 +262,7 @@
   }
 
   // ---- the reason dialog every operator action goes through ----
-  function askAction({ title, text, members = null, date = null, okLabel = 'אישור' }) {
+  function askAction({ title, text, members = null, date = null, tickets = null, okLabel = 'אישור' }) {
     return new Promise(resolve => {
       const back = document.getElementById('opActionBackdrop');
       const form = document.getElementById('opActionForm');
@@ -274,6 +275,9 @@
       document.getElementById('opActionMember').innerHTML = (members || []).map(m =>
         `<option value="${esc(m.user_id)}">${esc(m.full_name || m.username || m.email)} — ${esc(OP_ROLE_LABELS[m.role] || m.role)}</option>`).join('');
       document.getElementById('opActionDateField').hidden = !date;
+      document.getElementById('opActionTicketField').hidden = !tickets;
+      document.getElementById('opActionTicket').innerHTML = '<option value="">בלי פנייה</option>' + (tickets || []).map(t =>
+        `<option value="${esc(t.id)}">${esc(t.subject)} — ${esc(opDate(t.created_at))} (${esc(t.status)})</option>`).join('');
       if (date) { const d = document.getElementById('opActionDate'); d.value = date; d.min = new Date(Date.now() + 86400000).toISOString().slice(0, 10); }
       back.classList.add('open');
       const done = value => { back.classList.remove('open'); form.onsubmit = null; resolve(value); };
@@ -283,7 +287,8 @@
         const reason = document.getElementById('opActionReason').value.trim();
         if (!reason) { showMsg(document.getElementById('opActionMsg'), 'נדרשת סיבה', 'error'); return; }
         done({ reason, member: members ? document.getElementById('opActionMember').value : null,
-               date: date ? document.getElementById('opActionDate').value : null });
+               date: date ? document.getElementById('opActionDate').value : null,
+               ticket: tickets ? document.getElementById('opActionTicket').value || null : null });
       };
     });
   }
@@ -305,6 +310,7 @@
 
   async function companyAction(act) {
     const org = companyOpen.org;
+    if (act === 'support') return enterAsSupport(org);
     let ask, run, done;
     if (act === 'suspend') {
       ask = { title: `השעיית ${org.name}`, text: 'כל המשתמשים של החברה יאבדו גישה מיידית. הנתונים נשארים במקומם, ואפשר להחזיר את החברה בכל רגע.', okLabel: 'השעיה' };
@@ -330,6 +336,24 @@
     try { await run(answer); toast(done, 'success'); }
     catch (err) { toast('הפעולה נכשלה: ' + err.message, 'error'); return; }
     loaded.overview = false; loadOrgs(); openCompany(org.id);
+  }
+
+  // Support access: view the company's data for up to an hour, read only. Logged, and shown to
+  // the company's owner in "יומן גישת תמיכה". The database refuses every write.
+  async function enterAsSupport(org) {
+    const { data: tickets } = await sb.from('support_tickets').select('id, subject, status, created_at')
+      .eq('organization_id', org.id).order('created_at', { ascending: false }).limit(30);
+    const answer = await askAction({ title: `כניסה כתמיכה — ${org.name}`,
+      text: 'צפייה בנתוני החברה בלבד, לשעה אחת לכל היותר. הכניסה והסיבה נרשמות ומוצגות לבעלי החברה.',
+      tickets: tickets || [], okLabel: 'כניסה' });
+    if (!answer) return;
+    let session;
+    try { session = await rpc('op_start_support_session', { p_org: org.id, p_reason: answer.reason, p_ticket: answer.ticket }); }
+    catch (err) { toast('הכניסה נכשלה: ' + err.message, 'error'); return; }
+    sessionStorage.setItem('tadok_support_session', session.id);
+    sessionStorage.removeItem('sgp_active_org_id');
+    sessionStorage.removeItem('sgp_active_site_id');
+    location.href = 'dashboard.html';
   }
 
   // ---- monitoring ----

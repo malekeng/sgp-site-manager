@@ -142,6 +142,7 @@ function opCompanyHtml(c) {
     <div class="op-company-head">
       <div><h3>${opEsc(o.name)}</h3><span class="slug-chip">${opEsc(o.slug)}</span> ${opStatusPill(o.status, c.closing?.closing_on)}</div>
       <div class="header-actions">
+        <button class="btn btn-sm btn-outline" data-act="support" title="צפייה בנתוני החברה לשעה, לצורך טיפול בפנייה">כניסה כתמיכה</button>
         ${suspended ? '<button class="btn btn-sm btn-primary" data-act="activate">הפעלה</button>'
                     : '<button class="btn btn-sm btn-outline" data-act="suspend">השעיה</button>'}
         <button class="btn btn-sm btn-outline" data-act="transfer">העברת בעלות</button>
@@ -264,3 +265,11 @@ function opAnnouncementsHtml(rows, orgNames = {}, now = Date.now()) {
     </li>`;
   }).join('')}</ul>`;
 }
+
+// ---- support access (op_start_support_session / op_end_support_session) ----
+Object.assign(OP_ACTION_LABELS, { 'support.start': 'כניסת תמיכה', 'support.end': 'סיום כניסת תמיכה' });
+OP_ERRORS.push(
+  [/reason required/, 'נדרשת סיבה (3 תווים לפחות)'],
+  [/ticket does not belong to this company/, 'הפנייה שנבחרה לא שייכת לחברה הזו'],
+  [/company not found/, 'החברה לא נמצאה'],
+);
