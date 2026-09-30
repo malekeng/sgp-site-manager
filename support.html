@@ -33,15 +33,15 @@
     <div>
       <section class="card" id="spNewCard" hidden>
         <div class="card-header"><h2>פנייה חדשה</h2></div>
-        <div id="spNewMsg" class="msg"></div>
         <form id="spNewForm">
           <div class="form-grid">
             <div class="field"><label for="spCat">נושא</label><select id="spCat" name="category" required></select></div>
             <div class="field"><label for="spSubject">כותרת</label><input id="spSubject" name="subject" required maxlength="120"></div>
             <div class="field full"><label for="spBody">מה קרה? מה ניסיתם לעשות?</label><textarea id="spBody" name="body" rows="5" required maxlength="5000"></textarea></div>
-            <div class="field full"><label for="spFiles">צילומי מסך או קבצים (עד 3, תמונות או PDF, עד 10MB)</label><input id="spFiles" type="file" multiple accept="image/*,application/pdf"></div>
+            <div class="field full"><label for="spFiles">צילומי מסך, תמונות או PDF (עד 3 קבצים; תמונות גדולות מוקטנות אוטומטית)</label><input id="spFiles" type="file" multiple accept="image/*,application/pdf"></div>
           </div>
           <details><summary style="cursor:pointer;font-size:12.5px;color:var(--steel);">פרטים טכניים שיצורפו לפנייה</summary><div id="spCtx"></div></details>
+          <div id="spNewMsg" class="msg" style="margin-top:10px;"></div>
           <div class="modal-actions"><button type="submit" class="btn btn-primary" id="spSendBtn">שליחת פנייה</button></div>
         </form>
         <p style="font-size:12px;color:var(--steel);margin-top:10px;">הפנייה גלויה לכם ולצוות TADOK בלבד. אנו משתדלים לענות בדרך כלל תוך 2 ימי עסקים.</p>
@@ -177,12 +177,15 @@
     const msgEl = document.getElementById('spNewMsg');
     hideMsg(msgEl);
     const fd = new FormData(e.target);
-    const files = document.getElementById('spFiles').files;
-    const fileErr = supportCheckFiles(files);
-    if (fileErr) { showMsg(msgEl, fileErr, 'error'); return; }
     const btn = document.getElementById('spSendBtn');
     btn.disabled = true;
+    btn.textContent = 'מכין את הקבצים…';
     try {
+      // camera photos are shrunk here, so a 12MB picture is not refused
+      const files = await supportPrepareFiles(document.getElementById('spFiles').files);
+      const fileErr = supportCheckFiles(files);
+      if (fileErr) throw new Error(fileErr);
+      btn.textContent = 'שולח…';
       const id = await supportOpenTicket({ userId: me.userId, category: fd.get('category'),
         subject: String(fd.get('subject')).trim(), body: String(fd.get('body')).trim(), files,
         organizationId: me.org?.id, siteId: me.site?.id, context });
@@ -190,25 +193,32 @@
       toast('הפנייה נשלחה', 'success');
       await loadMine();
       openThread(id);
-    } catch (err) { showMsg(msgEl, 'השליחה נכשלה: ' + err.message, 'error'); }
+    } catch (err) {
+      showMsg(msgEl, 'השליחה נכשלה: ' + err.message, 'error');
+      msgEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
     btn.disabled = false;
+    btn.textContent = 'שליחת פנייה';
   });
 
   document.getElementById('spReplyForm').addEventListener('submit', async e => {
     e.preventDefault();
     const msgEl = document.getElementById('spReplyMsg');
     hideMsg(msgEl);
-    const files = document.getElementById('spReplyFiles').files;
-    const fileErr = supportCheckFiles(files);
-    if (fileErr) { showMsg(msgEl, fileErr, 'error'); return; }
     const btn = document.getElementById('spReplyBtn');
     btn.disabled = true;
     try {
+      const files = await supportPrepareFiles(document.getElementById('spReplyFiles').files);
+      const fileErr = supportCheckFiles(files);
+      if (fileErr) throw new Error(fileErr);
       await supportReply(current, String(new FormData(e.target).get('body')).trim(), files);
       e.target.reset();
       await loadMine();
       await openThread(current.id);
-    } catch (err) { showMsg(msgEl, 'השליחה נכשלה: ' + err.message, 'error'); }
+    } catch (err) {
+      showMsg(msgEl, 'השליחה נכשלה: ' + err.message, 'error');
+      msgEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
     btn.disabled = false;
   });
 

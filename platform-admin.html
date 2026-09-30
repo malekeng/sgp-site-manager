@@ -323,13 +323,21 @@
   document.getElementById('opReplyForm').addEventListener('submit', async e => {
     e.preventDefault();
     const msgEl = document.getElementById('opReplyMsg');
-    const files = document.getElementById('opReplyFiles').files;
-    const fileErr = supportCheckFiles(files);
-    if (fileErr) { showMsg(msgEl, fileErr, 'error'); return; }
+    hideMsg(msgEl);
+    // preparing a camera photo takes a few seconds; a second click must not send twice
+    const btn = e.target.querySelector('[type=submit]');
+    btn.disabled = true;
     try {
+      const files = await supportPrepareFiles(document.getElementById('opReplyFiles').files);
+      const fileErr = supportCheckFiles(files);
+      if (fileErr) throw new Error(fileErr);
       await supportReply(opCurrent, String(new FormData(e.target).get('body')).trim(), files);
       e.target.reset(); await loadSupport(); await openOpThread(opCurrent.id);
-    } catch (err) { showMsg(msgEl, 'השליחה נכשלה: ' + err.message, 'error'); }
+    } catch (err) {
+      showMsg(msgEl, 'השליחה נכשלה: ' + err.message, 'error');
+      msgEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    btn.disabled = false;
   });
   const opSetStatus = async status => {
     try { await supportSetStatus(opCurrent.id, status); await loadSupport(); await openOpThread(opCurrent.id); }

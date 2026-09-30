@@ -14,15 +14,40 @@ function supportEsc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Some phones hand over a photo with an empty type, so the name decides when the type is missing.
+const SUPPORT_TYPE_BY_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+                              gif: 'image/gif', heic: 'image/heic', heif: 'image/heic', pdf: 'application/pdf' };
+function supportContentType(file) {
+  if (file.type) return file.type;
+  const ext = String(file.name || '').split('.').pop().toLowerCase();
+  return SUPPORT_TYPE_BY_EXT[ext] || '';
+}
+
 // null when the files can be sent, otherwise the reason, for the form.
 function supportCheckFiles(files) {
   const list = Array.from(files || []);
   if (list.length > SUPPORT_MAX_FILES) return `אפשר לצרף עד ${SUPPORT_MAX_FILES} קבצים`;
   for (const f of list) {
     if (f.size > SUPPORT_MAX_BYTES) return `הקובץ ${f.name} גדול מ-10MB`;
-    if (!SUPPORT_TYPES.includes(f.type)) return `הקובץ ${f.name} אינו תמונה או PDF`;
+    if (!SUPPORT_TYPES.includes(supportContentType(f))) return `הקובץ ${f.name} אינו תמונה או PDF`;
   }
   return null;
+}
+
+// Camera photos are often 10MB and more. Before upload they are redrawn at most
+// SUPPORT_IMAGE_MAX_SIDE pixels on the long side, which keeps a screenshot or a photo of
+// a defect perfectly readable at a fraction of the size.
+const SUPPORT_IMAGE_MAX_SIDE = 2400;
+const SUPPORT_SHRINK_ABOVE = 1.5 * 1024 * 1024;
+
+function supportScaledSize(w, h, max = SUPPORT_IMAGE_MAX_SIDE) {
+  const k = Math.min(1, max / Math.max(w, h));
+  return { w: Math.round(w * k), h: Math.round(h * k) };
+}
+
+function supportNeedsShrink(file) {
+  const type = supportContentType(file);
+  return type.startsWith('image/') && type !== 'image/gif' && file.size > SUPPORT_SHRINK_ABOVE;
 }
 
 // Storage keys must be plain ASCII, so a Hebrew name keeps only its extension and any Latin
@@ -82,6 +107,38 @@ function supportThreadHtml(messages, { viewerIsOperator = false, fileUrls = {}, 
   }).join('');
 }
 
+// ---- browser-only ----
+
+function supportLoadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+    img.src = url;
+  });
+}
+
+// A photo the browser cannot decode (HEIC on some desktops) is sent as it is.
+async function supportShrinkImage(file) {
+  let img;
+  try { img = await supportLoadImage(file); } catch (_) { return file; }
+  const { w, h } = supportScaledSize(img.naturalWidth, img.naturalHeight);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+  if (!blob || blob.size >= file.size) return file;
+  const base = String(file.name || '').replace(/\.[^.]+$/, '') || 'photo';
+  return new File([blob], base + '.jpg', { type: 'image/jpeg' });
+}
+
+async function supportPrepareFiles(files) {
+  const out = [];
+  for (const f of Array.from(files || [])) out.push(supportNeedsShrink(f) ? await supportShrinkImage(f) : f);
+  return out;
+}
+
 // ---- browser-only: talk to the database ----
 
 async function supportAppVersion() {
@@ -92,7 +149,7 @@ async function supportUpload(ownerId, ticketId, files) {
   const paths = [];
   for (const f of Array.from(files || [])) {
     const path = `${ownerId}/${ticketId}/${supportObjectName(f.name)}`;
-    const { error } = await sb.storage.from('support').upload(path, f, { contentType: f.type, upsert: false });
+    const { error } = await sb.storage.from('support').upload(path, f, { contentType: supportContentType(f), upsert: false });
     if (error) throw new Error('העלאת הקובץ נכשלה: ' + error.message);
     paths.push(path);
   }
