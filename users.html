@@ -24,7 +24,11 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 .users-grid { display: grid; grid-template-columns: 1.7fr 1fr; column-gap: 24px; align-items: start; }
-@media (max-width: 1000px) { .users-grid { grid-template-columns: 1fr; } }
+/* minmax(0, …): a plain 1fr column can't shrink below the table's 640px min-width, so it would widen the page */
+@media (max-width: 1000px) { .users-grid { grid-template-columns: minmax(0, 1fr); } }
+/* the hidden "פעולות" header (.sr-only) is position:absolute; without a positioned table it escapes
+   the scrolling .table-wrap and widens the whole page on a phone */
+.users-table { position: relative; }
 </style>
 </head>
 <body>
@@ -42,7 +46,7 @@
       <button class="btn btn-outline" id="addContractorBtn">+ קבלן חדש</button>
     </div>
     <div class="table-wrap">
-      <table>
+      <table class="users-table">
         <thead><tr><th>שם מלא</th><th>שם משתמש</th><th>אימייל</th><th>תפקיד מערכת</th><th>תפקיד בשטח</th><th>אתר</th><th><span class="sr-only">פעולות</span></th></tr></thead>
         <tbody id="usersBody">
           <tr class="empty-row"><td colspan="7"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
