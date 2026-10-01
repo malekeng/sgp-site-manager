@@ -70,6 +70,8 @@
 .avatar-sm img, .avatar-md img, .avatar-lg img {
   width: 100%; height: 100%; object-fit: cover; display: block;
 }
+/* display:block / .btn beat the hidden attribute: without a photo the profile page hides these */
+#avatarImg[hidden], #removeAvatarBtn[hidden] { display: none; }
 
 /* ===== User chip (sidebar) ===== */
 .user-chip {

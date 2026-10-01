@@ -43,3 +43,7 @@ section[data-panel][hidden] { display: none; }
 .op-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 /* .field is display:flex, which beats the hidden attribute: the action dialog's optional fields need this */
 #opActionForm .field[hidden] { display: none; }
+/* .btn is display:flex too: only one of "close ticket" / "reopen" may show */
+#opCloseBtn[hidden], #opReopenBtn[hidden] { display: none; }
+/* three buttons fill a phone-width window almost exactly; wrap instead of spilling out of it */
+#opThreadBackdrop .modal-actions { flex-wrap: wrap; }

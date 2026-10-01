@@ -7,6 +7,7 @@ function openAppendNoteModal(textarea) {
   backdrop.className = 'modal-backdrop open';
   backdrop.innerHTML = `
     <div class="modal">
+      <button type="button" class="icon-btn modal-close" id="closeAppendNoteBtn" aria-label="סגירה"><svg class="ui-ico ui-ico-x" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
       <h3>הוספת הערה</h3>
       <form id="appendNoteForm">
         <div class="field full">
@@ -18,7 +19,6 @@ function openAppendNoteModal(textarea) {
           <button type="button" class="btn btn-outline" id="cancelAppendNoteBtn">ביטול</button>
         </div>
       </form>
-      <button type="button" class="icon-btn modal-close" id="closeAppendNoteBtn" aria-label="סגירה"><svg class="ui-ico ui-ico-x" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
   `;
   document.body.appendChild(backdrop);

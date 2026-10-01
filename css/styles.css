@@ -72,7 +72,14 @@ html { scroll-behavior: smooth; }
 }
 .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .cell-muted { color: var(--steel-light); }
-.modal-close { position: absolute; top: 18px; left: 18px; }
+/* The ✕ is the first child of .modal and sticks to its top-left corner while a long form scrolls.
+   (position:absolute put it on the screen corner instead: .modal itself is not positioned.) */
+.modal > .modal-close {
+  display: flex; position: sticky; top: 0; z-index: 2;
+  margin: 0 auto -34px -10px; /* on the title's line, 18px from the window's left edge */
+  background: var(--sheet);
+}
+.modal > .modal-close + h3 { padding-left: 30px; }
 .empty-state {
   text-align: center; color: var(--steel-light); padding: 40px 14px; font-size: 13.5px; font-weight: 600;
 }
@@ -915,6 +922,8 @@ tbody tr:hover {
 @media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
+/* display:flex beats the hidden attribute (QC defect fields show only for a failed check) */
+.field[hidden] { display: none; }
 .field label {
   font-size: 12.5px;
   font-weight: 700;
@@ -1357,6 +1366,7 @@ footer.app-footer {
 }
 
 /* ===== Audit meta ===== */
+.record-audit[hidden] { display: none; } /* empty on a new record; inline-block would still show the pill */
 .record-audit {
   margin: -8px 0 16px;
   font-size: 12.5px;

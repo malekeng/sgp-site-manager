@@ -30,3 +30,5 @@
 .sp-topbar a { color: #fff; font-size: 13px; font-weight: 700; }
 body.sp-standalone main.page { margin-right: 0; }
 .sp-grid .card[hidden] { display: none; }
+/* .btn is display:flex, which beats the hidden attribute: a closed ticket has no "close ticket" button */
+#spCloseTicketBtn[hidden] { display: none; }
