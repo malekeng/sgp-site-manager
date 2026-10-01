@@ -29,9 +29,10 @@
 <script src="js/doc-insights.js"></script>
 <script src="js/weekly-report.js"></script>
 <style>
-.reports-grid { display: grid; grid-template-columns: 1fr 1.7fr; column-gap: 24px; align-items: start; }
-.reports-summary-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; align-items: start; }
-@media (max-width: 1000px) { .reports-grid, .reports-summary-grid { grid-template-columns: 1fr; } }
+/* minmax(0, …): a plain fr column can't shrink below the tables' 640px min-width, so it would widen the page */
+.reports-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); column-gap: 24px; align-items: start; }
+.reports-summary-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 24px; align-items: start; }
+@media (max-width: 1000px) { .reports-grid, .reports-summary-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>
 </head>
 <body>
