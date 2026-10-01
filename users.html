@@ -23,8 +23,8 @@
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-.users-grid { display: grid; grid-template-columns: 1.7fr 1fr; column-gap: 24px; align-items: start; }
-/* minmax(0, …): a plain 1fr column can't shrink below the table's 640px min-width, so it would widen the page */
+/* minmax(0, …): a plain fr column can't shrink below the table's 640px min-width, so it would widen the page */
+.users-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); column-gap: 24px; align-items: start; }
 @media (max-width: 1000px) { .users-grid { grid-template-columns: minmax(0, 1fr); } }
 /* the hidden "פעולות" header (.sr-only) is position:absolute; without a positioned table it escapes
    the scrolling .table-wrap and widens the whole page on a phone */
