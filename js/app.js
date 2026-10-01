@@ -418,7 +418,6 @@ async function renderHeader(activePage, profile, site, org) {
   });
 
   document.getElementById('logoutBtn')?.addEventListener('click', async () => {
-    sessionStorage.removeItem('tadok_opened');
     sessionStorage.removeItem(SGP_ACTIVE_ORG_KEY);
     sessionStorage.removeItem('sgp_active_site_id');
     await sb.auth.signOut();
@@ -728,11 +727,9 @@ async function requireAuth(activePage) {
   activeOrgName = org.name || PLATFORM_NAME;
   activeOrg = org;
 
-  // The operator's home is the control panel: the first dashboard of a session opens it instead.
-  const firstOpen = !sessionStorage.getItem('tadok_opened');
-  sessionStorage.setItem('tadok_opened', '1');
-  const askOperator = firstOpen && activePage === 'dashboard.html' && !support;
-  if (tadokOpensConsole(activePage, askOperator && await amIOperator(), !firstOpen, !!support)) {
+  // The operator's home is the control panel: coming into the site opens it instead of the
+  // company dashboard (js/policies.js). Only then is the operator question asked.
+  if (tadokOpensConsole(activePage, true, document.referrer, !!support, location.origin) && await amIOperator()) {
     location.replace('platform-admin.html');
     return null;
   }

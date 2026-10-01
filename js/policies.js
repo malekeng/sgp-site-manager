@@ -250,9 +250,14 @@ function tadokSupportLogHtml(rows, now = Date.now()) {
   return `<div class="table-wrap"><table class="support-log"><thead><tr><th>מתי</th><th>עד</th><th>סיבה</th><th>פנייה</th><th>מי</th><th>מצב</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
-// The platform operator's home is the control panel: the first dashboard of a browser session
-// (sign-in, the home-screen icon, the bare address) opens platform-admin.html instead. Later visits
-// to the dashboard, from the menu, stay on the company's dashboard.
-function tadokOpensConsole(page, isOperator, alreadyOpened, inSupport) {
-  return page === 'dashboard.html' && !!isOperator && !alreadyOpened && !inSupport;
+// The platform operator's home is the control panel. Coming into the site — a typed address, a
+// bookmark, the home-screen icon, a link from elsewhere, or straight after signing in — opens
+// platform-admin.html instead of the company dashboard. Moving inside the site ('לוח בקרה' in the
+// menu, 'בית' in the tab bar) still reaches the dashboard.
+function tadokOpensConsole(page, isOperator, referrer, inSupport, origin) {
+  if (page !== 'dashboard.html' || !isOperator || inSupport) return false;
+  let from = null;
+  try { from = referrer ? new URL(referrer) : null; } catch (_) { from = null; }
+  if (!from || from.origin !== origin) return true;
+  return /\/(index\.html)?$/.test(from.pathname); // the sign-in page, or the bare address
 }
