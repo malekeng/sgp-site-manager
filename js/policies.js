@@ -249,3 +249,10 @@ function tadokSupportLogHtml(rows, now = Date.now()) {
   }).join('');
   return `<div class="table-wrap"><table class="support-log"><thead><tr><th>מתי</th><th>עד</th><th>סיבה</th><th>פנייה</th><th>מי</th><th>מצב</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
+
+// The platform operator's home is the control panel: the first dashboard of a browser session
+// (sign-in, the home-screen icon, the bare address) opens platform-admin.html instead. Later visits
+// to the dashboard, from the menu, stay on the company's dashboard.
+function tadokOpensConsole(page, isOperator, alreadyOpened, inSupport) {
+  return page === 'dashboard.html' && !!isOperator && !alreadyOpened && !inSupport;
+}

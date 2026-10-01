@@ -73,6 +73,7 @@ const UI_ICONS = {
   'check': '<path d="M20 6 9 17l-5-5"/>',
   'chevron-left': '<path d="m15 18-6-6 6-6"/>',
   'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+  'shield-check': '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
   'house': '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   'list-checks': '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
   'chart-column': '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
@@ -199,14 +200,10 @@ async function renderHeader(activePage, profile, site, org) {
   if (profile && profile.role === 'owner') {
     items.push(ORG_SETTINGS_NAV_ITEM);
   }
-  // Platform operator link, shown only to operators. The page and the database check
-  // this independently; hiding the link is only a convenience.
-  // platform_admins is unreadable from the client on purpose, so ask the question
-  // instead of reading the table.
-  try {
-    const { data: isPlatformAdmin } = await sb.rpc('am_i_platform_admin');
-    if (isPlatformAdmin) items.push(PLATFORM_NAV_ITEM);
-  } catch (_) { /* never block the header on this */ }
+  // Platform operator link, shown only to operators and first in their menu — the control panel
+  // is their home. The page and the database check this independently; the link is a convenience.
+  const isPlatformAdmin = await amIOperator();
+  if (isPlatformAdmin) items.unshift(PLATFORM_NAV_ITEM);
   items.push(PROFILE_NAV_ITEM);
   items.push(SUPPORT_NAV_ITEM);
 
@@ -351,6 +348,7 @@ async function renderHeader(activePage, profile, site, org) {
     document.body.classList.add('has-tab-bar');
   }
   const TABS = [
+    ...(isPlatformAdmin ? [{ href: 'platform-admin.html', label: 'ניהול', icon: 'shield-check' }] : []),
     { href: 'dashboard.html', label: 'בית', icon: 'house' },
     { href: 'tasks.html', label: 'משימות', icon: 'list-checks', badge: 'tasks' },
     { href: 'reports.html', label: 'דוחות', icon: 'chart-column' },
@@ -420,6 +418,7 @@ async function renderHeader(activePage, profile, site, org) {
   });
 
   document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+    sessionStorage.removeItem('tadok_opened');
     sessionStorage.removeItem(SGP_ACTIVE_ORG_KEY);
     sessionStorage.removeItem('sgp_active_site_id');
     await sb.auth.signOut();
@@ -506,6 +505,14 @@ async function pdfLogoHtml(height = 38) {
 }
 
 const SGP_ACTIVE_ORG_KEY = 'sgp_active_org_id';
+
+// Is the signed-in user the platform operator? platform_admins is unreadable from the client on
+// purpose, so the question is asked — once per page, shared by requireAuth and the header.
+let tadokOperatorCheck = null;
+function amIOperator() {
+  if (!tadokOperatorCheck) tadokOperatorCheck = sb.rpc('am_i_platform_admin').then(r => r.data === true, () => false);
+  return tadokOperatorCheck;
+}
 
 // ---- support mode: the platform operator viewing one company, read only (op_start_support_session) ----
 // Looked up only when the console set the key, so ordinary page loads pay nothing for it.
@@ -720,6 +727,15 @@ async function requireAuth(activePage) {
   // now means "owner of this company" rather than "owner of everything".
   activeOrgName = org.name || PLATFORM_NAME;
   activeOrg = org;
+
+  // The operator's home is the control panel: the first dashboard of a session opens it instead.
+  const firstOpen = !sessionStorage.getItem('tadok_opened');
+  sessionStorage.setItem('tadok_opened', '1');
+  const askOperator = firstOpen && activePage === 'dashboard.html' && !support;
+  if (tadokOpensConsole(activePage, askOperator && await amIOperator(), !firstOpen, !!support)) {
+    location.replace('platform-admin.html');
+    return null;
+  }
 
   // Terms and privacy acceptance: once per user and again after a change (js/policies.js).
   // (the operator accepted as themselves; nothing is recorded for a company viewed as support)
