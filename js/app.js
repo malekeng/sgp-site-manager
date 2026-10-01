@@ -207,10 +207,15 @@ async function renderHeader(activePage, profile, site, org) {
   items.push(PROFILE_NAV_ITEM);
   items.push(SUPPORT_NAV_ITEM);
 
-  // Each company sees its own name in the tab title.
-  if (org?.name) {
+  // Who the header says you are (js/policies.js): the operator is the platform's owner, and the
+  // control panel carries TADOK's name and logo, not a company's.
+  const who = tadokHeaderIdentity(activePage, isPlatformAdmin, !!org?.__support, org?.name || '',
+                                  profile?.job_title || systemRoleLabel(profile?.role));
+
+  // Each company sees its own name in the tab title; the control panel shows TADOK.
+  if (who.titleSuffix) {
     const base = (document.title || '').split('|')[0].trim();
-    document.title = base ? `${base} | ${org.name}` : org.name;
+    document.title = base ? `${base} | ${who.titleSuffix}` : who.titleSuffix;
   }
 
   const NAV_GROUP_KEY_PREFIX = 'sgp_navgroup_';
@@ -245,24 +250,24 @@ async function renderHeader(activePage, profile, site, org) {
   }).join('');
 
   const allSites = site?.__allSites;
-  const siteControl = (allSites && allSites.length > 1)
+  const siteControl = !who.showSite ? '' : (allSites && allSites.length > 1)
     ? `<select class="site-badge" id="siteSwitcher" style="cursor:pointer;">
         ${allSites.map(s => `<option value="${s.id}" ${s.id === site.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
       </select>`
     : `<span class="site-badge">${esc(site?.name || '')}</span>`;
 
   const name = esc(profileDisplayName(profile));
-  const job = esc(profile?.job_title || systemRoleLabel(profile?.role));
+  const job = esc(who.role);
 
   // A person can belong to more than one company; show a switcher only when they do.
   const allOrgs = org?.__allOrgs || [];
-  const orgControl = allOrgs.length > 1
+  const orgControl = who.platformBrand ? `<div class="brand-org">${esc(who.brandName)}</div>` : allOrgs.length > 1
     ? `<select class="site-badge" id="orgSwitcher" style="cursor:pointer;font-weight:800;">
         ${allOrgs.map(o => `<option value="${o.id}" ${o.id === org.id ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}
        </select>`
     : (org?.name ? `<div class="brand-org">${esc(org.name)}</div>` : '');
 
-  const logo = await orgLogo(org);
+  const logo = who.platformBrand ? { isCompany: false } : await orgLogo(org);
   const logoHtml = logo.isCompany
     ? `<img class="brand-logo company" src="${esc(logo.src)}" alt="${esc(org?.name || '')}" onerror="this.onerror=null;this.className='brand-logo';this.src='${PLATFORM_LOGO}'">`
     : `<img class="brand-logo" src="${PLATFORM_LOGO}" alt="TADOK">`;

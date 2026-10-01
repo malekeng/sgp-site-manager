@@ -261,3 +261,17 @@ function tadokOpensConsole(page, isOperator, referrer, inSupport, origin) {
   if (!from || from.origin !== origin) return true;
   return /\/(index\.html)?$/.test(from.pathname); // the sign-in page, or the bare address
 }
+
+// Who the header says you are. The platform operator is "בעלי הפלטפורמה" wherever they are, and
+// the control panel carries TADOK's name and logo rather than a company's. In support mode the
+// role keeps its own label ('תמיכת TADOK — צפייה בלבד').
+function tadokHeaderIdentity(page, isOperator, inSupport, orgName, roleLabel) {
+  const onPanel = page === 'platform-admin.html' && !!isOperator;
+  return {
+    platformBrand: onPanel,
+    brandName: onPanel ? 'ניהול הפלטפורמה' : orgName,
+    role: isOperator && !inSupport ? 'בעלי הפלטפורמה' : roleLabel,
+    titleSuffix: onPanel ? 'TADOK' : orgName,
+    showSite: !onPanel,
+  };
+}
