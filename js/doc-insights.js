@@ -7,8 +7,9 @@
 //  - the sampling window the delivery note itself states (clause 2ג: the plant answers for
 //    strength only when the sample was taken within 90 minutes of the truck leaving the
 //    plant, or 60 minutes of it arriving).
-// Read-only towards the records: nothing here changes what the user entered. The only
-// write is sgpReadPendingDocs, which fills documents.extracted for a document not yet read.
+// Nothing here changes what the user entered. The writes are sgpReadPendingDocs, which fills
+// documents.extracted for a document not yet read, and sgpAutoFill, which fills a record's
+// fields that are still EMPTY from what its documents say (a lab report's strengths).
 
 const SGP_DOC_KIND = {
   concrete_note: 'תעודת משלוח בטון', concrete_lab: 'דוח מעבדה', rebar_note: 'תעודת משלוח ברזל',
@@ -138,6 +139,18 @@ function sgpConcreteInsights(rec, by, add) {
     } else {
       add('info', `${age ? age + ' ימים' : name} (${name}): ממוצע ${fmtNum(avg, 1)} מגפ"ס`
         + (c ? ` · הדרישה ל-${c.age} יום: ממוצע ≥ ${c.avg_min}, כל דגימה ≥ ${c.single_min}` : ''));
+    }
+  }
+  // the strengths typed in the record, against the report (auto-fill never replaces a value,
+  // so a wrong one has to be shown)
+  for (const lab of labs) {
+    const said = sgpLabFill(lab);
+    for (const [key, age] of [['strength_7d', 7], ['strength_28d', 28]]) {
+      const v = rec[key];
+      if (v === null || v === undefined || v === '' || said[key] == null) continue;
+      if (Math.abs(Number(v) - said[key]) > 0.05) {
+        add('warn', `ברשומה חוזק ${age} יום ${fmtNum(v, 1)} מגפ"ס — בדוח ${lab.lab_no || 'המעבדה'} ${fmtNum(said[key], 1)} מגפ"ס. בדקו מול הדוח.`);
+      }
     }
   }
   // the 28-day result, once samples were taken
@@ -359,4 +372,57 @@ async function sgpReadPendingDocs(pending, onProgress = () => {}) {
     }
   }
   return done;
+}
+
+// ---- auto-fill: a record's empty fields, from what its documents say ---------------------
+// A lab report gives the pour its strengths (each age's printed average), its number, and
+// "tested". Only fields still empty are filled — a value already in the record is never
+// replaced (a different one is flagged by the insights instead).
+const SGP_FILL_FIELDS = { concrete_pours: ['strength_7d', 'strength_28d', 'lab_test_number', 'lab_tested'] };
+const SGP_FILL_LABELS = { strength_7d: 'חוזק 7 יום', strength_28d: 'חוזק 28 יום', lab_test_number: 'מס\' בדיקה', lab_tested: 'נבדק במעבדה' };
+
+function sgpLabFill(ex) {
+  if (!ex || ex.kind !== 'concrete_lab') return {};
+  const out = { lab_tested: true };
+  if (ex.lab_no) out.lab_test_number = ex.lab_no;
+  let byAge = ex.avg_by_age;
+  if (!byAge) {   // read before avg_by_age existed: the first average is the latest age's
+    const ages = (ex.ages || []).slice().sort((a, b) => b - a);
+    if (ages.length && (ex.averages || []).length) byAge = { [ages[0]]: ex.averages[0] };
+  }
+  if (byAge && byAge[7] != null) out.strength_7d = byAge[7];
+  if (byAge && byAge[28] != null) out.strength_28d = byAge[28];
+  return out;
+}
+
+function sgpFillPatch(table, row, extractedList) {
+  const fields = SGP_FILL_FIELDS[table];
+  if (!fields) return {};
+  const patch = {};
+  for (const ex of extractedList || []) {
+    const said = table === 'concrete_pours' ? sgpLabFill(ex) : {};
+    for (const key of fields) {
+      if (!(key in said) || key in patch) continue;
+      const cur = row ? row[key] : null;
+      const empty = key === 'lab_tested' ? cur !== true : (cur === null || cur === undefined || cur === '');
+      if (empty) patch[key] = said[key];
+    }
+  }
+  return patch;
+}
+
+// Writes the patch with the form's own lock (the row's updated_at), so a concurrent edit is
+// never overwritten. Returns the Hebrew labels of what was filled.
+async function sgpAutoFill(table, recordId, extractedList, userId) {
+  const fields = SGP_FILL_FIELDS[table];
+  if (!fields || !recordId) return [];
+  const { data: row, error } = await sb.from(table).select(['id', 'updated_at', ...fields].join(', ')).eq('id', recordId).single();
+  if (error || !row) return [];
+  const patch = sgpFillPatch(table, row, extractedList);
+  if (!Object.keys(patch).length) return [];
+  let q = sb.from(table).update({ ...patch, updated_by: userId, updated_at: new Date().toISOString() }).eq('id', recordId).select('id');
+  q = row.updated_at ? q.eq('updated_at', row.updated_at) : q.is('updated_at', null);
+  const { data, error: upErr } = await q;
+  if (upErr || !data || !data.length) return [];
+  return Object.keys(patch).map(k => SGP_FILL_LABELS[k] || k);
 }

@@ -332,18 +332,12 @@ const sgpParse = {
       r.pour_date = sgpDateNear(text, /תאריך\s*היציקה/);
       const lab = text.match(/(?<![A-Za-z0-9])(LA\d{10,16})(?!\d)/);
       if (lab) r.lab_test_number = lab[1];
-      // A report tested at 7 and 28 days prints one average per age on the same line
-      // ("ממוצע 33.5 21.0"). Match each to its column by the samples' own values, so the
-      // 28-day average never lands in the 7-day field.
-      const both = sgpExtractLab(text);
-      const two = text.match(/ממוצע\s*[:.]?\s*(\d{1,3}(?:\.\d{1,2})?)\s+(\d{1,3}(?:\.\d{1,2})?)(?!\d)/);
-      if (both.ages.includes(7) && both.ages.includes(28) && two) {
-        const a = sgpNum(two[1]), b = sgpNum(two[2]);
-        const col = i => { const v = both.samples.map(s => s.mpa[i]).filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
-        const first = col(0), second = col(1);   // the later age is printed first on these reports
-        const swapped = first != null && second != null && Math.abs(a - second) + Math.abs(b - first) < Math.abs(a - first) + Math.abs(b - second);
-        r.strength_28d = swapped ? b : a;
-        r.strength_7d = swapped ? a : b;
+      // each age's printed average, matched to its column (sgpExtractLab), so the 28-day
+      // average never lands in the 7-day field
+      const byAge = sgpExtractLab(text).avg_by_age || {};
+      if (byAge[7] != null && byAge[28] != null) {
+        r.strength_28d = byAge[28];
+        r.strength_7d = byAge[7];
       } else {
         const age = text.match(/חוזק\s*לחיצה\s*(7|28)\s*יום/) || text.match(/(7|28)\s*יום\s*לחיצה/);
         const avg = text.match(/ממוצע\s*[:.]?\s*(\d{1,3}(?:\.\d{1,2})?)/) || text.match(/(\d{1,3}\.\d{1,2})\s*ממוצע/);
@@ -644,6 +638,18 @@ function sgpExtractLab(text) {
       time: tok[ti], truck, note,
       mpa: nums.filter(n => n < 150), kn: nums.filter(n => n >= 150),
     });
+  }
+  // Each age's average as the lab printed it. A report tested at 7 and 28 days prints both on
+  // one line ("ממוצע 33.5 21.0"); each is matched to its column by the samples' own values.
+  const ages = r.ages.slice().sort((a, b) => b - a);   // the later age is printed first
+  if (ages.length === 1 && r.averages.length) r.avg_by_age = { [ages[0]]: r.averages[0] };
+  const pair = text.match(/ממוצע\s*[:.]?\s*(\d{1,3}(?:\.\d{1,2})?)\s+(\d{1,3}(?:\.\d{1,2})?)(?!\d)/);
+  if (ages.length === 2 && pair) {
+    const a = +pair[1], b = +pair[2];
+    const col = i => { const v = r.samples.map(s => s.mpa[i]).filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+    const first = col(0), second = col(1);
+    const swapped = first != null && second != null && Math.abs(a - second) + Math.abs(b - first) < Math.abs(a - first) + Math.abs(b - second);
+    r.avg_by_age = { [ages[0]]: swapped ? b : a, [ages[1]]: swapped ? a : b };
   }
   return r;
 }

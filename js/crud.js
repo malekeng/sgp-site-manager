@@ -409,7 +409,10 @@ async function initCrudPage(config) {
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       const n = await sgpReadPendingDocs(ins.pending, t => { btn.textContent = t; });
-      toast(n ? (n === 1 ? 'המסמך נקרא' : `${n} מסמכים נקראו`) : 'לא נקרא אף מסמך', n ? 'success' : 'error');
+      // the documents now read (and those read before) fill the record's still-empty fields
+      const filled = n ? await autoFillRecord(id, docs.map(d => d.extracted).filter(Boolean)) : [];
+      toast(n ? (n === 1 ? 'המסמך נקרא' : `${n} מסמכים נקראו`) + (filled.length ? ` · מולא ברשומה: ${filled.join(', ')}` : '')
+        : 'לא נקרא אף מסמך', n ? 'success' : 'error');
       await loadData();
       if (state.editingId === id && modalBackdrop.classList.contains('open')) renderInsights(id);
     });
@@ -557,7 +560,7 @@ async function initCrudPage(config) {
       toast(isNew ? 'הרשומה נוספה' : 'הרשומה עודכנה', 'success');
       closeModal();
       await loadData();
-      readNewUploads(uploaded);
+      readNewUploads(uploaded, recordId);
       if (config.afterSave) config.afterSave({ id: recordId, payload, isNew }, api);
     } catch (err) {
       console.error(err);
@@ -569,23 +572,33 @@ async function initCrudPage(config) {
 
   // New attachments are read in the background, so the documents become the record's source
   // without anyone waiting or typing. If the page is closed first, the record offers to read
-  // them later ("קריאת המסמכים שעוד לא נקראו").
-  async function readNewUploads(uploaded) {
+  // them later ("קריאת המסמכים שעוד לא נקראו"). What they say then fills the record's fields
+  // that are still empty (a lab report's strengths) — never one that already has a value.
+  async function readNewUploads(uploaded, recordId) {
     if (!config.docInsights || typeof sgpExtractFile !== 'function') return;
     const todo = uploaded.filter(u => !u.extracted && u.docType !== 'photo' && SGP_READABLE_RE.test(u.file.name));
     if (!todo.length) return;
     toast(todo.length === 1 ? 'קורא ברקע את המסמך שצורף...' : `קורא ברקע ${todo.length} מסמכים שצורפו...`);
-    let n = 0;
+    const read = [];
     for (const u of todo) {
       try {
         const extracted = await sgpExtractFile(u.file);
         const { error } = await sb.from('documents').update({ extracted, extracted_at: new Date().toISOString() })
           .eq('id', u.id).is('extracted', null);
         if (error) throw error;
-        n++;
+        read.push(extracted);
       } catch (err) { console.error('reading a new document failed', u.file.name, err); }
     }
-    if (n) { toast(n === 1 ? 'המסמך שצורף נקרא' : `${n} מסמכים שצורפו נקראו`, 'success'); await loadData(); }
+    if (!read.length) return;
+    const filled = await autoFillRecord(recordId, read);
+    toast((read.length === 1 ? 'המסמך שצורף נקרא' : `${read.length} מסמכים שצורפו נקראו`)
+      + (filled.length ? ` · מולא ברשומה: ${filled.join(', ')}` : ''), 'success');
+    await loadData();
+  }
+  async function autoFillRecord(recordId, extractedList) {
+    if (typeof sgpAutoFill !== 'function') return [];
+    try { return await sgpAutoFill(config.table, recordId, extractedList, user.id); }
+    catch (err) { console.error('auto-fill failed', err); return []; }
   }
 
   async function deleteRow(id) {
