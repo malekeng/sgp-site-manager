@@ -604,6 +604,13 @@ function sgpExtractLab(text) {
   if (printed && printed !== r.pour_date) r.report_date = printed;
   m = text.match(/סוג\s*הבטון[^\n\d]{0,8}(\d{2})/); if (m) r.grade = `ב-${m[1]}`;
   r.ages = sgpUnique([...text.matchAll(/חוזק\s*לחיצה\s*(\d{1,2})\s*יום/g)].map(x => +x[1]));
+  // A report with 7- and 28-day columns splits that header over two lines ("7 יום … יום 28"):
+  // then the ages come from the column header line (the one naming KN/MPa) — never from the
+  // requirement line, whose "בגיל 28 יום" is a rule, not a tested age.
+  if (!r.ages.length) {
+    const head = text.split('\n').filter(l => /\b(?:KN|MPa)\b/i.test(l) && /יום/.test(l));
+    r.ages = sgpUnique(head.flatMap(l => [...l.matchAll(/(?<![\d.])(\d{1,2})\s*יום|יום\s*(\d{1,2})(?![\d.])/g)].map(x => +(x[1] || x[2]))));
+  }
   m = text.match(/בגיל\s*(\d{1,2})\s*יום\s*לא\s*יקטן\s*מ\s*-?\s*(\d{1,3}(?:\.\d)?)[^\n]*?לממוצע[^\n]*?לא\s*יקטן\s*מ\s*-?\s*(\d{1,3}(?:\.\d)?)/);
   if (m) r.criteria = { age: +m[1], avg_min: +m[2], single_min: +m[3] };
   r.averages = [...text.matchAll(/ממוצע\s*[:.]?\s*(\d{1,3}\.\d{1,2})/g)].map(x => +x[1]);
@@ -615,8 +622,11 @@ function sgpExtractLab(text) {
     const note = tok[ti - 2], truck = tok[ti - 1];
     if (!/^\d{5,7}$/.test(note) || !/^\d{2,5}$/.test(truck)) continue;
     const nums = tok.slice(0, ti - 2).map(Number).filter(n => !isNaN(n));
+    // a later age's first row ends "… no dd/mm/yy age": the sample number sits before the test date
+    const di = tok.findIndex((x, i) => i > ti && /^\d{2}\/\d{2}\/\d{2,4}$/.test(x));
+    const noTok = di > ti ? tok[di - 1] : tok[tok.length - 1];
     r.samples.push({
-      no: /^\d{1,3}$/.test(tok[tok.length - 1]) ? +tok[tok.length - 1] : null,
+      no: /^\d{1,3}$/.test(noTok) ? +noTok : null,
       time: tok[ti], truck, note,
       mpa: nums.filter(n => n < 150), kn: nums.filter(n => n >= 150),
     });
