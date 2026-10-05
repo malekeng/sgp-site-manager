@@ -332,9 +332,23 @@ const sgpParse = {
       r.pour_date = sgpDateNear(text, /תאריך\s*היציקה/);
       const lab = text.match(/(?<![A-Za-z0-9])(LA\d{10,16})(?!\d)/);
       if (lab) r.lab_test_number = lab[1];
-      const age = text.match(/חוזק\s*לחיצה\s*(7|28)\s*יום/) || text.match(/(7|28)\s*יום\s*לחיצה/);
-      const avg = text.match(/ממוצע\s*[:.]?\s*(\d{1,3}(?:\.\d{1,2})?)/) || text.match(/(\d{1,3}\.\d{1,2})\s*ממוצע/);
-      if (avg) r[age && age[1] === '28' ? 'strength_28d' : 'strength_7d'] = sgpNum(avg[1]);
+      // A report tested at 7 and 28 days prints one average per age on the same line
+      // ("ממוצע 33.5 21.0"). Match each to its column by the samples' own values, so the
+      // 28-day average never lands in the 7-day field.
+      const both = sgpExtractLab(text);
+      const two = text.match(/ממוצע\s*[:.]?\s*(\d{1,3}(?:\.\d{1,2})?)\s+(\d{1,3}(?:\.\d{1,2})?)(?!\d)/);
+      if (both.ages.includes(7) && both.ages.includes(28) && two) {
+        const a = sgpNum(two[1]), b = sgpNum(two[2]);
+        const col = i => { const v = both.samples.map(s => s.mpa[i]).filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+        const first = col(0), second = col(1);   // the later age is printed first on these reports
+        const swapped = first != null && second != null && Math.abs(a - second) + Math.abs(b - first) < Math.abs(a - first) + Math.abs(b - second);
+        r.strength_28d = swapped ? b : a;
+        r.strength_7d = swapped ? a : b;
+      } else {
+        const age = text.match(/חוזק\s*לחיצה\s*(7|28)\s*יום/) || text.match(/(7|28)\s*יום\s*לחיצה/);
+        const avg = text.match(/ממוצע\s*[:.]?\s*(\d{1,3}(?:\.\d{1,2})?)/) || text.match(/(\d{1,3}\.\d{1,2})\s*ממוצע/);
+        if (avg) r[age && age[1] === '28' ? 'strength_28d' : 'strength_7d'] = sgpNum(avg[1]);
+      }
       r._summary = r.lab_test_number ? `דוח מעבדה ${r.lab_test_number}` : 'דוח מעבדה';
     } else {
       r.pour_date = sgpDateNear(text, /תארי[ךכן]/);
