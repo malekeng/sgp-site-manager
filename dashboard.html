@@ -494,18 +494,20 @@ function greetingByHour() {
       href: 'correspondence.html', tile: 'correspondence.html',
     }));
 
-    // failed checks not fixed yet (a fixed one carries its fix date)
+    // failed checks not fixed yet (a fixed one carries its fix date), and checks still in
+    // handling (e.g. waiting for a lab result) — those in orange, so they are not forgotten
     const { data: failedQc } = await sb.from('quality_controls')
-      .select('id, stage, subject, control_date, severity, planned_close_date, closed_date')
-      .eq('site_id', site.id).eq('result', 'לא תקין').is('closed_date', null)
+      .select('id, stage, subject, control_date, result, severity, planned_close_date, closed_date')
+      .eq('site_id', site.id).in('result', ['לא תקין', 'בטיפול']).is('closed_date', null)
       .order('control_date', { ascending: false });
     (failedQc || []).forEach(q => {
       const page = q.stage === 'preliminary' ? 'qc-preliminary.html' : 'qc-inprocess.html';
-      const late = q.planned_close_date && q.planned_close_date < todayIso;
+      const handling = q.result === 'בטיפול';
+      const late = !handling && q.planned_close_date && q.planned_close_date < todayIso;
       items.push({
-        ico: q.stage === 'preliminary' ? 'qc-preliminary' : 'qc-inprocess', dot: late || q.severity === 3 ? 'red' : 'orange',
-        text: `בקרה ${q.stage === 'preliminary' ? 'מוקדמת' : 'שוטפת'} ל"${q.subject}" מ-${fmtDate(q.control_date)} — לא תקין`
-          + (q.planned_close_date ? `, ${late ? 'היה אמור להיות מתוקן עד' : 'תיקון עד'} ${fmtDate(q.planned_close_date)}` : ''),
+        ico: q.stage === 'preliminary' ? 'qc-preliminary' : 'qc-inprocess', dot: !handling && (late || q.severity === 3) ? 'red' : 'orange',
+        text: `בקרה ${q.stage === 'preliminary' ? 'מוקדמת' : 'שוטפת'} ל"${q.subject}" מ-${fmtDate(q.control_date)} — ${handling ? 'בטיפול' : 'לא תקין'}`
+          + (!handling && q.planned_close_date ? `, ${late ? 'היה אמור להיות מתוקן עד' : 'תיקון עד'} ${fmtDate(q.planned_close_date)}` : ''),
         href: `${page}?open=${q.id}`, tile: page,
       });
     });
