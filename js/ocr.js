@@ -385,8 +385,9 @@ const sgpParse = {
       { needles: ['ERON STEEL'], label: 'ERON STEEL' },
       { needles: ['נוימן'], label: 'נוימן תעשיות פלדה' },
     ]);
-    // each product row shows the shipped weight and the order's remaining weight, both in
-    // ק"ג; the shipped one is the larger of the two
+    // each product row prints the delivered weight first (כמות) and then what the order still
+    // owes (יתרה למשלוח, which can be larger — SH26003293 doubled when the larger was taken);
+    // a row under SGP_NOTE_MIN_ROW_KG is a misread digit, not a delivery
     const perPage = [], notes = [];
     for (const page of sgpPages(text)) {
       let pageKg = 0;
@@ -400,7 +401,7 @@ const sgpParse = {
             .map(m => sgpNum(m[1] || m[2]));
         }
         vals = vals.filter(v => v !== null);
-        if (vals.length) pageKg += Math.max(...vals);
+        if (vals.length && vals[0] >= SGP_NOTE_MIN_ROW_KG) pageKg += vals[0];
       }
       const note = sgpNoteNumber(page);
       if (!pageKg && !note) continue;                                   // e.g. a weighing ticket
@@ -660,12 +661,53 @@ function sgpOrderKeyFromName(name) {
   return m ? sgpOrderKey(m[1], m[2], m[3]) : null;
 }
 
+// ---- a delivery note's product rows (עין עירון layout, read from 8 real notes) ----
+// "מיוחדת A-B" is processed rebar of diameters A..B (special meshes included); standard meshes
+// carry a code {d·10}2020 (82020 = Ø8, 652020 = Ø6.5) or text like "8/200/200"; transport
+// lines are in units, never in ק"ג, so they are not rows.
+const SGP_NOTE_MIN_ROW_KG = 20;
+const SGP_NOTE_KG_RE = /(?<![\d,.])(\d{1,3}(?:,\d{3})+\.\d{1,3}|\d+\.\d{2,3})(?!\d)/;
+const SGP_NOTE_KG_UNIT_RE = /ק["'״]?ג/;
+
+function sgpNoteGroup(line) {
+  const sp = line.match(/מיוחדת\s*(\d{1,2})\s*-\s*(\d{1,2})(?!\d)/);   // the first one: OCR repeats the cell noisily
+  if (sp) return { group: `מיוחדת ${sp[1]}-${sp[2]}`, range: [Number(sp[1]), Number(sp[2])] };
+  const code = line.match(/(?<!\d)(65|\d{1,2})2020(?!\d)/);
+  const txt = line.match(/(?<![\d./])(\d{1,2}(?:\.\d)?)\/(?:200|20)\/(?:200|20)(?!\d)/);
+  if (code || txt) {
+    const d = code ? (code[1] === '65' ? 6.5 : Number(code[1])) : Number(txt[1]);
+    return { group: `רשת Ø${d}`, mesh_d: d };
+  }
+  if (/אלמנטים\s*מרותכים/.test(line)) return { group: 'אלמנטים מרותכים' };
+  return null;
+}
+
+function sgpNoteRows(text) {
+  const lines = String(text || '').split('\n');
+  const isRow = l => SGP_NOTE_KG_UNIT_RE.test(l) && SGP_NOTE_KG_RE.test(l);
+  const rows = [];
+  lines.forEach((line, i) => {
+    if (!isRow(line)) return;
+    const kg = sgpNum(line.match(SGP_NOTE_KG_RE)[1]);
+    let g = sgpNoteGroup(line);
+    // a product name split onto the lines above it (never another row's)
+    for (let k = 1; !g && k <= 2 && i - k >= 0 && !isRow(lines[i - k]); k++) g = sgpNoteGroup(lines[i - k]);
+    const row = { ...(g || { group: 'אחר' }), kg };
+    if (kg < SGP_NOTE_MIN_ROW_KG) row.unread = true;
+    rows.push(row);
+  });
+  return rows;
+}
+
 function sgpExtractRebarNote(doc) {
   const text = doc.text;
   const p = sgpParse.rebar(text);
+  const rows = sgpNoteRows(text);
+  const read = rows.filter(x => !x.unread);
   const r = {
     notes: p.delivery_note_number ? p.delivery_note_number.split('\n') : [],
-    date: p.delivery_date, total_kg: p.weight_kg, diameters: p.diameter_text,
+    date: p.delivery_date, diameters: p.diameter_text, rows,
+    total_kg: read.length ? Math.round(read.reduce((a, x) => a + x.kg, 0) * 100) / 100 : p.weight_kg,
   };
   if (p._summary) r.per_note = p._summary;
   r.orders = sgpUnique([...text.matchAll(/(?:הז|רכש)\s*[:_.]?\s*(\d{3,4})\s*-\s*(\d{2})(?:\.(\d))?(?!\d)/g)].map(m => sgpOrderKey(m[1], m[2], m[3])));

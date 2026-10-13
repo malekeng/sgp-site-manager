@@ -9,6 +9,8 @@ const COMPANY_EXPORT_TABLES = [
   { table: 'rebar_deliveries', label: 'משלוחי ברזל' },
   { table: 'rebar_orders', label: 'הזמנות ברזל' },
   { table: 'rebar_order_items', label: 'שורות הזמנות ברזל' },
+  { table: 'rebar_receipts', label: 'קבלות ברזל' },
+  { table: 'rebar_receipt_items', label: 'שורות קבלות ברזל' },
   { table: 'prestressed_slabs', label: 'לוח״דים' },
   { table: 'vendor_submissions', label: 'הגשות לאישור' },
   { table: 'quality_controls', label: 'בקרת איכות' },

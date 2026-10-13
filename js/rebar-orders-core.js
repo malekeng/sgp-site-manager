@@ -142,6 +142,9 @@ const REBAR_DB_ERRORS = {
   rebar_close_needs_reason: 'יש לכתוב סיבת סגירה',
   rebar_bad_transition: 'הפעולה אינה אפשרית במצב הנוכחי של ההזמנה',
   rebar_site_immutable: 'אי אפשר להעביר הזמנה לאתר אחר',
+  rebar_receipt_order_state: 'אפשר לקלוט משלוח רק להזמנה שנשלחה ולא נסגרה',
+  rebar_receipt_wrong_order: 'השורה אינה שייכת להזמנה הזו',
+  rebar_order_has_receipts: 'כבר נקלטו משלוחים להזמנה — אי אפשר לפתוח אותה לעריכה',
 };
 
 function rebarDbError(err) {

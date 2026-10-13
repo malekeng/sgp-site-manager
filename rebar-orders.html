@@ -25,6 +25,9 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="js/ocr.js"></script>
 <style>
 /* the hidden "פעולות" header (.sr-only) is position:absolute; without a positioned table it escapes
    the scrolling .table-wrap and widens the whole page on a phone */
@@ -81,6 +84,20 @@
 .freehand-grid { width: 100%; max-width: 440px; height: auto; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: crosshair; touch-action: manipulation; }
 .check-row { display: flex; flex-wrap: wrap; gap: 14px; }
 .check-line { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--navy); }
+.ocr-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 22px; text-align: center; cursor: pointer; margin-bottom: 16px; }
+.ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(34, 216, 107,0.06); }
+.ocr-progress { display: none; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 13px; color: var(--steel); }
+.ocr-progress.show { display: flex; }
+.supplied { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.supplied-bar { width: 46px; height: 6px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+.supplied-bar > i { display: block; height: 100%; background: var(--green); }
+.rc-read { background: var(--bg); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px; font-size: 13px; color: var(--navy); }
+.rc-read b { font-weight: 800; }
+.rc-lines input[type=number], .rc-lines input[inputmode] { width: 84px; padding: 7px 8px; border: 2px solid var(--border); border-radius: var(--radius-sm); font: inherit; }
+.rc-lines td { vertical-align: middle; }
+.items-table.rc-lines { min-width: 480px; }
+.rc-lines input[type=checkbox] { width: 20px; height: 20px; }
+.receipt-row .di-checks { margin-top: 6px; }
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .summary-grid table { min-width: 0; }
 .summary-grid td.num-cell, .summary-grid th.num-cell { text-align: left; }
@@ -138,6 +155,7 @@
     </div>
 
     <div id="sectionsHost"></div>
+    <div id="receiptsHost"></div>
     <div id="summaryHost"></div>
   </div>
 </main>
@@ -160,6 +178,11 @@
   </div>
 </div>
 
+<!-- receive a delivery -->
+<div class="modal-backdrop" id="receiptBackdrop">
+  <div class="modal modal-wide" id="receiptModal"></div>
+</div>
+
 <!-- add / edit a line (bar, mesh or pile) -->
 <div class="modal-backdrop" id="itemBackdrop">
   <div class="modal" id="itemModal"></div>
@@ -171,6 +194,7 @@
 <script src="js/rebar-calc.js"></script>
 <script src="js/rebar-shapes.js"></script>
 <script src="js/rebar-orders-core.js"></script>
+<script src="js/rebar-receipts.js"></script>
 <script src="js/rebar-pdf.js"></script>
 <script src="js/rebar-orders.js"></script>
 </body>

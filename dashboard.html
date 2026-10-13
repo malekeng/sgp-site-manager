@@ -156,6 +156,8 @@
 <script src="js/policies.js"></script>
 <script src="js/app.js"></script>
 <script src="js/doc-insights.js"></script>
+<script src="js/rebar-calc.js"></script>
+<script src="js/rebar-receipts.js"></script>
 <script>
 
 function greetingByHour() {
@@ -511,6 +513,27 @@ function greetingByHour() {
         href: `${page}?open=${q.id}`, tile: page,
       });
     });
+
+    // rebar orders past their delivery date and not fully supplied (or not even sent yet)
+    const { data: lateOrders } = await sb.from('rebar_orders').select('id, order_no, name, required_date, status')
+      .eq('site_id', site.id).lt('required_date', todayIso).order('required_date', { ascending: true });
+    const late = (lateOrders || []).filter(o => !['complete', 'closed'].includes(o.status));
+    if (late.length) {
+      const [{ data: lines }, { data: got }] = await Promise.all([
+        sb.from('rebar_order_items').select('id, order_id, qty, unit_kg, total_kg').in('order_id', late.map(o => o.id)),
+        sb.from('rebar_receipt_items').select('item_id, qty_received').eq('site_id', site.id),
+      ]);
+      late.forEach(o => {
+        const own = (lines || []).filter(l => l.order_id === o.id);
+        const ownIds = new Set(own.map(l => l.id));
+        const pct = orderProgress(own, (got || []).filter(g => ownIds.has(g.item_id))).pct;
+        items.push({
+          ico: 'rebar', dot: 'red',
+          text: `הזמנת ברזל ${o.order_no} "${o.name}" — הייתה צפויה עד ${fmtDate(o.required_date)} · ${o.status === 'draft' ? 'עדיין לא נשלחה לספק' : 'סופק ' + pct + '%'}`,
+          href: `rebar-orders.html#o=${o.id}`, tile: 'rebar-orders.html',
+        });
+      });
+    }
 
     items.forEach(it => { const k = it.tile || it.href; tileState.attention[k] = (tileState.attention[k] || 0) + 1; });
     renderTileBadges();
