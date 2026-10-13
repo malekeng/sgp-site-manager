@@ -129,18 +129,10 @@ function rbLabel(v) {
 
 // The drawing keeps the shape's proportions, except that a very short leg is drawn at
 // least 12% of the longest one so a 15 cm hook beside a 12 m bar stays visible. Equal
-// legs stay equal, so closed shapes still close. Each leg is labelled with its length
-// on the side away from the shape's centre.
-function shapeSvg(shape, opts = {}) {
-  const w = opts.w || 300, h = opts.h || 120, stroke = opts.stroke || 2;
-  const pad = Math.min(22, Math.round(Math.min(w, h) * 0.3));   // room for the labels (11 px out + half a line)
-  const head = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
-  const text = (x, y, t) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="#0E1A20">${t}</text>`;
-  if (shape.family === 'hoop') {
-    const r = Math.max(4, Math.min(w, h) / 2 - Math.min(pad, 10));
-    return head + `<circle cx="${w / 2}" cy="${h / 2}" r="${r}" fill="none" stroke="#0E1A20" stroke-width="${stroke}"/>`
-      + text(w / 2, h / 2, 'Ø' + rbLabel(shape.D)) + '</svg>';
-  }
+// legs stay equal, so closed shapes still close. The layout is the geometry in a w×h box:
+// the corner points, the scale (px per drawn cm) and, per leg, its midpoint, the unit
+// normal pointing away from the shape's centre and the unit direction along the leg.
+function shapeLayout(shape, w, h, pad) {
   const segs = shape.segments || [];
   const longest = Math.max(1, ...segs.map(g => Number(g.len) || 0));
   const pts = [{ x: 0, y: 0 }];
@@ -158,6 +150,29 @@ function shapeSvg(shape, opts = {}) {
   const offX = (w - bw * scale) / 2, offY = (h - bh * scale) / 2;
   const P = pts.map(p => ({ x: offX + (p.x - minX) * scale, y: offY + (p.y - minY) * scale }));
   const cx = P.reduce((a, p) => a + p.x, 0) / P.length, cy = P.reduce((a, p) => a + p.y, 0) / P.length;
+  const labels = segs.map((g, i) => {
+    const a = P[i], b = P[i + 1], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    let nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len;
+    if (nx * (mx - cx) + ny * (my - cy) < 0 || (Math.abs(mx - cx) < 1e-6 && Math.abs(my - cy) < 1e-6 && ny < 0)) { nx = -nx; ny = -ny; }
+    return { x: mx, y: my, nx, ny, ux: (b.x - a.x) / len, uy: (b.y - a.y) / len };
+  });
+  return { points: P, scale, labels };
+}
+
+// Each leg is labelled with its length on the side away from the shape's centre.
+function shapeSvg(shape, opts = {}) {
+  const w = opts.w || 300, h = opts.h || 120, stroke = opts.stroke || 2;
+  const pad = Math.min(22, Math.round(Math.min(w, h) * 0.3));   // room for the labels (11 px out + half a line)
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+  const text = (x, y, t) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="#0E1A20">${t}</text>`;
+  if (shape.family === 'hoop') {
+    const r = Math.max(4, Math.min(w, h) / 2 - Math.min(pad, 10));
+    return head + `<circle cx="${w / 2}" cy="${h / 2}" r="${r}" fill="none" stroke="#0E1A20" stroke-width="${stroke}"/>`
+      + text(w / 2, h / 2, 'Ø' + rbLabel(shape.D)) + '</svg>';
+  }
+  const segs = shape.segments || [];
+  const { points: P, labels } = shapeLayout(shape, w, h, pad);
   let out = head + `<polyline points="${P.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ')}" fill="none" stroke="#0E1A20" stroke-width="${stroke}" stroke-linejoin="round" stroke-linecap="round"/>`;
   if (shape.hooks > 0 && P.length > 1) {
     const tick = (p, q, rot) => {   // a 135° hook at p, turned from the direction p→q
@@ -167,14 +182,41 @@ function shapeSvg(shape, opts = {}) {
     out += tick(P[0], P[1], 45);
     if (shape.hooks > 1) out += tick(P[P.length - 1], P[P.length - 2], -45);
   }
-  segs.forEach((g, i) => {
-    const a = P[i], b = P[i + 1], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    let nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len;
-    if (nx * (mx - cx) + ny * (my - cy) < 0 || (Math.abs(mx - cx) < 1e-6 && Math.abs(my - cy) < 1e-6 && ny < 0)) { nx = -nx; ny = -ny; }
-    out += text(mx + nx * 11, my + ny * 11, rbLabel(g.len));
-  });
+  labels.forEach((l, i) => { out += text(l.x + l.nx * 11, l.y + l.ny * 11, rbLabel(segs[i].len)); });
   return out + '</svg>';
+}
+
+// ---- editing on the drawing ----
+// The legs that share one length with leg i (a closed stirrup's opposite sides).
+function shapeLinkedSegs(shape, i) {
+  const g = (shape.equal || []).find(gr => gr.includes(i));
+  return g ? [...g].sort((a, b) => a - b) : [i];
+}
+
+// Which typed value (an index into shape.inputs) sets leg i; -1 for a hoop.
+function shapeInputIndex(shape, i) {
+  const linked = shapeLinkedSegs(shape, i);
+  return (shape.inputs || []).findIndex(idx => linked.includes(idx));
+}
+
+// The same shape with every leg typed on its own ("סימטרי" off); name, family and hooks kept.
+function shapeUnlinked(shape) {
+  const s = JSON.parse(JSON.stringify(shape));
+  s.equal = [];
+  s.inputs = (s.segments || []).map((_, i) => i);
+  return s;
+}
+
+// Whether a stored shape still has equal legs wherever its catalog shape pairs them.
+function shapeKeepsEqual(shape, equal) {
+  return (equal || []).every(g => g.every(i => Number(shape.segments[i].len) === Number(shape.segments[g[0]].len)));
+}
+
+// Dragging a leg: the pointer's travel along the leg's direction (dir, a unit vector in
+// screen px) at `scale` px per cm, from the length v0, snapped to `step` cm.
+function shapeDragLen(v0, dx, dy, dir, scale, step = 5) {
+  const v = Number(v0) + (dx * dir.ux + dy * dir.uy) / scale;
+  return Math.max(step, Math.round(v / step) * step);
 }
 
 // ---- free drawing ----

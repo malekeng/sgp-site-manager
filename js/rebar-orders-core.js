@@ -35,9 +35,22 @@ function parseNum(v) {
   return Number(s);
 }
 
+// The form's own shape wins: a free drawing, or a catalog shape whose legs were unlinked.
 function rebarBaseShape(f) {
-  if (f.code === 'F') return f.shape || null;
+  if (f.shape) return f.shape;
+  if (f.code === 'F') return null;
   try { return rebarShape(f.code); } catch { return null; }
+}
+
+// The add-items window's shape strip: the shapes used last (newest first) …
+function rebarRecentPush(list, code, max = 8) {
+  return [code, ...(list || []).filter(c => c !== code)].slice(0, max);
+}
+
+// … then the usual ones, catalog codes only.
+function rebarStripCodes(recent, defaults, n) {
+  const known = c => c !== 'F' && REBAR_SHAPES.some(s => s.code === c);
+  return [...new Set([...(recent || []), ...defaults])].filter(known).slice(0, n);
 }
 
 // { field: message } for every bad field of a line; {} when it can be saved.
