@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>הזמנות ברזל | TADOK</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="application-name" content="TADOK">
+<meta name="apple-mobile-web-app-title" content="TADOK">
+<meta name="theme-color" content="#0E1A20">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TADOK">
+<meta property="og:title" content="TADOK — תיעוד, בקרת איכות ושליטה באתר הבנייה">
+<meta property="og:description" content="פלטפורמה לניהול אתר בנייה: יציקות, ברזל, מסמכים, בקרת איכות ודוחות.">
+<meta property="og:image" content="https://tadok.vercel.app/brand/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="he_IL">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="js/pdf-report.js"></script>
+<style>
+/* the hidden "פעולות" header (.sr-only) is position:absolute; without a positioned table it escapes
+   the scrolling .table-wrap and widens the whole page on a phone */
+.items-table, .orders-table { position: relative; }
+.order-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.order-head h2 { margin: 0; }
+.unit-totals { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.unit-pill {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 12px; font-size: 12.5px; font-weight: 700; color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+.orders-table tr.is-overdue td:first-child { box-shadow: inset -3px 0 0 var(--danger); }
+.orders-table tbody tr[data-open] { cursor: pointer; }
+.orders-table td:first-child, .items-table td.num-cell { white-space: nowrap; }
+.contact-row { display: grid; grid-template-columns: 1fr 1fr 1fr 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
+.contact-row input { padding: 8px 10px; border: 2px solid var(--border); border-radius: var(--radius-sm); font: inherit; min-width: 0; }
+@media (max-width: 560px) { .contact-row { grid-template-columns: 1fr 1fr 32px; } .contact-row input[data-k="role"] { grid-column: 1 / -2; } }
+.orderer-line { font-size: 13.5px; color: var(--navy); font-weight: 600; padding: 9px 0; }
+.locked-note { font-size: 12.5px; color: var(--steel); font-weight: 600; }
+.shape-thumb { display: block; width: 150px; height: 60px; }
+.shape-thumb svg { width: 100%; height: 100%; }
+.approx-badge {
+  font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px;
+  background: rgba(255,157,66,0.16); color: #b5651d; white-space: nowrap;
+}
+.calc-preview {
+  margin-top: 14px; padding: 14px 16px;
+  background: var(--green-soft); border: 1px solid rgba(34, 216, 107,0.3);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.calc-preview-formula { font-size: 12.5px; color: var(--steel); }
+.calc-preview-result { font-size: 22px; font-weight: 800; color: var(--green-deep); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.calc-preview-unit { font-size: 13px; font-weight: 700; color: var(--steel); }
+.modal.modal-wide { max-width: 880px; }
+.shape-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.shape-catalog { max-height: 230px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 14px; background: var(--bg); }
+.shape-group + .shape-group { margin-top: 8px; }
+.shape-group-label { font-size: 11.5px; font-weight: 700; color: var(--steel); margin-bottom: 6px; }
+.shape-group-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.shape-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; width: 104px; padding: 6px;
+  background: var(--sheet); border: 2px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--navy);
+}
+.shape-btn:hover { border-color: rgba(34, 216, 107, 0.5); }
+.shape-btn.is-on { border-color: var(--green); background: var(--green-soft); }
+.shape-btn svg { width: 84px; height: 40px; }
+.shape-stage { display: flex; justify-content: center; background: var(--bg); border-radius: var(--radius-sm); padding: 8px; margin-bottom: 14px; }
+.shape-stage svg { max-width: 100%; height: auto; }
+.len-grid { margin-bottom: 14px; }
+.freehand-wrap { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.freehand-grid { width: 100%; max-width: 440px; height: auto; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: crosshair; touch-action: manipulation; }
+.check-row { display: flex; flex-wrap: wrap; gap: 14px; }
+.check-line { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--navy); }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.summary-grid table { min-width: 0; }
+.summary-grid td.num-cell, .summary-grid th.num-cell { text-align: left; }
+</style>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title" id="pageTitle">הזמנות ברזל</h1>
+  <div class="stats-row" id="statsRow"></div>
+
+  <!-- the site's orders -->
+  <div class="card" id="ordersCard">
+    <div class="card-header">
+      <h2>הזמנות ברזל</h2>
+      <div class="header-actions">
+        <button class="btn btn-primary" id="newBtn">+ הזמנה חדשה</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="orders-table">
+        <thead><tr><th>מס' הזמנה</th><th>שם ההזמנה</th><th>ספק</th><th>תאריך אספקה</th><th>טון</th><th>סטטוס</th><th>סופק</th><th><span class="sr-only">פעולות</span></th></tr></thead>
+        <tbody id="ordersBody">
+          <tr class="empty-row"><td colspan="8"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- one order -->
+  <div id="editorWrap" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <div class="order-head"><h2 id="edTitle">הזמנה חדשה</h2><span id="edStatus"></span></div>
+        <div class="header-actions" id="edActions"></div>
+      </div>
+      <div id="edMsg" class="msg"></div>
+      <form class="form-grid" id="headerForm" autocomplete="off">
+        <div class="field"><label for="f-name">שם ההזמנה *</label><input id="f-name" maxlength="200" placeholder="לדוגמה: ברזל רצפה קומה 2"></div>
+        <div class="field"><label for="f-order_no">מס' הזמנה *</label><input id="f-order_no" maxlength="40"></div>
+        <div class="field"><label for="f-supplier">ספק</label><input id="f-supplier" list="supplierList" maxlength="120"><datalist id="supplierList"></datalist></div>
+        <div class="field"><label for="f-required_date">תאריך אספקה נדרש</label><input id="f-required_date" type="date"></div>
+        <div class="field full"><label for="f-delivery_address">כתובת למשלוח</label><input id="f-delivery_address" maxlength="200"></div>
+        <div class="field full"><label for="f-driver_notes">הערות לנהג</label><textarea id="f-driver_notes" rows="2" maxlength="500"></textarea></div>
+        <div class="field"><label for="f-waste_pct">פחת (%)</label><input id="f-waste_pct" inputmode="decimal"></div>
+        <div class="field"><label>מזמין</label><div class="orderer-line" id="ordererLine"></div></div>
+        <div class="field full">
+          <label>אנשי קשר בשטח</label>
+          <div id="contactsList"></div>
+          <div><button type="button" class="btn btn-outline btn-sm" id="addContactBtn">+ איש קשר</button></div>
+        </div>
+      </form>
+    </div>
+
+    <div id="sectionsHost"></div>
+    <div id="summaryHost"></div>
+  </div>
+</main>
+
+<!-- close an order -->
+<div class="modal-backdrop" id="closeBackdrop">
+  <div class="modal">
+    <button class="icon-btn modal-close" id="closeX" aria-label="סגירה"><svg class="ui-ico ui-ico-x" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    <h3>סגירת הזמנה</h3>
+    <div id="closeMsg" class="msg"></div>
+    <div class="field full">
+      <label for="closeReason">סיבת סגירה *</label>
+      <textarea id="closeReason" rows="3" maxlength="500" placeholder="לדוגמה: הספק לא יספק את היתרה"></textarea>
+      <div class="field-hint">הזמנה סגורה לא מחכה עוד לאספקה, גם אם נשארו שורות שלא סופקו.</div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="closeConfirm">סגור הזמנה</button>
+      <button type="button" class="btn btn-outline" id="closeCancel">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- add / edit a line (bar, mesh or pile) -->
+<div class="modal-backdrop" id="itemBackdrop">
+  <div class="modal" id="itemModal"></div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/policies.js"></script>
+<script src="js/app.js"></script>
+<script src="js/rebar-calc.js"></script>
+<script src="js/rebar-shapes.js"></script>
+<script src="js/rebar-orders-core.js"></script>
+<script src="js/rebar-pdf.js"></script>
+<script src="js/rebar-orders.js"></script>
+</body>
+</html>

@@ -7,6 +7,8 @@ const COMPANY_EXPORT_PAGE = 1000;   // PostgREST returns at most this many rows 
 const COMPANY_EXPORT_TABLES = [
   { table: 'concrete_pours', label: 'יציקות בטון' },
   { table: 'rebar_deliveries', label: 'משלוחי ברזל' },
+  { table: 'rebar_orders', label: 'הזמנות ברזל' },
+  { table: 'rebar_order_items', label: 'שורות הזמנות ברזל' },
   { table: 'prestressed_slabs', label: 'לוח״דים' },
   { table: 'vendor_submissions', label: 'הגשות לאישור' },
   { table: 'quality_controls', label: 'בקרת איכות' },
