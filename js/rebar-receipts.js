@@ -5,7 +5,7 @@
 
 const RR_TOLERANCE_KG = 5;      // with 1%: the same threshold the documents check uses
 const RR_TOLERANCE_PCT = 0.01;
-const RR_SECTION = { bar: 'מוטות', mesh: 'רשתות', pile: 'כלונסאות' };
+const RR_SECTION = { bar: 'מוטות', mesh: 'רשתות', pile: 'כלונסאות', element: 'אלמנטים' };
 
 function rrRound(x, n = 2) {
   const f = 10 ** n;
@@ -52,6 +52,8 @@ function deriveStatus(order, items, receiptItems) {
 function noteGroupOf(item, rows) {
   const d = Number(item.diameter_mm);
   const read = (rows || []).filter(r => !r.unread);
+  // a ready element is printed under its own group on the supplier's note
+  if (item.kind === 'element') { const e = read.find(r => r.group === 'אלמנטים מרותכים'); return e ? e.group : null; }
   if (item.kind === 'mesh') {
     const m = read.find(r => r.mesh_d === d);
     if (m) return m.group;
@@ -87,8 +89,10 @@ function receiptCheck({ order, items, ticked, note, priorNotes = [], prior = {} 
       checks.push({ level: 'warn', text: `התקבל יותר מהמוזמן בשורה ${it.line_no} (${RR_SECTION[it.kind] || ''})` });
     }
   }
+  // only lines that weigh something are compared (a spacer is counted, not weighed)
   const marked = (ticked || []).filter(t => byId[t.item_id] && Number(t.qty) > 0)
-    .map(t => ({ it: byId[t.item_id], kg: Number(t.qty) * (Number(byId[t.item_id].unit_kg) || 0) }));
+    .map(t => ({ it: byId[t.item_id], kg: Number(t.qty) * (Number(byId[t.item_id].unit_kg) || 0) }))
+    .filter(m => m.kg > 0);
   const noteKg = Number(n.total_kg);
   if (!marked.length) return checks;
   if (!(noteKg >= 20)) {

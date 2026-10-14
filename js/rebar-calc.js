@@ -43,14 +43,43 @@ function pileCalc(p, dMain) {
   return { length_cm: length, unit_kg: rebarRound(mMain * rebarW(dMain) + mSpiral * rebarW(p.d_spiral), 2), meters };
 }
 
+// A "ליפט": a closed bundle of straight bars from the mill, each lift at most REBAR_LIFT_KG.
+// Bars per lift are counted in agorot-like hundredths so a float never drops a bar.
+const REBAR_LIFT_KG = 1500;
+
+function rebarLiftQty(d, lengthCm, lifts) {
+  const unit = rebarRound(lengthCm / 100 * rebarW(d), 2);
+  const perLift = Math.floor(REBAR_LIFT_KG * 100 / Math.round(unit * 100));
+  const qty = perLift * lifts;
+  return { unit_kg: unit, per_lift: perLift, qty, lift_kg: rebarRound(perLift * unit, 2), total_kg: rebarRound(qty * unit, 2) };
+}
+
+// An element (spec 2026-10-14 §3). A corner mesh ("רשת קרנץ") is weighed from its bars the
+// way a mesh is: ceil(L/s) cross bars of a+b cm, plus n_long bars along L — not measured on a
+// supplier's note yet, so approximate. A spacer is counted, not weighed; "other" carries its
+// own weight per unit.
+function elementCalc(p, d) {
+  if (p.type === 'kranz') {
+    const mT = Math.ceil(p.L / p.s) * (p.a + p.b) / 100;
+    const mL = p.n_long * p.L / 100;
+    const meters = rebarAddMeters(rebarAddMeters({}, d, mT), p.d_long, mL);
+    return { length_cm: p.L, unit_kg: rebarRound(mT * rebarW(d) + mL * rebarW(p.d_long), 2), meters, approx: true, weighed: true };
+  }
+  if (p.type === 'spacer') return { length_cm: 200, unit_kg: 0, meters: {}, approx: false, weighed: false };
+  return { length_cm: null, unit_kg: rebarRound(Number(p.unit_kg) || 0, 2), meters: {}, approx: false, weighed: true };
+}
+
 // One order line → its weights, its metres per diameter (for the whole quantity), and
 // the flags the summary needs.
 function itemCalc(item) {
   const qty = Number(item.qty) || 0, d = Number(item.diameter_mm);
-  let length = null, unit = 0, meters = {}, approx = false;
+  let length = null, unit = 0, meters = {}, approx = false, weighed = true;
   if (item.kind === 'mesh') {
     const m = meshCalc(item.params, d);
     unit = m.unit_kg; meters = m.meters; approx = m.approx;
+  } else if (item.kind === 'element') {
+    const e = elementCalc(item.params, d);
+    length = e.length_cm; unit = e.unit_kg; meters = e.meters; approx = e.approx; weighed = e.weighed;
   } else if (item.kind === 'pile') {
     const p = pileCalc(item.params, d);
     length = p.length_cm; unit = p.unit_kg; meters = p.meters;
@@ -64,12 +93,12 @@ function itemCalc(item) {
   const family = item.kind === 'bar' && item.shape ? item.shape.family : null;
   return {
     length_cm: length, unit_kg: unit, total_kg: rebarRound(unit * qty, 2), meters,
-    bent: !!family && family !== 'straight', kalmara: family === 'kalmara', approx,
+    bent: !!family && family !== 'straight', kalmara: family === 'kalmara', approx, weighed,
   };
 }
 
 function orderSummary(items, wastePct) {
-  const sections = { bar: { units: 0, kg: 0 }, mesh: { units: 0, kg: 0 }, pile: { units: 0, kg: 0 } };
+  const sections = { bar: { units: 0, kg: 0 }, mesh: { units: 0, kg: 0 }, pile: { units: 0, kg: 0 }, element: { units: 0, kg: 0 } };
   const meters = {};
   let cut = 0, bend = 0, kal = 0;
   for (const item of items) {
@@ -83,12 +112,12 @@ function orderSummary(items, wastePct) {
     if (c.bent || !REBAR_STOCK_LENGTHS.includes(c.length_cm)) cut += c.total_kg;
     if (c.kalmara) kal += Number(item.qty) || 0;
   }
-  const totalKg = sections.bar.kg + sections.mesh.kg + sections.pile.kg;
+  const totalKg = sections.bar.kg + sections.mesh.kg + sections.pile.kg + sections.element.kg;
   const totalT = totalKg / 1000, pct = Number(wastePct) || 0;
   for (const s of Object.values(sections)) s.kg = rebarRound(s.kg, 2);
   return {
     sections,
-    units: sections.bar.units + sections.mesh.units + sections.pile.units,
+    units: sections.bar.units + sections.mesh.units + sections.pile.units + sections.element.units,
     total_kg: rebarRound(totalKg, 2),
     total_t: rebarRound(totalT, 4),
     waste_t: rebarRound(totalT * pct / 100, 4),

@@ -31,6 +31,7 @@ const RP_SECTIONS = {
   bar: { title: 'מוטות', heads: ['#', 'שרטוט', 'כינוי', 'סוג פלדה', 'קוטר מ״מ', 'אורך ס״מ', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
   mesh: { title: 'רשתות', heads: ['#', 'כינוי', 'סוג רשת', 'X×Y ס״מ', 'קוטר מ״מ', 'פסיעה ס״מ', 'סוג פלדה', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
   pile: { title: 'כלונסאות', heads: ['#', 'כינוי', 'סוג', 'd/D ס״מ', 'מוטות', 'אורך ס״מ', 'ספירלה', 'תוספות', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
+  element: { title: 'אלמנטים', heads: ['#', 'שרטוט', 'כינוי', 'סוג', 'פירוט', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
 };
 
 function rebarPdfBanner(orgName, logoHtml, genStr) {
@@ -128,6 +129,12 @@ function rebarPdfCells(it, drawings) {
     const img = drawings[it.line_no] ? `<img src="${drawings[it.line_no]}" style="width:150px;height:55px;display:block;">` : '<span style="color:#9FAAB0;">כמו בקובץ</span>';
     return cell(img, 'padding:4px 8px;') + alias + cell(rebarPdfEsc(it.steel)) + num(it.diameter_mm, 1) + num(it.length_cm, 1) + tail;
   }
+  if (it.kind === 'element') {
+    // a spacer is counted, not weighed: its weights print as a dash
+    const img = drawings['e' + it.line_no] ? `<img src="${drawings['e' + it.line_no]}" style="width:150px;height:55px;display:block;">` : '—';
+    const weights = p.type === 'spacer' ? num(it.qty, 0) + cell('—', 'text-align:left;') + cell('—', 'text-align:left;') : tail;
+    return cell(img, 'padding:4px 8px;') + alias + cell(rebarPdfEsc(elementLabel(it))) + (p.type === 'kranz' ? cell(rebarPdfLtr(elementDesc(it)), 'text-align:left;') : cell(rebarPdfEsc(elementDesc(it)))) + weights;
+  }
   if (it.kind === 'mesh') {
     const asym = p.type === 'asym';
     return alias + cell(asym ? 'א-סימטרי' : 'סימטרי') + cell(rebarPdfLtr(`${p.x}×${p.y}`), 'text-align:left;white-space:nowrap;')
@@ -174,7 +181,7 @@ function rebarPdfMiniTable(title, heads, rows, foot) {
 
 function rebarPdfSummary(summary, wastePct) {
   const s = summary, n = rebarPdfNum;
-  const secs = [['מוטות', s.sections.bar], ['רשתות', s.sections.mesh], ['כלונסאות', s.sections.pile]];
+  const secs = [['מוטות', s.sections.bar], ['רשתות', s.sections.mesh], ['כלונסאות', s.sections.pile], ['אלמנטים', s.sections.element]];
   return `
     <div style="padding:16px 40px 8px;">
       <div style="font-size:14px;font-weight:800;color:#0E1A20;margin-bottom:10px;">סיכום הזמנה</div>
@@ -194,7 +201,7 @@ function rebarPdfSummary(summary, wastePct) {
 // One HTML string per A4 page. Lines flow bar → mesh → pile, REBAR_PDF_ROWS per page,
 // never split; the summary goes on the last page when it has room, else on a page of its own.
 function rebarPdfPages({ orgName, logoHtml, site, order, items, summary, drawings, genStr }) {
-  const rank = { bar: 0, mesh: 1, pile: 2 };
+  const rank = { bar: 0, mesh: 1, pile: 2, element: 3 };
   const lines = [...items].sort((a, b) => rank[a.kind] - rank[b.kind] || a.line_no - b.line_no);
   const chunks = [];
   let i = 0;
@@ -242,6 +249,8 @@ async function rebarExportPdf({ order, items, site }) {
   const drawings = {};
   for (const it of items) {
     if (it.kind === 'bar' && it.shape) drawings[it.line_no] = await rebarSvgToPng(shapeSvg(it.shape, { w: 300, h: 110, stroke: 2.2 }), 300, 110);
+    const el = it.kind === 'element' ? elementSvg(it.params, { w: 300, h: 110, stroke: 2.2 }) : null;
+    if (el) drawings['e' + it.line_no] = await rebarSvgToPng(el, 300, 110);
   }
   const logo = await orgLogo(activeOrg);
   const logoHtml = logo.isCompany ? await pdfLogoHtml(40) : '';

@@ -186,6 +186,33 @@ function shapeSvg(shape, opts = {}) {
   return out + '</svg>';
 }
 
+// ---- elements (spec 2026-10-14) ----
+// A corner mesh ("רשת קרנץ") drawn as its cross section: the cross bar's long leg a with the
+// short leg b at the far end (down for the upper mesh, up for the lower one), and the
+// longitudinal bars as circles 10, 30, 50 … cm from the free end, as on the supplier's sheet.
+// Spacers and other elements have no drawing.
+function elementSvg(p, opts = {}) {
+  if (!p || p.type !== 'kranz') return null;
+  const w = opts.w || 300, h = opts.h || 120, stroke = opts.stroke || 2;
+  const pad = Math.min(22, Math.round(Math.min(w, h) * 0.3));
+  const up = p.variant !== 'lower';
+  const shape = { family: 'figura', segments: [{ len: p.a, turn: up ? 90 : -90 }, { len: p.b, turn: 0 }] };
+  const { points: P, labels } = shapeLayout(shape, w, h, pad);
+  const text = (x, y, t) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="#0E1A20">${t}</text>`;
+  let out = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
+    + `<polyline points="${P.map(q => q.x.toFixed(1) + ',' + q.y.toFixed(1)).join(' ')}" fill="none" stroke="#0E1A20" stroke-width="${stroke}" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const a = Number(p.a), n = Number(p.n_long) || 0;
+  if (a > 0) {
+    const side = up ? 1 : -1, r = Math.max(2.5, stroke * 1.4);
+    for (let i = 0; i < n && 10 + 20 * i < a; i++) {
+      const x = P[0].x + (10 + 20 * i) / a * (P[1].x - P[0].x);
+      out += `<circle cx="${x.toFixed(1)}" cy="${(P[0].y + side * (r + stroke)).toFixed(1)}" r="${r.toFixed(1)}" fill="none" stroke="#0E1A20" stroke-width="${Math.max(1, stroke * 0.7).toFixed(1)}"/>`;
+    }
+  }
+  labels.forEach((l, i) => { out += text(l.x + l.nx * 11, l.y + l.ny * 11, rbLabel(i ? p.b : p.a)); });
+  return out + '</svg>';
+}
+
 // ---- editing on the drawing ----
 // The legs that share one length with leg i (a closed stirrup's opposite sides).
 function shapeLinkedSegs(shape, i) {

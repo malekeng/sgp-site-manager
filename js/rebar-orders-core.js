@@ -83,6 +83,22 @@ function validateItem(kind, f) {
       if (!REBAR_MESH_D.includes(num('d_y'))) e.d_y = 'בחרו קוטר מהרשימה';
       if (!REBAR_STEPS.includes(num('s_x'))) e.s_x = 'בחרו פסיעה מהרשימה';
     }
+  } else if (kind === 'element') {
+    if (f.type === 'kranz') {
+      if (!pos('L')) e.L = 'אורך הרשת — מספר גדול מ-0';
+      if (!REBAR_BAR_D.includes(num('diameter_mm'))) e.diameter_mm = 'בחרו קוטר מהרשימה';
+      if (!REBAR_STEPS.includes(num('s'))) e.s = 'בחרו פסיעה מהרשימה';
+      if (!pos('a')) e.a = 'אורך — מספר גדול מ-0';
+      if (!pos('b')) e.b = 'אורך — מספר גדול מ-0';
+      const nl = num('n_long');
+      if (!(nl !== null && Number.isInteger(nl) && nl >= 0)) e.n_long = 'מספר מוטות — מספר שלם 0 ומעלה';
+      if (!REBAR_BAR_D.includes(num('d_long'))) e.d_long = 'בחרו קוטר מהרשימה';
+    } else if (f.type === 'spacer') {
+      if (!REBAR_SPACER_HEIGHTS.includes(num('height_mm'))) e.height_mm = 'בחרו גובה מהרשימה';
+    } else if (f.type === 'other') {
+      if (!String(f.name || '').trim()) e.name = 'שם האלמנט — חובה';
+      if (f.unit_kg !== undefined && f.unit_kg !== null && f.unit_kg !== '' && !(num('unit_kg') >= 0)) e.unit_kg = 'משקל ליחידה — מספר 0 ומעלה';
+    } else e.type = 'בחרו סוג אלמנט';
   } else if (kind === 'pile') {
     if (!REBAR_PILE_D.includes(num('diameter_mm'))) e.diameter_mm = 'בחרו קוטר מהרשימה';
     const n = num('n');
@@ -115,6 +131,16 @@ function buildItem(kind, f, lineNo) {
   } else if (kind === 'mesh') {
     row.params = { type: f.type === 'asym' ? 'asym' : 'sym', x: parseNum(f.x), y: parseNum(f.y), s: parseNum(f.s) };
     if (f.type === 'asym') { row.params.d_y = parseNum(f.d_y); row.params.s_x = parseNum(f.s_x); }
+  } else if (kind === 'element') {
+    row.steel = 'מצולע';
+    if (f.type === 'kranz') {
+      row.params = { type: 'kranz', variant: f.variant === 'lower' ? 'lower' : 'upper' };
+      for (const k of ['L', 's', 'a', 'b', 'n_long', 'd_long']) row.params[k] = parseNum(f[k]);
+    } else {
+      row.diameter_mm = null;
+      row.params = f.type === 'spacer' ? { type: 'spacer', height_mm: parseNum(f.height_mm) }
+        : { type: 'other', name: String(f.name || '').trim(), unit_kg: parseNum(f.unit_kg) ?? 0 };
+    }
   } else if (kind === 'pile') {
     row.params = {
       pile_type: f.pile_type || 'בסיס', d: parseNum(f.d), D: parseNum(f.D), n: parseNum(f.n),
@@ -127,6 +153,55 @@ function buildItem(kind, f, lineNo) {
   row.unit_kg = c.unit_kg;
   row.total_kg = c.total_kg;
   return row;
+}
+
+// ---- ליפט: a closed bundle of straight bars (spec 2026-10-14 §2) ----
+function validateLift(f) {
+  const e = {}, lifts = parseNum(f.lifts);
+  if (!(lifts !== null && Number.isInteger(lifts) && lifts > 0)) e.lifts = 'מספר ליפטים — מספר שלם גדול מ-0';
+  if (!REBAR_BAR_D.includes(parseNum(f.diameter_mm))) e.diameter_mm = 'בחרו קוטר מהרשימה';
+  if (!REBAR_STOCK_LENGTHS.includes(parseNum(f.length))) e.length = 'אורך: 600 או 1200';
+  if (f.steel !== undefined && !REBAR_STEELS.includes(f.steel)) e.steel = 'סוג פלדה: מצולע או עגול';
+  return e;
+}
+
+// A lift is stored as an ordinary straight bar, so weights, PDF and receipts treat it as one.
+function buildLiftItem(f, lineNo) {
+  const d = parseNum(f.diameter_mm), L = parseNum(f.length), lifts = parseNum(f.lifts);
+  const q = rebarLiftQty(d, L, lifts);
+  const note = lifts === 1 ? `ליפט אחד × ${q.per_lift}` : `${lifts} ליפטים × ${q.per_lift}`;
+  return buildItem('bar', { code: 'S', shape: null, lens: [L], diameter_mm: d, qty: q.qty, steel: f.steel || 'מצולע', alias: 'ליפט', note }, lineNo);
+}
+
+// ---- אלמנט: a corner mesh, a spacer, or another ready element (spec 2026-10-14 §3) ----
+const REBAR_ELEMENT_TYPES = [['kranz', 'רשת קרנץ'], ['spacer', 'שומר מרחק'], ['other', 'אחר']];
+const REBAR_KRANZ_VARIANTS = [['upper', 'קרנץ עליון (ע.)'], ['lower', 'קרנץ תחתון (ת.)']];
+const REBAR_SPACER_HEIGHTS = Array.from({ length: 22 }, (_, i) => 70 + i * 10);   // 70…280 mm
+
+// The window's form for an element: the defaults for a new one, or a saved row read back.
+function rebarElementForm(item) {
+  const p = (item && item.params) || {};
+  return {
+    alias: item ? item.alias || '' : '', note: item ? item.note || '' : '', qty: item ? item.qty : '', steel: 'מצולע',
+    type: p.type || 'kranz', variant: p.variant || 'upper', L: p.L ?? 600, diameter_mm: item && p.type === 'kranz' ? item.diameter_mm : 8,
+    s: p.s ?? 20, a: p.a ?? 80, b: p.b ?? 15, n_long: p.n_long ?? 3, d_long: p.d_long ?? 8,
+    height_mm: p.height_mm ?? 120, name: p.name || '', unit_kg: p.type === 'other' && p.unit_kg ? p.unit_kg : '',
+  };
+}
+
+// The "סוג" text of an element, for the order table and the PDF.
+function elementLabel(item) {
+  const p = item.params || {};
+  if (p.type === 'kranz') return (REBAR_KRANZ_VARIANTS.find(v => v[0] === p.variant) || REBAR_KRANZ_VARIANTS[0])[1];
+  return (REBAR_ELEMENT_TYPES.find(t => t[0] === p.type) || REBAR_ELEMENT_TYPES[2])[1];
+}
+
+// The "פירוט" text of an element, for the order table and the PDF.
+function elementDesc(item) {
+  const p = item.params || {}, n = v => String(Number(v));
+  if (p.type === 'kranz') return `L=${n(p.L)} · Ø${n(item.diameter_mm)}@${n(p.s)} · ${n(p.n_long)}Ø${n(p.d_long)}`;
+  if (p.type === 'spacer') return `גובה ${n(p.height_mm)} מ״מ · אורך 2 מ׳`;   // plain Hebrew: a mixed LTR wrapper garbles it
+  return p.name || '';
 }
 
 const REBAR_ORDER_RESET = ['id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'sent_at', 'sent_by',

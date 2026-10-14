@@ -9,7 +9,11 @@ const RO_SECTIONS = {
   bar: { title: 'מוטות', add: '+ הוספת מוט', item: 'מוט' },
   mesh: { title: 'רשתות', add: '+ הוספת רשת', item: 'רשת' },
   pile: { title: 'כלונסאות', add: '+ הוספת כלונס', item: 'כלונס' },
+  element: { title: 'אלמנטים', add: '+ הוספת אלמנט', item: 'אלמנט' },
 };
+// the add-items window's tabs: a ליפט is a quick way to a straight-bar line
+const RO_WINDOW_TABS = [['bar', 'מוט'], ['lift', 'ליפט'], ['mesh', 'רשת'], ['pile', 'כלונס'], ['element', 'אלמנט']];
+const RO_KIND_RANK = { bar: 0, mesh: 1, pile: 2, element: 3 };
 const RO_PILE_ADDITIONS = ['אוזניים', 'טבעות', 'צינורות גמא'];
 const RO_ITEM_COLS = ['kind', 'line_no', 'alias', 'note', 'steel', 'diameter_mm', 'qty', 'length_cm', 'shape', 'params', 'unit_kg', 'total_kg'];
 
@@ -118,9 +122,8 @@ async function roOpenOrder(id) {
     sb.from('rebar_order_items').select('*').eq('order_id', id).order('line_no'),
   ]);
   if (error || e2) { toast(rebarDbError(error || e2), 'error'); return; }
-  const rank = { bar: 0, mesh: 1, pile: 2 };
   Object.assign(state, {
-    order, items: (items || []).sort((a, b) => rank[a.kind] - rank[b.kind] || a.line_no - b.line_no),
+    order, items: (items || []).sort((a, b) => RO_KIND_RANK[a.kind] - RO_KIND_RANK[b.kind] || a.line_no - b.line_no),
     removedIds: [], dirty: false, loadedUpdatedAt: order.updated_at, noTouched: false,
   });
   await roLoadReceipts(id);
@@ -284,7 +287,7 @@ async function saveOrder() {
       if (error) throw error;
       state.removedIds = [];
     }
-    const counters = { bar: 0, mesh: 0, pile: 0 };
+    const counters = { bar: 0, mesh: 0, pile: 0, element: 0 };
     for (const it of state.items) {
       const no = ++counters[it.kind];
       if (it.line_no !== no) { it.line_no = no; it._dirty = true; }
@@ -390,6 +393,12 @@ function roLineCells(it) {
     return `<td>${it.alias ? esc(it.alias) : '<span class="cell-muted">—</span>'}</td><td>${p.type === 'asym' ? 'א-סימטרי' : 'סימטרי'}${approx}</td>
       <td class="num-cell"><bdi dir="ltr">${esc(`${p.x}×${p.y}`)}</bdi></td><td class="num-cell"><bdi dir="ltr">${esc(d)}</bdi></td><td class="num-cell"><bdi dir="ltr">${esc(step)}</bdi></td><td>${esc(it.steel)}</td>`;
   }
+  if (it.kind === 'element') {
+    const svg = elementSvg(it.params, { w: 150, h: 60, stroke: 1.6 });
+    return `<td>${svg ? `<span class="shape-thumb">${svg}</span>` : '<span class="cell-muted">—</span>'}</td>
+      <td>${it.alias ? esc(it.alias) : '<span class="cell-muted">—</span>'}</td><td>${esc(elementLabel(it))}${approx}</td>
+      <td>${it.params && it.params.type === 'kranz' ? `<bdi dir="ltr">${esc(elementDesc(it))}</bdi>` : esc(elementDesc(it))}</td>`;
+  }
   const p = it.params || {};
   return `<td>${it.alias ? esc(it.alias) : '<span class="cell-muted">—</span>'}</td><td>${esc(p.pile_type || 'בסיס')}</td>
     <td class="num-cell"><bdi dir="ltr">${esc(`${p.d}/${p.D}`)}</bdi></td><td class="num-cell"><bdi dir="ltr">${esc(`${p.n}×Ø${fmtNum(it.diameter_mm, 1)}`)}</bdi></td>
@@ -400,6 +409,7 @@ const RO_SECTION_HEADS = {
   bar: ['שרטוט', 'כינוי', 'סוג פלדה', 'קוטר (מ״מ)', 'אורך (ס״מ)'],
   mesh: ['כינוי', 'סוג רשת', 'X×Y (ס״מ)', 'קוטר (מ״מ)', 'פסיעה (ס״מ)', 'סוג פלדה'],
   pile: ['כינוי', 'סוג כלונס', 'd/D (ס״מ)', 'מוטות', 'אורך (ס״מ)', 'ספירלה'],
+  element: ['שרטוט', 'כינוי', 'סוג', 'פירוט'],
 };
 
 function roRenderSections() {
@@ -417,8 +427,8 @@ function roRenderSections() {
       return `<tr>
         <td class="num-cell">${n + 1}</td>${roLineCells(it)}
         <td class="num-cell">${esc(fmtNum(it.qty, 0))}</td>
-        <td class="num-cell">${esc(fmtNum(c.unit_kg, 2))}</td>
-        <td class="num-cell"><strong>${esc(fmtNum(c.total_kg, 2))}</strong></td>
+        <td class="num-cell">${c.weighed ? esc(fmtNum(c.unit_kg, 2)) : '<span class="cell-muted">—</span>'}</td>
+        <td class="num-cell"><strong>${c.weighed ? esc(fmtNum(c.total_kg, 2)) : '—'}</strong></td>
         ${track ? roLineSupplied(prog.lines[it.id]) : ''}
         <td class="row-actions">${draft ? `<div class="row-actions-inner">
           <button class="icon-btn" data-edit-line="${idx}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
@@ -433,6 +443,7 @@ function roRenderSections() {
           <h2>${sec.title}</h2>
           <div class="header-actions">
             <div class="unit-totals"><span class="unit-pill">${esc(fmtNum(totals.units, 0))} יח׳</span><span class="unit-pill">${roTons(totals.kg)} טון</span></div>
+            ${draft && kind === 'bar' ? '<button class="btn btn-outline" data-add="lift">+ ליפט</button>' : ''}
             ${draft ? `<button class="btn btn-primary" data-add="${kind}">${sec.add}</button>` : ''}
           </div>
         </div>
@@ -544,6 +555,8 @@ function roRecentSave(list) {
 }
 
 function roFormFromItem(kind, it) {
+  if (kind === 'lift') return { diameter_mm: 12, length: '600', lifts: 1, steel: 'מצולע' };
+  if (kind === 'element') return rebarElementForm(it);
   const base = { alias: it ? it.alias || '' : '', steel: it ? it.steel : 'מצולע', note: it ? it.note || '' : '', qty: it ? it.qty : '' };
   if (kind === 'bar') {
     if (!it) return { ...base, code: 'S', shape: null, lens: ['600'], diameter_mm: 8, hook_cm: '' };
@@ -580,7 +593,7 @@ function roOpenItemDialog(kind, idx) {
   });
   document.getElementById('itemBackdrop').classList.add('open');   // open first: the drawing measures its box
   roRenderItemDialog();
-  const first = document.querySelector('#itemModal [data-k="qty"]');
+  const first = document.querySelector('#itemModal [data-k="qty"], #itemModal [data-k="lifts"]');
   if (first && idx === null) first.focus({ preventScroll: true });
 }
 
@@ -590,8 +603,18 @@ function roCloseItemDialog() {
   dlg.added = [];
 }
 
+// The lengths the drawing edits: a bar's typed values, or a corner mesh's two legs a and b.
+function roLens() {
+  return dlg.kind === 'element' ? [dlg.f.a, dlg.f.b] : dlg.f.lens;
+}
+
 function roDialogShape() {
-  const f = dlg.f, base = rebarBaseShape(f);
+  const f = dlg.f;
+  if (dlg.kind === 'element') {   // the corner mesh's cross bar, drawn and edited like a bar's legs
+    return { code: 'KR', family: 'figura', hooks: 0, equal: [], inputs: [0, 1],
+      segments: [{ len: parseNum(f.a) ?? 0, turn: f.variant === 'lower' ? -90 : 90 }, { len: parseNum(f.b) ?? 0, turn: 0 }] };
+  }
+  const base = rebarBaseShape(f);
   if (!base) return null;
   const s = shapeSetLengths(base, (f.lens || []).map(v => parseNum(v) ?? 0));
   const hook = parseNum(f.hook_cm);
@@ -735,15 +758,73 @@ function roItemShort(r) {
   const d = 'Ø' + fmtNum(r.diameter_mm, 1);
   if (r.kind === 'mesh') return `${fmtNum(r.params.x, 0)}×${fmtNum(r.params.y, 0)} ${d} × ${r.qty}`;
   if (r.kind === 'pile') return `כלונס ${d} × ${r.qty}`;
-  return `${d} × ${r.qty}`;
+  if (r.kind === 'element') return `${elementLabel(r)} × ${r.qty}`;
+  return `${r.alias === 'ליפט' ? 'ליפט ' : ''}${d} × ${r.qty}`;
+}
+
+// a segmented choice: one button per [value, text], the chosen one pressed
+function roSeg(key, value, opts) {
+  return `<div class="iw-seg" role="group">${opts.map(([v, t]) =>
+    `<button type="button" data-set="${key}" data-val="${esc(v)}" aria-pressed="${String(v) === String(value)}">${esc(t)}</button>`).join('')}</div>`;
+}
+
+// ---- ליפט: a closed bundle of straight bars, each lift up to 1,500 kg ----
+function roLiftBodyHtml() {
+  const f = dlg.f;
+  return `<div class="iw-body iw-body-form"><div class="iw-card iw-card-narrow">
+    ${roRow('קוטר (מ״מ)', 'diameter_mm', f.diameter_mm, REBAR_BAR_D.map(d => [d, 'Ø' + d]))}
+    <div class="field iw-row" data-field="length"><label>אורך (ס״מ)</label>${roSeg('length', f.length, REBAR_STOCK_LENGTHS.map(l => [l, String(l)]))}<div class="field-error-msg"></div></div>
+    ${roRow('מספר ליפטים', 'lifts', f.lifts, null, 'inputmode="numeric" autocomplete="off"')}
+    ${roRow('סוג פלדה', 'steel', f.steel, REBAR_STEELS)}
+    <div class="field-hint">ליפט סגור — עד ${fmtNum(REBAR_LIFT_KG, 0)} ק״ג. נרשם כמוט ישר בכינוי "ליפט".</div>
+    ${roFootHtml(false)}
+  </div></div>`;
+}
+
+// ---- אלמנט: a corner mesh (drawn), a spacer, or another ready element ----
+function roElementBodyHtml() {
+  const f = dlg.f;
+  const types = `<div class="iw-typebar">${roSeg('type', f.type, REBAR_ELEMENT_TYPES)}</div>`;
+  if (f.type === 'kranz') {
+    const lens = [['A', 'a', 0], ['B', 'b', 1]].map(([letter, key, k]) => `<div class="field iw-lrow" data-field="${key}">
+      <span class="iw-letter">${letter}</span><input data-len="${k}" data-seg="${k}" inputmode="decimal" value="${esc(f[key] ?? '')}" aria-label="צלע ${letter} (ס״מ)">
+      <span class="iw-ang">${k ? '' : '90°'}</span><div class="field-error-msg"></div></div>`).join('');
+    return `${types}<div class="iw-body">
+      <div class="iw-stage" id="iwStage"><svg id="iwSvg" class="iw-svg" aria-hidden="true"></svg><span class="iw-badge iw-badge-len" id="iwLen"></span></div>
+      <div class="iw-card">
+        ${roSeg('variant', f.variant, REBAR_KRANZ_VARIANTS)}
+        <div class="iw-sec" style="margin-top:10px;"><span>מוט רוחב (ס״מ)</span><span>זווית</span></div>${lens}
+        <div class="iw-sep"></div>
+        ${roRow('אורך הרשת L (ס״מ)', 'L', f.L, null, 'inputmode="decimal"')}
+        <div class="field-hint" style="margin:-4px 0 8px;">בדרך כלל 350–600</div>
+        ${roRow('מוטות רוחב — קוטר', 'diameter_mm', f.diameter_mm, REBAR_BAR_D.map(d => [d, 'Ø' + d]))}
+        ${roRow('מוטות רוחב — פסיעה', 's', f.s, REBAR_STEPS.map(s => [s, '@' + s]))}
+        ${roRow('מוטות אורך — מספר', 'n_long', f.n_long, null, 'inputmode="numeric"')}
+        ${roRow('מוטות אורך — קוטר', 'd_long', f.d_long, REBAR_BAR_D.map(d => [d, 'Ø' + d]))}
+        ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}
+        ${roFootHtml(true)}
+      </div></div>`;
+  }
+  const fields = f.type === 'spacer'
+    ? `${roRow('גובה (מ״מ)', 'height_mm', f.height_mm, REBAR_SPACER_HEIGHTS)}
+       ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}
+       <div class="field-hint">נספר ביחידות, לא נכלל במשקל · אורך 2 מ׳</div>`
+    : `${roRow('שם האלמנט', 'name', f.name, null, 'maxlength="120"')}
+       ${roRow('ק״ג ליחידה', 'unit_kg', f.unit_kg, null, 'inputmode="decimal" placeholder="לא חובה"')}
+       ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}`;
+  return `${types}<div class="iw-body iw-body-form"><div class="iw-card iw-card-narrow">${fields}${roFootHtml(true)}</div></div>`;
 }
 
 function roTrayHtml() {
   const n = dlg.added.length, kg = dlg.added.reduce((a, r) => a + (Number(r.total_kg) || 0), 0);
-  const items = dlg.added.map((r, j) => `<div class="iw-item">
-      ${r.shape ? roMini(r.shape, 40, 22) : `<span class="iw-item-kind">${esc(RO_SECTIONS[r.kind].item)}</span>`}
+  const items = dlg.added.map((r, j) => {
+    const el = r.kind === 'element' ? elementSvg(r.params, { w: 40, h: 22, stroke: 1.6 }) : null;
+    const pic = r.shape ? roMini(r.shape, 40, 22) : el ? el.replace(/<text[\s\S]*?<\/text>/g, '') : `<span class="iw-item-kind">${esc(RO_SECTIONS[r.kind].item)}</span>`;
+    return `<div class="iw-item">
+      ${pic}
       <span>${esc(roItemShort(r))}</span>
-      <button type="button" class="iw-item-del" data-undo="${j}" title="הסרת השורה" aria-label="הסרת השורה ${esc(roItemShort(r))}">${uiIcon('x', 12)}</button></div>`).join('');
+      <button type="button" class="iw-item-del" data-undo="${j}" title="הסרת השורה" aria-label="הסרת השורה ${esc(roItemShort(r))}">${uiIcon('x', 12)}</button></div>`;
+  }).join('');
   return `<span class="iw-tray-count">${n ? `נוספו ${n} ${n === 1 ? 'שורה' : 'שורות'} · ${esc(fmtNum(kg, 2))} ק״ג` : 'השורות שתוסיפו יופיעו כאן'}</span>
     <div class="iw-items">${items}</div>
     <button type="button" class="btn btn-outline" data-x>סיום</button>`;
@@ -753,9 +834,11 @@ function roRenderItemDialog() {
   const sec = RO_SECTIONS[dlg.kind], editing = dlg.idx !== null;
   const modal = document.getElementById('itemModal');
   modal.className = 'modal item-win';
-  const kinds = editing ? '' : `<div class="iw-kinds" role="tablist" aria-label="סוג הפריט">${Object.entries(RO_SECTIONS).map(([k, s]) =>
-    `<button type="button" role="tab" aria-selected="${k === dlg.kind}" data-kind="${k}">${s.item}</button>`).join('')}</div>`;
-  const body = dlg.kind === 'bar'
+  const kinds = editing ? '' : `<div class="iw-kinds" role="tablist" aria-label="סוג הפריט">${RO_WINDOW_TABS.map(([k, t]) =>
+    `<button type="button" role="tab" aria-selected="${k === dlg.kind}" data-kind="${k}">${t}</button>`).join('')}</div>`;
+  const body = dlg.kind === 'lift' ? roLiftBodyHtml()
+    : dlg.kind === 'element' ? roElementBodyHtml()
+    : dlg.kind === 'bar'
     ? `<div class="iw-strip">${roStripHtml()}</div>
        <div class="iw-body">
          <div class="iw-stage ${dlg.freehand ? 'is-free' : ''}" id="iwStage">
@@ -774,7 +857,7 @@ function roRenderItemDialog() {
     <div id="itemMsg" class="msg"></div>
     ${body}
     ${editing ? '' : `<div class="iw-tray" id="iwTray">${roTrayHtml()}</div>`}`;
-  if (dlg.kind === 'bar') roStageMount();
+  if (document.getElementById('iwStage')) roStageMount();
   roItemPreview();
 }
 
@@ -794,7 +877,7 @@ function roStageMount() {
       el.autocomplete = 'off';
       el.dataset.len = b.k;
       el.dataset.seg = b.seg;
-      el.value = dlg.f.lens[b.k] ?? '';
+      el.value = roLens()[b.k] ?? '';
       el.setAttribute('aria-label', b.label + ' (ס״מ)');
       stage.appendChild(el);
     }
@@ -823,8 +906,10 @@ function roStageDraw() {
     return;
   }
   const shape = roDialogShape();
-  const d = parseNum(dlg.f.diameter_mm);
-  badge.textContent = (dlg.f.lens || []).some(v => !(parseNum(v) > 0)) && shape.family !== 'hoop' ? '' : `אורך ${fmtNum(shapeLength(shape, d), 1)} ס״מ`;
+  const d = parseNum(dlg.f.diameter_mm), complete = !(roLens() || []).some(v => !(parseNum(v) > 0));
+  badge.textContent = dlg.kind === 'element'
+    ? (complete ? `אורך פרוס ${fmtNum(parseNum(dlg.f.a) + parseNum(dlg.f.b), 1)} ס״מ` : '')
+    : !complete && shape.family !== 'hoop' ? '' : `אורך ${fmtNum(shapeLength(shape, d), 1)} ס״מ`;
   if (shape.family === 'hoop') {
     const r = Math.max(20, Math.min(w, h) / 2 - 40);
     svg.innerHTML = `<circle cx="${w / 2}" cy="${h / 2}" r="${r}" class="iw-bar"/>`;
@@ -844,6 +929,13 @@ function roStageDraw() {
     g += tick(P[0], P[1], 45);
     if (shape.hooks > 1) g += tick(P[P.length - 1], P[P.length - 2], -45);
   }
+  if (dlg.kind === 'element') {   // the corner mesh's longitudinal bars, 10, 30, 50 … cm from the free end
+    const a = parseNum(dlg.f.a), n = parseNum(dlg.f.n_long) || 0, side = dlg.f.variant === 'lower' ? -1 : 1;
+    for (let i = 0; a > 0 && i < n && 10 + 20 * i < a; i++) {
+      const x = P[0].x + (10 + 20 * i) / a * (P[1].x - P[0].x);
+      g += `<circle cx="${x.toFixed(1)}" cy="${(P[0].y + side * 10).toFixed(1)}" r="6" class="iw-ring"/>`;
+    }
+  }
   if (dlg.hl !== null && dlg.hl !== 'D') g += shapeLinkedSegs(shape, dlg.hl).map(i => line(P[i], P[i + 1], 'iw-hl')).join('');
   lay.labels.forEach((l, i) => {
     const o = 18 + Math.abs(l.nx) * 18 + 28;
@@ -862,7 +954,8 @@ function roStageDraw() {
 
 // a typed or dragged length: the form, every box of that value (drawing and card), the weight
 function roSetLen(k, value, from) {
-  dlg.f.lens[k] = value;
+  if (dlg.kind === 'element') dlg.f[k === 0 ? 'a' : 'b'] = value;
+  else dlg.f.lens[k] = value;
   document.querySelectorAll(`#itemModal [data-len="${k}"]`).forEach(el => { if (el !== from) el.value = value; });
   roStageDraw();
   roItemPreview();
@@ -875,6 +968,7 @@ function roReadItemForm() {
 }
 
 function roItemErrors() {
+  if (dlg.kind === 'lift') return validateLift(dlg.f);
   const f = { ...dlg.f };
   if (dlg.kind === 'mesh' && f.type !== 'asym') { delete f.d_y; delete f.s_x; }
   return validateItem(dlg.kind, f);
@@ -899,7 +993,7 @@ function roShowItemErrors(errs) {
     let ok;
     if (k === 'lens') ok = (dlg.f.lens || []).map((v, i) => parseNum(v) > 0 ? false : put('len' + i, text)).some(Boolean);
     else if (k === 'overlap') ok = put('len1', text);
-    else if (k === 'L') ok = ['L1', 'L2', 'L3'].map(key => put(key, text)).some(Boolean);
+    else if (k === 'L' && dlg.kind === 'pile') ok = ['L1', 'L2', 'L3'].map(key => put(key, text)).some(Boolean);
     else ok = put(k, text);
     if (!ok) rest.push(text);
   }
@@ -917,10 +1011,22 @@ function roItemPreview() {
     box.innerHTML = '<div class="iw-tot-hint">השלימו את השדות כדי לראות את המשקל</div>';
     return;
   }
+  if (dlg.kind === 'lift') {
+    const f = dlg.f, q = rebarLiftQty(parseNum(f.diameter_mm), parseNum(f.length), parseNum(f.lifts));
+    box.innerHTML = `<div class="iw-tot"><span>ליפט אחד</span><span>${esc(fmtNum(q.per_lift, 0))} מוטות · ${esc(fmtNum(q.lift_kg, 2))} ק״ג</span></div>
+      <div class="iw-tot iw-tot-sum"><span>סה״כ ${esc(fmtNum(q.qty, 0))} מוטות</span><b>${esc(fmtNum(q.total_kg, 2))} ק״ג</b></div>`;
+    return;
+  }
+  if (dlg.kind === 'element' && dlg.f.type === 'spacer') {
+    box.innerHTML = '<div class="iw-tot-hint">נספר ביחידות, לא נכלל במשקל</div>';
+    return;
+  }
   const qtyOk = !errs.qty;
   const row = buildItem(dlg.kind, { ...dlg.f, qty: qtyOk ? dlg.f.qty : 1 }, 1), c = itemCalc(row);
   const unit = `${row.length_cm ? fmtNum(row.length_cm, 1) + ' ס״מ · ' : ''}${fmtNum(row.unit_kg, 2)} ק״ג`;
-  box.innerHTML = `<div class="iw-tot"><span>ליחידה</span><span>${esc(unit)}</span></div>
+  const perMetre = dlg.kind === 'element' && row.length_cm
+    ? `<div class="iw-tot"><span>ק״ג למ״א</span><span>${esc(fmtNum(row.unit_kg / (row.length_cm / 100), 2))}</span></div>` : '';
+  box.innerHTML = `<div class="iw-tot"><span>ליחידה</span><span>${esc(unit)}</span></div>${perMetre}
     <div class="iw-tot iw-tot-sum"><span>סה״כ${c.approx ? ' <span class="approx-badge">חישוב משוער</span>' : ''}</span>
       <b>${qtyOk ? esc(fmtNum(row.total_kg, 2)) + ' ק״ג' : '— ק״ג'}</b></div>`;
 }
@@ -955,17 +1061,19 @@ function roSaveLine() {
     roRefreshLines();
     return;
   }
-  const row = { ...buildItem(dlg.kind, f, state.items.filter(i => i.kind === dlg.kind).length + 1), _dirty: true };
+  const kind = dlg.kind === 'lift' ? 'bar' : dlg.kind;   // a lift is saved as a straight bar
+  const n = state.items.filter(i => i.kind === kind).length + 1;
+  const row = { ...(dlg.kind === 'lift' ? buildLiftItem(f, n) : buildItem(kind, f, n)), _dirty: true };
   state.items.push(row);
   dlg.added.push(row);
   if (dlg.kind === 'bar' && f.code !== 'F') roRecentSave(rebarRecentPush(roRecentShapes(), f.code));
   roMarkDirty();
   roRefreshLines();
   // the window stays: same shape, diameter and steel; the next line needs its own quantity
-  Object.assign(dlg.f, { qty: '', alias: '', note: '' });
+  if (dlg.kind !== 'lift') Object.assign(dlg.f, { qty: '', alias: '', note: '' });
   dlg.tried = false;
   roRenderItemDialog();
-  const qty = document.querySelector('#itemModal [data-k="qty"]');
+  const qty = document.querySelector('#itemModal [data-k="qty"], #itemModal [data-k="lifts"]');
   if (qty) qty.focus({ preventScroll: true });
 }
 
@@ -1002,6 +1110,8 @@ function roItemDialogEvents() {
       roRenderItemDialog();
       return;
     }
+    const set = e.target.closest('[data-set]');
+    if (set) { roReadItemForm(); dlg.f[set.dataset.set] = set.dataset.val; dlg.hl = null; roRenderItemDialog(); return; }
     if (e.target.closest('[data-gallery]')) { roReadItemForm(); dlg.gallery = !dlg.gallery; roRenderItemDialog(); return; }
     const fam = e.target.closest('[data-family]');
     if (fam) { roReadItemForm(); dlg.family = fam.dataset.family; roRenderItemDialog(); return; }
@@ -1029,7 +1139,7 @@ function roItemDialogEvents() {
     const len = e.target.closest('[data-len]');
     if (len) { roSetLen(Number(len.dataset.len), len.value, len); return; }
     roReadItemForm();
-    if (dlg.kind === 'bar') roStageDraw();
+    if (document.getElementById('iwStage')) roStageDraw();
     roItemPreview();
   });
   modal.addEventListener('change', e => {
@@ -1046,7 +1156,7 @@ function roItemDialogEvents() {
   // the leg being edited lights up on the drawing
   modal.addEventListener('focusin', e => {
     const el = e.target.closest('[data-seg]');
-    if (!el || dlg.kind !== 'bar') return;
+    if (!el || !document.getElementById('iwStage')) return;
     dlg.hl = el.dataset.seg === 'D' ? 'D' : Number(el.dataset.seg);
     roStageDraw();
     if (el.select) el.select();
@@ -1078,7 +1188,7 @@ function roItemDialogEvents() {
     const d = dlg.drag;
     if (!d) return;
     const v = String(shapeDragLen(d.v0, e.clientX - d.x0, e.clientY - d.y0, d.dir, d.scale));
-    if (v !== String(dlg.f.lens[d.k])) roSetLen(d.k, v, null);
+    if (v !== String(roLens()[d.k])) roSetLen(d.k, v, null);
   });
   const endDrag = () => { if (!dlg.drag) return; dlg.drag = null; dlg.hl = null; roStageDraw(); };
   modal.addEventListener('pointerup', endDrag);
@@ -1182,15 +1292,17 @@ function roOpenReceiptDialog() {
   const prior = roReceiptPrior();
   const lines = state.items.map(it => {
     const left = Math.max(0, Number(it.qty) - (prior[it.id] || 0));
+    const elSvg = it.kind === 'element' ? elementSvg(it.params, { w: 110, h: 44, stroke: 1.4 }) : null;
     const desc = it.kind === 'bar'
       ? (it.shape ? `<span class="shape-thumb" style="width:110px;height:44px">${shapeSvg(it.shape, { w: 110, h: 44, stroke: 1.4 })}</span>` : '')
+      : it.kind === 'element' ? (elSvg ? `<span class="shape-thumb" style="width:110px;height:44px">${elSvg}</span>` : esc(elementDesc(it)))
       : it.kind === 'mesh' ? `<bdi dir="ltr">${esc(`${it.params.x}×${it.params.y}`)}</bdi>` : `<bdi dir="ltr">${esc(`${it.params.d}/${it.params.D}`)}</bdi>`;
     return `<tr data-rc-item="${it.id}">
       <td>${esc(RO_SECTIONS[it.kind].item)} ${it.line_no}${it.alias ? ' · ' + esc(it.alias) : ''}</td>
       <td class="num-cell">${esc(fmtNum(left, 0))}</td>
       <td><input type="checkbox" data-rc-all="${it.id}" aria-label="הגיע הכל" ${left ? '' : 'disabled'}></td>
       <td><input inputmode="numeric" data-rc-qty="${it.id}" placeholder="0" aria-label="כמות שהגיעה"></td>
-      <td class="num-cell"><bdi dir="ltr">Ø${esc(fmtNum(it.diameter_mm, 1))}</bdi></td>
+      <td class="num-cell">${it.diameter_mm ? `<bdi dir="ltr">Ø${esc(fmtNum(it.diameter_mm, 1))}</bdi>` : '—'}</td>
       <td class="num-cell">${esc(fmtNum(it.qty, 0))}</td>
       <td>${desc}</td>
     </tr>`;
