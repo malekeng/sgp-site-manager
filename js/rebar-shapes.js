@@ -213,6 +213,44 @@ function elementSvg(p, opts = {}) {
   return out + '</svg>';
 }
 
+// ---- meshes (2026-10-14) ----
+// A mesh's bars as meshCalc weighs them — ceil(y/s) bars along X spaced s apart, ceil(x/s_x)
+// along Y — laid at their spacing and centred, so the ends stick out equally on both edges.
+// Positions are cm from the top (ys) and from the left (xs).
+function meshBars(p) {
+  const x = Number(p.x), y = Number(p.y), s = Number(p.s);
+  const sX = p.type === 'asym' && Number(p.s_x) > 0 ? Number(p.s_x) : s;
+  const nX = Math.max(1, Math.ceil(y / s)), nY = Math.max(1, Math.ceil(x / sX));
+  const oy = (y - (nX - 1) * s) / 2, ox = (x - (nY - 1) * sX) / 2;
+  return { nX, nY, oy, ox, ys: Array.from({ length: nX }, (_, i) => oy + i * s), xs: Array.from({ length: nY }, (_, i) => ox + i * sX) };
+}
+
+// The mesh in a w×h box, proportions kept and centred: its corner, drawn size, scale (px per
+// cm) and the bars in px.
+function meshLayout(p, w, h, pad) {
+  const b = meshBars(p), x = Number(p.x), y = Number(p.y);
+  const scale = Math.min((w - 2 * pad) / x, (h - 2 * pad) / y);
+  const dw = x * scale, dh = y * scale, x0 = (w - dw) / 2, y0 = (h - dh) / 2;
+  return { x0, y0, w: dw, h: dh, scale, nX: b.nX, nY: b.nY, ys: b.ys.map(v => y0 + v * scale), xs: b.xs.map(v => x0 + v * scale) };
+}
+
+// The mesh as the supplier wants it sketched: every bar, X under it, Y beside it, and the
+// diameter@spacing above (both directions for an asymmetric mesh). No size, no drawing.
+function meshSvg(p, d, opts = {}) {
+  if (!p || !(Number(p.x) > 0 && Number(p.y) > 0 && Number(p.s) > 0)) return null;
+  const w = opts.w || 300, h = opts.h || 120, stroke = opts.stroke || 2;
+  const pad = Math.min(22, Math.round(Math.min(w, h) * 0.3));
+  const l = meshLayout(p, w, h, pad), sw = Math.max(0.8, stroke * 0.45).toFixed(2);
+  const text = (x, y, t, anchor = 'middle') => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="12" font-family="Arial, sans-serif" text-anchor="${anchor}" dominant-baseline="middle" fill="#0E1A20">${t}</text>`;
+  const line = (x1, y1, x2, y2) => `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#0E1A20" stroke-width="${sw}"/>`;
+  const asym = p.type === 'asym';
+  const spec = 'Ø' + rbLabel(d) + '@' + rbLabel(p.s) + (asym ? ' · Ø' + rbLabel(Number(p.d_y) || d) + '@' + rbLabel(Number(p.s_x) || p.s) : '');
+  let out = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+  out += l.ys.map(v => line(l.x0, v, l.x0 + l.w, v)).join('') + l.xs.map(v => line(v, l.y0, v, l.y0 + l.h)).join('');
+  out += text(l.x0 + l.w / 2, l.y0 + l.h + 11, rbLabel(p.x)) + text(l.x0 - 4, l.y0 + l.h / 2, rbLabel(p.y), 'end') + text(l.x0 + l.w / 2, l.y0 - 11, spec);
+  return out + '</svg>';
+}
+
 // ---- editing on the drawing ----
 // The legs that share one length with leg i (a closed stirrup's opposite sides).
 function shapeLinkedSegs(shape, i) {

@@ -4,7 +4,7 @@
 
 const REBAR_STATUS_LABELS = { draft: 'טיוטה', sent: 'נשלחה', partial: 'סופקה חלקית', complete: 'סופקה', closed: 'נסגרה' };
 const REBAR_BAR_D = [6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 26, 28, 30, 32, 34, 36, 40];
-const REBAR_MESH_D = [5, 5.5, 6, 6.5, 8, 10, 12, 14, 16];
+const REBAR_MESH_D = [5, 5.5, 6, 6.5, 7.5, 8, 10, 12, 14, 16];
 const REBAR_PILE_D = [12, 14, 16, 18, 20, 22, 25, 26, 28, 30, 32, 34, 36];
 const REBAR_SPIRAL_D = [8, 10, 12, 14, 16];
 const REBAR_STEPS = [5, 10, 15, 20, 25];

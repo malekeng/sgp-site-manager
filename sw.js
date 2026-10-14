@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sgp-v40';
+const CACHE_NAME = 'sgp-v41';
 
 self.addEventListener('install', event => {
   self.skipWaiting();

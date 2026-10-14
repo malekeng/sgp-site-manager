@@ -5,6 +5,7 @@
 
 const RR_TOLERANCE_KG = 5;      // with 1%: the same threshold the documents check uses
 const RR_TOLERANCE_PCT = 0.01;
+const RR_MESH_OVER_PCT = 0.06;  // a mesh may weigh up to 6% over theoretical (ת"י 4466 חלק 4; the supplier bills the scale)
 const RR_SECTION = { bar: 'מוטות', mesh: 'רשתות', pile: 'כלונסאות', element: 'אלמנטים' };
 
 function rrRound(x, n = 2) {
@@ -62,12 +63,15 @@ function noteGroupOf(item, rows) {
   return sp ? sp.group : null;
 }
 
-function rrCompare(label, tickKg, noteKg) {
+// `meshKg` is the part of the marked weight that is mesh: a mesh may weigh up to 6% over its
+// theoretical weight, so the note may be heavier by that much more (never lighter).
+function rrCompare(label, tickKg, noteKg, meshKg = 0) {
   const diff = rrRound(tickKg - noteKg);
+  const tol = Math.max(RR_TOLERANCE_KG, noteKg * RR_TOLERANCE_PCT);
   const base = `${label}: סומן ${rrFmt(tickKg)} ק״ג, בתעודה ${rrFmt(noteKg)} ק״ג`;
-  return Math.abs(diff) <= Math.max(RR_TOLERANCE_KG, noteKg * RR_TOLERANCE_PCT)
-    ? { level: 'ok', text: `${base} — תואם` }
-    : { level: 'warn', text: `${base} — הפרש ${rrFmt(Math.abs(diff))} ק״ג` };
+  if (Math.abs(diff) <= tol) return { level: 'ok', text: `${base} — תואם` };
+  if (diff < 0 && -diff <= tol + meshKg * RR_MESH_OVER_PCT) return { level: 'ok', text: `${base} — תואם (רשתות עד 6% מעל המשקל התאורטי)` };
+  return { level: 'warn', text: `${base} — הפרש ${rrFmt(Math.abs(diff))} ק״ג` };
 }
 
 // The checks for one receipt before it is saved (spec §7). `ticked` is what the site marked
@@ -107,11 +111,13 @@ function receiptCheck({ order, items, ticked, note, priorNotes = [], prior = {} 
     for (const g of rowGroups) {
       const tick = marked.filter((_, i) => groups[i] === g).reduce((a, m) => a + m.kg, 0);
       const inNote = rows.filter(r => r.group === g).reduce((a, r) => a + r.kg, 0);
-      checks.push(rrCompare(g, rrRound(tick), rrRound(inNote)));
+      const mesh = marked.filter((m, i) => groups[i] === g && m.it.kind === 'mesh').reduce((a, m) => a + m.kg, 0);
+      checks.push(rrCompare(g, rrRound(tick), rrRound(inNote), mesh));
     }
   } else {
     if (rows.length) checks.push({ level: 'info', text: 'השוואה לפי סה״כ — לא כל השורות זוהו בתעודה' });
-    checks.push(rrCompare('סה״כ', rrRound(marked.reduce((a, m) => a + m.kg, 0)), noteKg));
+    const mesh = marked.filter(m => m.it.kind === 'mesh').reduce((a, m) => a + m.kg, 0);
+    checks.push(rrCompare('סה״כ', rrRound(marked.reduce((a, m) => a + m.kg, 0)), noteKg, mesh));
   }
   return checks;
 }

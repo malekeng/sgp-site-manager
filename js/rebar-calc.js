@@ -33,6 +33,21 @@ function meshCalc(p, d) {
   return { unit_kg: rebarRound(mX * rebarW(d) + mY * rebarW(dY), 2), meters, approx: p.type === 'asym' };
 }
 
+// Sheets in one closed bundle ("חבילה") of a standard 600×250 mesh, from a supplier's table
+// (שפי סטיל, read 2026-10-14; about 1.5–1.8 t a bundle). Other sizes, asymmetric and special
+// meshes have no standard bundle. Keyed "diameter@spacing".
+const REBAR_MESH_BUNDLE = {
+  '6@15': 40, '6@20': 50, '6.5@10': 20, '6.5@15': 30, '6.5@20': 40, '7.5@10': 16, '7.5@15': 24, '7.5@20': 32,
+  '8@10': 14, '8@15': 20, '8@20': 28, '10@10': 8, '10@15': 12, '10@20': 16,
+};
+
+function meshBundle(p, d) {
+  if (!p || p.type === 'asym') return null;
+  const x = Number(p.x), y = Number(p.y);
+  if (!((x === 600 && y === 250) || (x === 250 && y === 600))) return null;
+  return REBAR_MESH_BUNDLE[`${Number(d)}@${Number(p.s)}`] ?? null;
+}
+
 // A pile cage: n main bars over L1+L2+L3, and a spiral over L2 (pitch p1) and L3 (pitch p2)
 // on the cage diameter d. EasyBar takes π as 3.14 here (14×Ø16, @10/@20, Ø10 → 476.55).
 function pileCalc(p, dMain) {

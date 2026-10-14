@@ -29,7 +29,7 @@ const RP_TH = 'display:table-cell;color:#fff;font-weight:700;font-size:11px;text
 const RP_TD = 'display:table-cell;padding:8px 10px;border-bottom:1px solid #E8EEEA;color:#0E1A20;vertical-align:middle;line-height:1.4;font-size:12px;';
 const RP_SECTIONS = {
   bar: { title: 'מוטות', heads: ['#', 'שרטוט', 'כינוי', 'סוג פלדה', 'קוטר מ״מ', 'אורך ס״מ', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
-  mesh: { title: 'רשתות', heads: ['#', 'כינוי', 'סוג רשת', 'X×Y ס״מ', 'קוטר מ״מ', 'פסיעה ס״מ', 'סוג פלדה', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
+  mesh: { title: 'רשתות', heads: ['#', 'שרטוט', 'כינוי', 'סוג רשת', 'X×Y ס״מ', 'קוטר מ״מ', 'פסיעה ס״מ', 'סוג פלדה', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
   pile: { title: 'כלונסאות', heads: ['#', 'כינוי', 'סוג', 'd/D ס״מ', 'מוטות', 'אורך ס״מ', 'ספירלה', 'תוספות', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
   element: { title: 'אלמנטים', heads: ['#', 'שרטוט', 'כינוי', 'סוג', 'פירוט', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
 };
@@ -139,7 +139,8 @@ function rebarPdfCells(it, drawings) {
   }
   if (it.kind === 'mesh') {
     const asym = p.type === 'asym';
-    return alias + cell(asym ? 'א-סימטרי' : 'סימטרי') + cell(rebarPdfLtr(`${p.x}×${p.y}`), 'text-align:left;white-space:nowrap;')
+    const img = drawings['m' + it.line_no] ? `<img src="${drawings['m' + it.line_no]}" style="width:150px;height:55px;display:block;">` : '—';
+    return cell(img, 'padding:4px 8px;') + alias + cell(asym ? 'א-סימטרי' : 'סימטרי') + cell(rebarPdfLtr(`${p.x}×${p.y}`), 'text-align:left;white-space:nowrap;')
       + cell(rebarPdfLtr(asym ? `${it.diameter_mm} / ${p.d_y}` : it.diameter_mm), 'text-align:left;')
       + cell(rebarPdfLtr(asym ? `@${p.s} / @${p.s_x}` : `@${p.s}`), 'text-align:left;') + cell(rebarPdfEsc(it.steel)) + tail;
   }
@@ -253,6 +254,9 @@ async function rebarExportPdf({ order, items, site }) {
     if (it.kind === 'bar' && it.shape) drawings[it.line_no] = await rebarSvgToPng(shapeSvg(it.shape, { w: 300, h: 110, stroke: 2.2 }), 300, 110);
     const el = it.kind === 'element' ? elementSvg(it.params, { w: 300, h: 110, stroke: 2.2 }) : null;
     if (el) drawings['e' + it.line_no] = await rebarSvgToPng(el, 300, 110);
+    // drawn smaller than a bar so its numbers stay readable at the cell's 150×55
+    const mesh = it.kind === 'mesh' ? meshSvg(it.params, it.diameter_mm, { w: 210, h: 77, stroke: 2 }) : null;
+    if (mesh) drawings['m' + it.line_no] = await rebarSvgToPng(mesh, 210, 77);
   }
   const logo = await orgLogo(activeOrg);
   const logoHtml = logo.isCompany ? await pdfLogoHtml(40) : '';
