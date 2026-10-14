@@ -530,7 +530,7 @@ function greetingByHour() {
         items.push({
           ico: 'rebar', dot: 'red',
           text: `הזמנת ברזל ${o.order_no} "${o.name}" — הייתה צפויה עד ${fmtDate(o.required_date)} · ${o.status === 'draft' ? 'עדיין לא נשלחה לספק' : 'סופק ' + pct + '%'}`,
-          href: `rebar-orders.html#o=${o.id}`, tile: 'rebar-orders.html',
+          href: `rebar-orders.html#o=${o.id}`, tile: 'rebar.html',
         });
       });
     }

@@ -30,6 +30,15 @@
 .ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(34, 216, 107,0.06); }
 .ocr-progress { display: none; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 13px; color: var(--steel); }
 .ocr-progress.show { display: flex; }
+/* a tracking row that belongs to a rebar order (made by the order, kept in sync by the database) */
+.order-chip {
+  display: inline-block; margin-inline-start: 6px; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+  font-size: 11px; font-weight: 800; color: var(--green-deep); background: var(--green-soft);
+}
+.drafts-hint { font-size: 12.5px; color: var(--steel); font-weight: 600; }
+/* the hidden "פעולות" header (.sr-only) is position:absolute; without a positioned table it escapes
+   the scrolling .table-wrap and widens the whole page on a phone */
+.drafts-table { position: relative; }
 </style>
 </head>
 <body>
@@ -41,10 +50,24 @@
 
   <div class="stats-row" id="statsRow"></div>
 
+  <!-- orders being prepared (drafts); a sent order is a row of the tracking table below -->
+  <div class="card" id="draftsCard" style="display:none;">
+    <div class="card-header">
+      <div><h2>הזמנות בהכנה</h2><div class="drafts-hint">טיוטות שעוד לא נשלחו לספק — אחרי השליחה הן מופיעות במעקב למטה</div></div>
+    </div>
+    <div class="table-wrap">
+      <table class="drafts-table">
+        <thead><tr><th>מס' הזמנה</th><th>שם ההזמנה</th><th>נוצרה</th><th class="num-cell">שורות</th><th class="num-cell">משקל (ק"ג)</th><th><span class="sr-only">פעולות</span></th></tr></thead>
+        <tbody id="draftsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-header">
       <h2>מעקב אספקת ברזל זיון</h2>
       <div class="header-actions">
+        <a class="btn btn-outline" href="rebar-orders.html#new">+ הזמנה חדשה</a>
         <button class="btn btn-primary" id="addBtn">+ הוספת רשומה</button>
         <button class="btn btn-outline" id="filterToggle">סינון</button>
       </div>
@@ -110,17 +133,32 @@
 <script src="js/documents.js"></script>
 <script src="js/doc-insights.js"></script>
 <script src="js/crud.js"></script>
+<script src="js/rebar-orders-core.js"></script>
 <script>
+// A row made by a rebar order (rebar_order_id) belongs to that order: the database keeps it in
+// sync and refuses edits, so the row opens the order instead, and deleting it deletes the order.
+const rbOrderHref = id => `rebar-orders.html#o=${id}`;
+
 initCrudPage({
   table: 'rebar_deliveries', docInsights: true, icon: '🔩',
   activePage: 'rebar.html',
   title: 'משלוחי ברזל',
   dateField: 'order_date',
   orderBy: { column: 'order_date', ascending: false },
+  rowActions: row => row.rebar_order_id ? `
+    <a class="icon-btn" href="${rbOrderHref(row.rebar_order_id)}" title="פתיחת ההזמנה" aria-label="פתיחת ההזמנה">${uiIcon('eye')}</a>
+    <button class="icon-btn danger" data-del-order="${row.rebar_order_id}" data-order-no="${esc(row.plan_ref || '')}" title="מחיקת ההזמנה" aria-label="מחיקת ההזמנה">${uiIcon('trash')}</button>` : null,
+  openRecord: row => {
+    if (!row.rebar_order_id) return false;
+    location.href = rbOrderHref(row.rebar_order_id);
+    return true;
+  },
+  onLoaded: (rows, api) => rbLoadDrafts(api.site),
   columns: [
     { key: 'order_date', label: 'תאריך הזמנה', type: 'date' },
     { key: 'supplier', label: 'ספק', type: 'text' },
-    { key: 'location', label: 'אלמנט / מיקום', type: 'text' },
+    { key: 'location', label: 'אלמנט / מיקום', type: 'text',
+      render: row => esc(row.location || '—') + (row.rebar_order_id ? `<span class="order-chip">הזמנה ${esc(row.plan_ref || '')}</span>` : '') },
     { key: 'weight_kg', label: 'משקל (ק"ג)', type: 'number', digits: 0 },
     { key: 'supply_status', label: 'סופק', type: 'text' },
     { key: 'order_closed', label: 'סטטוס הזמנה', type: 'boolean', trueLabel: 'סגורה', falseLabel: 'פתוחה' },
@@ -228,6 +266,59 @@ document.getElementById('ocrAttachSkip').addEventListener('click', () => {
   lastOcrExtracted = null;
   document.getElementById('ocrAttachChoice').style.display = 'none';
 });
+
+// ---- rebar orders in this page: drafts being prepared, and deleting an order ----
+async function rbLoadDrafts(site) {
+  const card = document.getElementById('draftsCard'), body = document.getElementById('draftsBody');
+  const { data: drafts, error } = await sb.from('rebar_orders').select('id, order_no, name, created_at')
+    .eq('site_id', site.id).eq('status', 'draft').order('created_at', { ascending: false });
+  if (error || !drafts || !drafts.length) { card.style.display = 'none'; return; }
+  const { data: lines } = await sb.from('rebar_order_items').select('order_id, total_kg').in('order_id', drafts.map(d => d.id));
+  body.innerHTML = drafts.map(d => {
+    const own = (lines || []).filter(l => l.order_id === d.id);
+    const kg = own.reduce((a, l) => a + (Number(l.total_kg) || 0), 0);
+    return `<tr>
+      <td><strong>${esc(d.order_no)}</strong></td>
+      <td>${esc(d.name || '—')}</td>
+      <td>${esc(fmtDate(d.created_at))}</td>
+      <td class="num-cell">${esc(fmtNum(own.length, 0))}</td>
+      <td class="num-cell">${esc(fmtNum(kg, 0))}</td>
+      <td class="row-actions"><div class="row-actions-inner">
+        <a class="icon-btn" href="${rbOrderHref(d.id)}" title="פתיחה" aria-label="פתיחה">${uiIcon('pencil')}</a>
+        <button class="icon-btn danger" data-del-draft="${d.id}" data-order-no="${esc(d.order_no)}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+  card.style.display = '';
+}
+
+async function rbDeleteOrder(id, orderNo, draft) {
+  const question = draft ? `למחוק את הטיוטה ${orderNo}? הפעולה אינה הפיכה.`
+    : `למחוק את ההזמנה ${orderNo}? היא תימחק גם ממעקב אספקת הברזל. הפעולה אינה הפיכה.`;
+  if (!confirm(question)) return;
+  const { data, error } = await sb.from('rebar_orders').delete().eq('id', id).select('id');
+  if (error) { toast(rebarDeleteError(error), 'error'); return; }
+  if (!data || !data.length) { toast('ההזמנה לא נמחקה — רעננו ונסו שוב', 'error'); return; }
+  toast(`ההזמנה ${orderNo} נמחקה`, 'success');
+  if (window.sgpCrud) await window.sgpCrud.reload();
+}
+
+document.getElementById('tableBody').addEventListener('click', e => {
+  const del = e.target.closest('[data-del-order]');
+  if (del) rbDeleteOrder(del.dataset.delOrder, del.dataset.orderNo, false);
+});
+document.getElementById('draftsBody').addEventListener('click', e => {
+  const del = e.target.closest('[data-del-draft]');
+  if (del) rbDeleteOrder(del.dataset.delDraft, del.dataset.orderNo, true);
+});
+
+// back from the order screen after deleting an order there
+(() => {
+  const deleted = new URLSearchParams(location.search).get('deleted');
+  if (!deleted) return;
+  history.replaceState(null, '', location.pathname);
+  setTimeout(() => toast(`ההזמנה ${deleted} נמחקה`, 'success'), 400);
+})();
 </script>
 </body>
 </html>

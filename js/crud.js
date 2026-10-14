@@ -225,6 +225,8 @@ async function initCrudPage(config) {
       const toggleBtn = qt
         ? `<button class="icon-btn" data-toggle="${row.id}" title="${row[qt.key] ? qt.trueAction : qt.falseAction}">${(l => l && l.icon ? uiIcon(l.icon) : l)(row[qt.key] ? qt.trueLabel : qt.falseLabel)}</button>`
         : '';
+      // a page may give some rows their own buttons (a row that belongs to another record)
+      const ownActions = config.rowActions ? config.rowActions(row) : null;
       return `
         <tr>
           ${cells}
@@ -232,9 +234,9 @@ async function initCrudPage(config) {
           ${auditCell}
           <td class="row-actions">
             <div class="row-actions-inner">
-              ${toggleBtn}
+              ${ownActions !== null && ownActions !== undefined ? ownActions : `${toggleBtn}
               <button class="icon-btn" data-edit="${row.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
-              <button class="icon-btn danger" data-del="${row.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
+              <button class="icon-btn danger" data-del="${row.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>`}
             </div>
           </td>
         </tr>
@@ -419,6 +421,11 @@ async function initCrudPage(config) {
   }
 
   function openModal(id) {
+    // a page may open some records elsewhere (?open=, the documents dot): config.openRecord returns true then
+    if (id && config.openRecord) {
+      const row = state.rows.find(r => r.id === id);
+      if (row && config.openRecord(row)) return;
+    }
     state.editingId = id || null;
     modalTitle.textContent = id ? 'עריכת רשומה' : 'הוספת רשומה';
     formEl.reset();

@@ -33,73 +33,12 @@ function roStatusPill(o) {
   const pill = `<span class="lic-status lic-status-${RO_STATUS_TONE[o.status] || 'open'}">${esc(REBAR_STATUS_LABELS[o.status] || o.status)}</span>`;
   return pill + (isOverdue(o, roToday()) ? ` <span class="lic-status lic-status-fail">באיחור</span>` : '');
 }
-function roSuppliedHtml(pct) {
-  const v = Math.max(0, Math.min(100, Number(pct) || 0));
-  return `<span class="supplied"><span class="supplied-bar"><i style="width:${v}%"></i></span>${v}%</span>`;
-}
 function roTons(kg) { return fmtNum((Number(kg) || 0) / 1000, 2); }
 function roMsg(text, type) { const el = document.getElementById('edMsg'); text ? showMsg(el, text, type || 'error') : hideMsg(el); }
 
-// ===== list =====
-async function roLoadList() {
-  const site = state.ctx.site;
-  const { data: orders, error } = await sb.from('rebar_orders').select('*').eq('site_id', site.id).order('created_at', { ascending: false });
-  if (error) { toast(rebarDbError(error), 'error'); return; }
-  const ids = orders.map(o => o.id);
-  let lines = [], got = [];
-  if (ids.length) {
-    const [{ data: rows }, { data: rc }] = await Promise.all([
-      sb.from('rebar_order_items').select('id, order_id, qty, unit_kg, total_kg').in('order_id', ids),
-      sb.from('rebar_receipt_items').select('item_id, qty_received').eq('site_id', site.id),
-    ]);
-    lines = rows || []; got = rc || [];
-  }
-  state.orders = orders.map(o => {
-    const own = lines.filter(l => l.order_id === o.id);
-    const ownIds = new Set(own.map(l => l.id));
-    const p = orderProgress(own, got.filter(g => ownIds.has(g.item_id)));
-    return { ...o, _kg: p.kg_ordered, _pct: p.pct };
-  });
-  roRenderList();
-}
-
-function roRenderListStats() {
-  const os = state.orders, today = roToday();
-  const last = os.length ? fmtDate(os.map(o => o.updated_at || o.created_at).sort().slice(-1)[0]) : '—';
-  document.getElementById('statsRow').innerHTML =
-    statCardHtml({ ico: 'rebar', label: 'סה"כ הזמנות', value: os.length }) +
-    statCardHtml({ ico: 'incoming', label: 'ממתינות לאספקה', value: os.filter(o => ['sent', 'partial'].includes(o.status)).length }) +
-    statCardHtml({ ico: 'exceptions', label: 'באיחור', value: os.filter(o => isOverdue(o, today)).length }) +
-    statCardHtml({ ico: 'updated', label: 'עודכן לאחרונה', value: last, valueStyle: 'font-size:20px;' });
-}
-
-function roRenderList() {
-  roRenderListStats();
-  const body = document.getElementById('ordersBody');
-  if (!state.orders.length) {
-    body.innerHTML = '<tr class="empty-row"><td colspan="8">אין הזמנות עדיין — לחצו על "הזמנה חדשה"</td></tr>';
-    return;
-  }
-  const today = roToday();
-  body.innerHTML = state.orders.map(o => `
-    <tr data-open="${o.id}" class="${isOverdue(o, today) ? 'is-overdue' : ''}">
-      <td><strong>${esc(o.order_no)}</strong></td>
-      <td>${esc(o.name)}</td>
-      <td>${o.supplier ? esc(o.supplier) : '<span class="cell-muted">—</span>'}</td>
-      <td>${o.required_date ? esc(fmtDate(o.required_date)) : '<span class="cell-muted">—</span>'}</td>
-      <td class="num-cell">${roTons(o._kg)}</td>
-      <td>${roStatusPill(o)}</td>
-      <td>${o.status === 'draft' ? '<span class="cell-muted">—</span>' : roSuppliedHtml(o._pct)}</td>
-      <td class="row-actions"><div class="row-actions-inner">
-        <button class="icon-btn" data-open="${o.id}" title="פתיחה" aria-label="פתיחה">${uiIcon('eye')}</button>
-        <button class="icon-btn" data-dup="${o.id}" title="שכפול" aria-label="שכפול">${uiIcon('copy')}</button>
-      </div></td>
-    </tr>`).join('');
-}
-
 // ===== open / new / duplicate =====
+// the order screen only shows one order; the orders themselves are listed in the ברזל page
 function roShow(view) {
-  document.getElementById('ordersCard').style.display = view === 'list' ? 'block' : 'none';
   document.getElementById('editorWrap').style.display = view === 'editor' ? 'block' : 'none';
   window.scrollTo(0, 0);
 }
@@ -108,12 +47,10 @@ function roLeaveOk() {
   return !state.dirty || confirm('יש שינויים שלא נשמרו — לצאת?');
 }
 
-async function roBackToList() {
+function roBackToRebar(query = '') {
   if (!roLeaveOk()) return;
   state.dirty = false;
-  history.replaceState(null, '', location.pathname);
-  roShow('list');
-  await roLoadList();
+  location.href = 'rebar.html' + query;
 }
 
 async function roOpenOrder(id) {
@@ -201,8 +138,9 @@ function roRenderActions() {
   if (s === 'sent' && !state.receipts.length) b.push(`<button class="btn btn-outline" data-act="reopen">${uiIcon('lock-open')} פתח לעריכה</button>`);
   if (s === 'sent' || s === 'partial') b.push(`<button class="btn btn-outline" data-act="close">${uiIcon('lock')} סגור הזמנה</button>`);
   if (o.id) b.push(`<button class="btn btn-outline" data-act="dup">${uiIcon('copy')} שכפול</button>`);
-  if (s === 'draft' && o.id) b.push(`<button class="btn btn-danger" data-act="delete">${uiIcon('trash')} מחק</button>`);
-  b.push(`<button class="btn btn-outline" data-act="back">חזרה להזמנות</button>`);
+  // an order that received nothing can be deleted (its tracking row goes with it); otherwise it is closed
+  if (o.id && !state.receipts.length) b.push(`<button class="btn btn-danger" data-act="delete">${uiIcon('trash')} מחק</button>`);
+  b.push(`<button class="btn btn-outline" data-act="back">חזרה לברזל</button>`);
   document.getElementById('edActions').innerHTML = b.join('');
 }
 
@@ -329,13 +267,15 @@ async function roSetStatus(patch, okText) {
 }
 
 async function roDelete() {
-  if (!confirm(`למחוק את הטיוטה ${state.order.order_no}? הפעולה אינה הפיכה.`)) return;
-  const { data, error } = await sb.from('rebar_orders').delete().eq('id', state.order.id).eq('updated_at', state.loadedUpdatedAt).select('id');
-  if (error) { toast(rebarDbError(error), 'error'); return; }
+  const o = state.order;
+  const question = o.status === 'draft' ? `למחוק את הטיוטה ${o.order_no}? הפעולה אינה הפיכה.`
+    : `למחוק את ההזמנה ${o.order_no}? היא תימחק גם ממעקב אספקת הברזל. הפעולה אינה הפיכה.`;
+  if (!confirm(question)) return;
+  const { data, error } = await sb.from('rebar_orders').delete().eq('id', o.id).eq('updated_at', state.loadedUpdatedAt).select('id');
+  if (error) { toast(rebarDeleteError(error), 'error'); return; }
   if (!data || !data.length) { toast(RO_LOCK_MSG, 'error'); return; }
   state.dirty = false;
-  toast('הטיוטה נמחקה', 'success');
-  await roBackToList();
+  roBackToRebar('?deleted=' + encodeURIComponent(o.order_no));
 }
 
 function roOpenClose() {
@@ -354,7 +294,7 @@ async function roConfirmClose() {
 
 async function roAction(act) {
   if (act === 'save') return saveOrder();
-  if (act === 'back') return roBackToList();
+  if (act === 'back') return roBackToRebar();
   if (act === 'dup') return roDuplicate(state.order.id);
   if (act === 'delete') return roDelete();
   if (act === 'close') return roOpenClose();
@@ -1473,17 +1413,10 @@ function roReceiptEvents() {
 
 // ===== start =====
 (async function () {
-  const auth = await requireAuth('rebar-orders.html');
+  const auth = await requireAuth('rebar.html');   // the order screen belongs to the ברזל page
   if (!auth) return;
   state.ctx = auth;
 
-  document.getElementById('newBtn').addEventListener('click', roNewOrder);
-  document.getElementById('ordersBody').addEventListener('click', e => {
-    const dup = e.target.closest('[data-dup]');
-    if (dup) { e.stopPropagation(); roDuplicate(dup.dataset.dup); return; }
-    const open = e.target.closest('[data-open]');
-    if (open) roOpenOrder(open.dataset.open);
-  });
   document.getElementById('edActions').addEventListener('click', e => {
     const b = e.target.closest('[data-act]');
     if (b) roAction(b.dataset.act);
@@ -1545,8 +1478,8 @@ function roReceiptEvents() {
   const names = [...new Set([...(a || []), ...(b || [])].map(r => (r.supplier || '').trim()).filter(Boolean))].sort();
   document.getElementById('supplierList').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
 
-  await roLoadList();
   const m = location.hash.match(/^#o=([0-9a-f-]{36})$/);
   if (m) await roOpenOrder(m[1]);
   else if (location.hash === '#new') await roNewOrder();
+  else location.replace('rebar.html');   // the orders are listed in the ברזל page
 })();

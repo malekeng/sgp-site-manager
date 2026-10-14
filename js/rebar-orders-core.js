@@ -233,6 +233,7 @@ const REBAR_DB_ERRORS = {
   rebar_receipt_order_state: 'אפשר לקלוט משלוח רק להזמנה שנשלחה ולא נסגרה',
   rebar_receipt_wrong_order: 'השורה אינה שייכת להזמנה הזו',
   rebar_order_has_receipts: 'כבר נקלטו משלוחים להזמנה — אי אפשר לפתוח אותה לעריכה',
+  rebar_delivery_linked: 'השורה נוצרה מהזמנת ברזל — פתחו את ההזמנה כדי לשנות אותה',
 };
 
 function rebarDbError(err) {
@@ -240,4 +241,10 @@ function rebarDbError(err) {
   if (err.code === '23505') return 'מספר ההזמנה כבר קיים באתר';
   const key = Object.keys(REBAR_DB_ERRORS).find(k => String(err.message || '').startsWith(k));
   return key ? REBAR_DB_ERRORS[key] : (err.message || String(err));
+}
+
+// the same, for a refused delete: an order that received deliveries is closed instead
+function rebarDeleteError(err) {
+  if (err && String(err.message || '').startsWith('rebar_order_has_receipts')) return 'כבר נקלטו משלוחים להזמנה — סגרו אותה במקום למחוק';
+  return rebarDbError(err);
 }

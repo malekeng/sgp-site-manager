@@ -14,7 +14,6 @@ const NAV_ITEMS = [
   { group: 'מעקב ציוד וחומר', key: 'materials', icon: '📦', ico: 'group-materials', items: [
     { href: 'concrete.html', label: 'בטון', icon: '🧱', ico: 'concrete' },
     { href: 'rebar.html',    label: 'ברזל', icon: '🔩', ico: 'rebar' },
-    { href: 'rebar-orders.html', label: 'הזמנות ברזל', icon: '📦', ico: 'rebar' },
     { href: 'slabs.html',    label: 'לוח״דים', icon: '🏗️', ico: 'slabs' },
   ]},
   { group: 'הגשות לאישור', key: 'vendor-submissions', icon: '📥', ico: 'group-submissions', items: [
