@@ -147,6 +147,7 @@ initCrudPage({
   orderBy: { column: 'order_date', ascending: false },
   rowActions: row => row.rebar_order_id ? `
     <a class="icon-btn" href="${rbOrderHref(row.rebar_order_id)}" title="פתיחת ההזמנה" aria-label="פתיחת ההזמנה">${uiIcon('eye')}</a>
+    ${rebarTrackingEditable(row) ? `<a class="icon-btn" href="rebar-orders.html#edit=${row.rebar_order_id}" title="עריכת ההזמנה" aria-label="עריכת ההזמנה">${uiIcon('pencil')}</a>` : ''}
     <button class="icon-btn danger" data-del-order="${row.rebar_order_id}" data-order-no="${esc(row.plan_ref || '')}" title="מחיקת ההזמנה" aria-label="מחיקת ההזמנה">${uiIcon('trash')}</button>` : null,
   openRecord: row => {
     if (!row.rebar_order_id) return false;

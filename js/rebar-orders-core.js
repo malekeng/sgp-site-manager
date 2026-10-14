@@ -243,6 +243,18 @@ function rebarDbError(err) {
   return key ? REBAR_DB_ERRORS[key] : (err.message || String(err));
 }
 
+// The order screen's address: #o=<id> opens an order, #edit=<id> opens it for editing, #new starts one.
+function rebarOrderRoute(hash) {
+  const m = /^#(o|edit)=([0-9a-f-]{36})$/.exec(hash || '');
+  if (m) return { mode: m[1] === 'o' ? 'open' : 'edit', id: m[2] };
+  return hash === '#new' ? { mode: 'new', id: null } : { mode: null, id: null };
+}
+
+// A tracking row's order can go back to editing while nothing arrived and it is not closed.
+function rebarTrackingEditable(row) {
+  return !!row.rebar_order_id && row.supply_status === 'לא' && !row.order_closed;
+}
+
 // the same, for a refused delete: an order that received deliveries is closed instead
 function rebarDeleteError(err) {
   if (err && String(err.message || '').startsWith('rebar_order_has_receipts')) return 'כבר נקלטו משלוחים להזמנה — סגרו אותה במקום למחוק';

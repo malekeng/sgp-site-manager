@@ -4,6 +4,7 @@
 // (guard triggers), so the buttons here only offer what the status allows.
 
 const RO_LOCK_MSG = 'ההזמנה עודכנה על ידי משתמש אחר — רעננו';
+const RO_REOPEN_Q = 'לפתוח את ההזמנה לעריכה? היא תחזור לטיוטה ותצא ממעקב האספקה עד שתישלח שוב. אחרי השינויים לחצו "הפק PDF וסמן כנשלחה" ושלחו לספק את ה-PDF החדש.';
 const RO_STATUS_TONE = { draft: 'open', sent: 'progress', partial: 'progress', complete: 'done', closed: 'open' };
 const RO_SECTIONS = {
   bar: { title: 'מוטות', add: '+ הוספת מוט', item: 'מוט' },
@@ -299,7 +300,7 @@ async function roAction(act) {
   if (act === 'delete') return roDelete();
   if (act === 'close') return roOpenClose();
   if (act === 'reopen') {
-    if (!confirm('לפתוח את ההזמנה לעריכה? היא תחזור לטיוטה, ואחרי השינויים יש להפיק ולשלוח PDF חדש לספק.')) return;
+    if (!confirm(RO_REOPEN_Q)) return;
     return roSetStatus({ status: 'draft' }, 'ההזמנה חזרה לטיוטה');
   }
   if (act === 'receive') return roOpenReceiptDialog();
@@ -1478,8 +1479,14 @@ function roReceiptEvents() {
   const names = [...new Set([...(a || []), ...(b || [])].map(r => (r.supplier || '').trim()).filter(Boolean))].sort();
   document.getElementById('supplierList').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
 
-  const m = location.hash.match(/^#o=([0-9a-f-]{36})$/);
-  if (m) await roOpenOrder(m[1]);
-  else if (location.hash === '#new') await roNewOrder();
-  else location.replace('rebar.html');   // the orders are listed in the ברזל page
+  const route = rebarOrderRoute(location.hash);
+  if (route.mode === 'new') await roNewOrder();
+  else if (route.mode) {
+    await roOpenOrder(route.id);
+    // the pencil of the tracking table: a sent order that received nothing goes back to editing
+    if (route.mode === 'edit' && state.order && state.order.id === route.id && state.order.status === 'sent') {
+      if (state.receipts.length) toast(rebarDbError({ message: 'rebar_order_has_receipts' }), 'error');
+      else if (confirm(RO_REOPEN_Q)) await roSetStatus({ status: 'draft' }, 'ההזמנה פתוחה לעריכה');
+    }
+  } else location.replace('rebar.html');   // the orders are listed in the ברזל page
 })();
