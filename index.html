@@ -197,8 +197,12 @@
         <input id="csCompany" type="text" name="company_name" required maxlength="200">
       </div>
       <div class="form-grid">
+        <div class="field"><label for="csTaxId">ח.פ / ע.מ</label><input id="csTaxId" type="text" name="tax_id" required inputmode="numeric" maxlength="20" placeholder="512345678"></div>
+        <div class="field"><label for="csAddress">כתובת החברה</label><input id="csAddress" type="text" name="address" required maxlength="200"></div>
+      </div>
+      <div class="form-grid">
         <div class="field"><label for="csContact">איש קשר</label><input id="csContact" type="text" name="contact_name" required></div>
-        <div class="field"><label for="csPhone">טלפון</label><input id="csPhone" type="tel" name="phone"></div>
+        <div class="field"><label for="csPhone">טלפון</label><input id="csPhone" type="tel" name="phone" required maxlength="30"></div>
       </div>
       <div class="field full">
         <label for="csEmail">אימייל</label>
@@ -224,6 +228,7 @@
 
 <script src="js/supabase-client.js"></script>
 <script src="js/policies.js"></script>
+<script src="js/company-details.js"></script>
 <script>
 const msgEl = document.getElementById('msg');
 const authCard = document.getElementById('authCard');
@@ -314,11 +319,13 @@ companySignupForm.addEventListener('submit', async e => {
     showErr('יש לאשר את תנאי השימוש ואת מדיניות הפרטיות כדי לשלוח בקשה');
     return;
   }
+  const fd = new FormData(companySignupForm);
+  const tax = normalizeTaxId(fd.get('tax_id'));
+  if (tax.error) { showErr(tax.error); document.getElementById('csTaxId').focus(); return; }
   const btn = document.getElementById('csBtn');
   const btnText = document.getElementById('csBtnText');
   setBusy(btn, btnText, true, 'שולח...', 'שליחת בקשה');
 
-  const fd = new FormData(companySignupForm);
   const { error } = await sb.rpc('request_company_signup', {
     p_company_name: fd.get('company_name'),
     p_contact_name: fd.get('contact_name'),
@@ -326,10 +333,12 @@ companySignupForm.addEventListener('submit', async e => {
     p_phone: fd.get('phone') || null,
     p_note: fd.get('note') || null,
     p_terms_version: typeof TADOK_POLICY !== 'undefined' ? TADOK_POLICY.terms : null,
+    p_tax_id: tax.value,
+    p_address: (fd.get('address') || '').trim() || null,
   });
 
   setBusy(btn, btnText, false, '', 'שליחת בקשה');
-  if (error) { showErr('שגיאה בשליחת הבקשה: ' + error.message); return; }
+  if (error) { showErr(/tax_id_invalid/.test(error.message) ? TAX_ID_ERROR : 'שגיאה בשליחת הבקשה: ' + error.message); return; }
   companySignupForm.reset();
   showOk('הבקשה נשלחה. נחזור אליכם במייל לאחר הבדיקה.');
 });

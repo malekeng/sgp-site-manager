@@ -260,3 +260,38 @@ function rebarDeleteError(err) {
   if (err && String(err.message || '').startsWith('rebar_order_has_receipts')) return 'כבר נקלטו משלוחים להזמנה — סגרו אותה במקום למחוק';
   return rebarDbError(err);
 }
+
+// ---- the sender and the delivery, entered once (spec 2026-10-14-sender-details-once §4.3) ----
+// A new order: the orderer from the account; the address, driver notes and site contacts from
+// the site's last order (a copy, so editing one never changes the other). What the last order
+// left empty — or everything, for the first order on a site — takes the site's address and the
+// orderer as the contact. `from_order` names the last order only when something came from it.
+function rebarOrderDefaults({ last, site, profile }) {
+  const p = profile || {};
+  const orderer = { name: p.full_name || p.username || '', phone: p.phone || '', email: p.email || '' };
+  const l = last || {};
+  const address = String(l.delivery_address || '').trim(), notes = String(l.driver_notes || '').trim();
+  const contacts = (l.contacts || []).filter(c => c && (String(c.name || '').trim() || String(c.phone || '').trim()))
+    .map(c => ({ name: c.name || '', phone: c.phone || '', role: c.role || '' }));
+  return {
+    orderer,
+    delivery_address: address || (site && site.location) || '',
+    driver_notes: notes,
+    contacts: contacts.length ? contacts : [{ name: orderer.name, phone: orderer.phone, role: 'מזמין' }],
+    from_order: last && (address || notes || contacts.length) ? last.order_no || null : null,
+  };
+}
+
+// What each line of the "המזמין והמשלוח" summary lacks. A contact counts only with a phone.
+function rebarSenderGaps({ company, orderer, order }) {
+  const blank = v => !String(v ?? '').trim();
+  const c = company || {}, o = order || {};
+  return {
+    company: ['tax_id', 'address', 'phone'].filter(k => blank(c[k])),
+    orderer: blank((orderer || {}).phone) ? ['phone'] : [],
+    delivery: [
+      ...(blank(o.delivery_address) ? ['address'] : []),
+      ...((o.contacts || []).some(x => !blank(x && x.phone)) ? [] : ['contact']),
+    ],
+  };
+}

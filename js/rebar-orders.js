@@ -62,7 +62,7 @@ async function roOpenOrder(id) {
   if (error || e2) { toast(rebarDbError(error || e2), 'error'); return; }
   Object.assign(state, {
     order, items: (items || []).sort((a, b) => RO_KIND_RANK[a.kind] - RO_KIND_RANK[b.kind] || a.line_no - b.line_no),
-    removedIds: [], dirty: false, loadedUpdatedAt: order.updated_at, noTouched: false,
+    removedIds: [], dirty: false, loadedUpdatedAt: order.updated_at, noTouched: false, senderFrom: null, senderOpen: null,
   });
   await roLoadReceipts(id);
   history.replaceState(null, '', '#o=' + id);
@@ -75,15 +75,19 @@ async function roSiteOrderNos() {
   return (data || []).map(r => r.order_no);
 }
 
+// A new order fills its sender and delivery itself: the orderer from the account, the delivery
+// from the site's last order (or the site's address the first time) — spec 2026-10-14 §4.3.
 async function roNewOrder() {
   const { profile, site } = state.ctx;
-  const orderer = { name: profile.full_name || profile.username || '', phone: profile.phone || '', email: profile.email || '' };
+  const { data: last } = await sb.from('rebar_orders').select('order_no, delivery_address, driver_notes, contacts')
+    .eq('site_id', site.id).order('created_at', { ascending: false }).limit(1);
+  const d = rebarOrderDefaults({ last: (last || [])[0] || null, site, profile });
   state.order = {
     status: 'draft', order_no: nextOrderNo(await roSiteOrderNos(), new Date()), name: '', supplier: '', required_date: null,
-    delivery_address: site.location || '', driver_notes: '', waste_pct: 3, orderer,
-    contacts: [{ name: orderer.name, phone: orderer.phone, role: 'מזמין' }],
+    delivery_address: d.delivery_address, driver_notes: d.driver_notes, waste_pct: 3, orderer: d.orderer, contacts: d.contacts,
   };
-  Object.assign(state, { items: [], removedIds: [], dirty: false, loadedUpdatedAt: null, noTouched: true, receipts: [], receiptItems: [], receiptDocs: {} });
+  Object.assign(state, { items: [], removedIds: [], dirty: false, loadedUpdatedAt: null, noTouched: true, receipts: [], receiptItems: [], receiptDocs: {},
+    senderFrom: d.from_order, senderOpen: null });
   history.replaceState(null, '', '#new');
   roShow('editor');
   roRenderEditor();
@@ -98,7 +102,8 @@ async function roDuplicate(id) {
   if (!order) { toast('ההזמנה לא נמצאה', 'error'); return; }
   const copy = duplicateOrder(order, items || [], nextOrderNo(await roSiteOrderNos(), new Date()));
   copy.order.name = order.name;
-  Object.assign(state, { order: copy.order, items: copy.items, removedIds: [], loadedUpdatedAt: null, noTouched: true, receipts: [], receiptItems: [], receiptDocs: {} });
+  Object.assign(state, { order: copy.order, items: copy.items, removedIds: [], loadedUpdatedAt: null, noTouched: true, receipts: [], receiptItems: [], receiptDocs: {},
+    senderFrom: null, senderOpen: null });
   state.dirty = true;
   history.replaceState(null, '', '#new');
   roShow('editor');
@@ -114,9 +119,8 @@ function roRenderEditor() {
   const set = (k, v) => { const el = document.getElementById('f-' + k); el.value = v ?? ''; el.disabled = !draft; };
   set('name', o.name); set('order_no', o.order_no); set('supplier', o.supplier); set('required_date', o.required_date);
   set('delivery_address', o.delivery_address); set('driver_notes', o.driver_notes); set('waste_pct', o.waste_pct ?? 3);
-  const who = o.orderer || {};
-  document.getElementById('ordererLine').textContent = [who.name, who.phone, who.email].filter(Boolean).join(' · ') || '—';
   roRenderContacts();
+  roRenderSender();
   document.getElementById('addContactBtn').style.display = draft ? '' : 'none';
   roRenderActions();
   roRenderSections();
@@ -155,6 +159,58 @@ function roRenderContacts() {
       <input data-k="role" placeholder="תפקיד" value="${esc(c.role || '')}" ${draft ? '' : 'disabled'}>
       ${draft ? `<button type="button" class="icon-btn danger" data-del-contact="${i}" title="הסרה" aria-label="הסרה">${uiIcon('trash')}</button>` : '<span></span>'}
     </div>`).join('') || '<div class="cell-muted">—</div>';
+}
+
+// ---- "המזמין והמשלוח": three summary lines; the fields open under them for a draft ----
+const RO_GAP_LABEL = { tax_id: 'ח.פ', address: 'כתובת', phone: 'טלפון' };
+
+function roRenderSender() {
+  const o = state.order, draft = roIsDraft(), c = state.company || {}, who = o.orderer || {};
+  const { profile } = state.ctx;
+  const gaps = rebarSenderGaps({ company: c, orderer: who, order: o });
+  const join = parts => parts.filter(x => String(x || '').trim()).map(esc).join(' · ');
+  const companyGap = gaps.company.length
+    ? `<span class="sender-gap">חסרים פרטי חברה: ${gaps.company.map(k => RO_GAP_LABEL[k]).join(', ')} · ${profile.role === 'owner' ? '<a href="org-settings.html">להשלמה בהגדרות החברה</a>' : 'בעל החברה ישלים'}</span>` : '';
+  // only the orderer's own phone, and only on their own draft (another person's draft keeps theirs)
+  const mine = draft && who.email && who.email === profile.email;
+  const phoneGap = gaps.orderer.length && mine
+    ? '<span class="sender-gap">חסר טלפון <input id="senderPhone" type="tel" inputmode="tel" maxlength="30" aria-label="הטלפון שלך" autocomplete="tel"><button type="button" class="btn btn-primary btn-sm" id="senderPhoneSave">שמירה</button></span>' : '';
+  const contacts = (o.contacts || []).map(x => [x.name, x.phone].filter(Boolean).join(' ')).filter(Boolean).join(', ');
+  const deliveryGap = draft && gaps.delivery.length
+    ? `<span class="sender-gap">חסר: ${gaps.delivery.map(k => k === 'address' ? 'כתובת למשלוח' : 'איש קשר עם טלפון').join(', ')}</span>` : '';
+  const from = state.senderFrom ? `<span class="sender-from">מההזמנה הקודמת באתר ${esc(state.senderFrom)}</span>` : '';
+  document.getElementById('senderSummary').innerHTML = `
+    <div class="sender-line"><span class="sender-k">חברה</span><span class="sender-v">${join([c.name, c.tax_id ? 'ח.פ ' + c.tax_id : '', c.address, c.phone]) || '—'}${companyGap}</span></div>
+    <div class="sender-line"><span class="sender-k">מזמין</span><span class="sender-v">${join([who.name, who.phone, who.email]) || '—'}${phoneGap}</span></div>
+    <div class="sender-line"><span class="sender-k">משלוח</span><span class="sender-v">${join([o.delivery_address, contacts, o.driver_notes]) || '—'}${from}${deliveryGap}</span></div>`;
+  // the card opens by itself once per order, when the delivery lacks what the supplier needs
+  if (state.senderOpen === null || state.senderOpen === undefined) state.senderOpen = draft && gaps.delivery.length > 0;
+  const open = !!(draft && state.senderOpen);
+  document.getElementById('senderCard').classList.toggle('is-open', open);
+  const t = document.getElementById('senderToggle');
+  t.style.display = draft ? '' : 'none';
+  t.textContent = open ? 'סגירה' : 'עריכה';
+  t.setAttribute('aria-expanded', String(open));
+}
+
+// the orderer's phone, typed once: saved in the account, then used here and in every next order
+async function roSaveMyPhone() {
+  const el = document.getElementById('senderPhone');
+  const phone = ((el && el.value) || '').trim();
+  if (!phone) { if (el) el.focus(); return; }
+  const { user, profile } = state.ctx;
+  const { data, error } = await sb.from('profiles').update({ phone }).eq('id', user.id).select('id');
+  if (error || !data || !data.length) { toast('הטלפון לא נשמר' + (error ? ' — ' + error.message : ' — אין הרשאה'), 'error'); return; }
+  roReadHeader();
+  profile.phone = phone;
+  const o = state.order;
+  o.orderer = { ...(o.orderer || {}), phone };
+  const c = (o.contacts || []).find(x => x.name === o.orderer.name && !String(x.phone || '').trim());
+  if (c) c.phone = phone;
+  roMarkDirty();
+  roRenderContacts();
+  roRenderSender();
+  toast('הטלפון נשמר בחשבון', 'success');
 }
 
 function roMarkDirty() {
@@ -1527,17 +1583,31 @@ function roReceiptEvents() {
   const auth = await requireAuth('rebar.html');   // the order screen belongs to the ברזל page
   if (!auth) return;
   state.ctx = auth;
+  // the company's details for the summary and the PDF (the session's company holds only name and logo)
+  const { data: company } = await sb.from('organizations').select('name, tax_id, address, phone, email').eq('id', auth.org.id).single();
+  state.company = company || { name: auth.org.name };
 
   document.getElementById('edActions').addEventListener('click', e => {
     const b = e.target.closest('[data-act]');
     if (b) roAction(b.dataset.act);
   });
   document.getElementById('headerForm').addEventListener('input', e => {
-    if (!roIsDraft()) return;
+    if (!roIsDraft() || e.target.id === 'senderPhone') return;   // the phone belongs to the account, not to the order
     if (e.target.id === 'f-order_no') state.noTouched = false;
     roReadHeader();
     roMarkDirty();
     if (e.target.id === 'f-waste_pct') roRenderSummary();
+    if (e.target.closest('#senderEdit')) roRenderSender();
+  });
+  document.getElementById('senderToggle').addEventListener('click', () => {
+    state.senderOpen = !state.senderOpen;
+    roRenderSender();
+  });
+  document.getElementById('senderSummary').addEventListener('click', e => {
+    if (e.target.closest('#senderPhoneSave')) roSaveMyPhone();
+  });
+  document.getElementById('senderSummary').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.id === 'senderPhone') { e.preventDefault(); roSaveMyPhone(); }
   });
   document.getElementById('headerForm').addEventListener('submit', e => e.preventDefault());
   document.getElementById('addContactBtn').addEventListener('click', () => {
@@ -1545,6 +1615,7 @@ function roReceiptEvents() {
     state.order.contacts = [...(state.order.contacts || []), { name: '', phone: '', role: '' }];
     roRenderContacts();
     roMarkDirty();
+    roRenderSender();
   });
   document.getElementById('contactsList').addEventListener('click', e => {
     const del = e.target.closest('[data-del-contact]');
@@ -1555,6 +1626,7 @@ function roReceiptEvents() {
     roReadHeader();
     roRenderContacts();
     roMarkDirty();
+    roRenderSender();
   });
   document.getElementById('sectionsHost').addEventListener('click', e => {
     const t = e.target.closest('[data-add],[data-edit-line],[data-copy-line],[data-del-line]');

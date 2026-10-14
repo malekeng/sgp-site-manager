@@ -75,8 +75,9 @@ function rebarPdfInfoBox(title, rows) {
     </div>`;
 }
 
-function rebarPdfFirstHead({ orgName, logoHtml, site, order, summary, genStr }) {
-  const who = order.orderer || {};
+function rebarPdfFirstHead({ orgName, logoHtml, site, order, summary, genStr, company }) {
+  const who = order.orderer || {}, c = company || {};
+  const dot = parts => parts.filter(x => String(x || '').trim()).join(' · ');
   const contacts = (order.contacts || []).map(c => rebarPdfEsc([c.name, c.phone, c.role].filter(Boolean).join(' · '))).join('<br>');
   return rebarPdfBanner(orgName, logoHtml, genStr) + `
     <div style="padding:22px 40px 4px;">
@@ -96,7 +97,7 @@ function rebarPdfFirstHead({ orgName, logoHtml, site, order, summary, genStr }) 
         ${rebarPdfChip('rebar', 'סה״כ (טון)', rebarPdfNum(summary.total_t, 2), true)}
       </div>
       <div style="display:flex;gap:12px;margin-top:12px;">
-        ${rebarPdfInfoBox('המזמין', [['חברה', rebarPdfEsc(orgName)], ['יוצר ההזמנה', rebarPdfEsc([who.name, who.phone].filter(Boolean).join(' · '))], ['דוא״ל', rebarPdfEsc(who.email)]])}
+        ${rebarPdfInfoBox('המזמין', [['חברה', rebarPdfEsc(dot([orgName, c.tax_id ? 'ח.פ ' + c.tax_id : '']))], ['פרטי החברה', rebarPdfEsc(dot([c.address, c.phone]))], ['יוצר ההזמנה', rebarPdfEsc(dot([who.name, who.phone]))], ['דוא״ל', rebarPdfEsc(who.email)]])}
         ${rebarPdfInfoBox('פרטי משלוח', [['כתובת', rebarPdfEsc(order.delivery_address)], ['אנשי קשר', contacts], ['הערות לנהג', rebarPdfEsc(order.driver_notes)]])}
       </div>
     </div>`;
@@ -203,7 +204,7 @@ function rebarPdfSummary(summary, wastePct) {
 
 // One HTML string per A4 page. Lines flow bar → mesh → pile, REBAR_PDF_ROWS per page,
 // never split; the summary goes on the last page when it has room, else on a page of its own.
-function rebarPdfPages({ orgName, logoHtml, site, order, items, summary, drawings, genStr }) {
+function rebarPdfPages({ orgName, logoHtml, site, order, items, summary, drawings, genStr, company }) {
   const rank = { bar: 0, mesh: 1, pile: 2, element: 3 };
   const lines = [...items].sort((a, b) => rank[a.kind] - rank[b.kind] || a.line_no - b.line_no);
   const chunks = [];
@@ -220,7 +221,7 @@ function rebarPdfPages({ orgName, logoHtml, site, order, items, summary, drawing
   const gen = genStr || new Date().toLocaleDateString('he-IL');
   const total = chunks.length;
   return chunks.map((chunk, p) => {
-    const head = p === 0 ? rebarPdfFirstHead({ orgName, logoHtml, site, order, summary, genStr: gen }) : rebarPdfNextHead(orgName, order);
+    const head = p === 0 ? rebarPdfFirstHead({ orgName, logoHtml, site, order, summary, genStr: gen, company }) : rebarPdfNextHead(orgName, order);
     const body = Object.keys(RP_SECTIONS).map(kind => {
       const own = chunk.filter(it => it.kind === kind);
       if (!own.length) return '';
@@ -247,7 +248,7 @@ function rebarSvgToPng(svg, w, h) {
   });
 }
 
-async function rebarExportPdf({ order, items, site }) {
+async function rebarExportPdf({ order, items, site, company }) {
   const summary = orderSummary(items, order.waste_pct ?? 3);
   const drawings = {};
   for (const it of items) {
@@ -260,7 +261,7 @@ async function rebarExportPdf({ order, items, site }) {
   }
   const logo = await orgLogo(activeOrg);
   const logoHtml = logo.isCompany ? await pdfLogoHtml(40) : '';
-  const pages = rebarPdfPages({ orgName: orgDisplayName(), logoHtml, site, order, items, summary, drawings, genStr: sgpGeneratedAt() });
+  const pages = rebarPdfPages({ orgName: orgDisplayName(), logoHtml, site, order, items, summary, drawings, genStr: sgpGeneratedAt(), company });
   const pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   for (let p = 0; p < pages.length; p++) {
     await sgpPaintPage(pdf, pages[p], { rootW: REBAR_PDF_W, landscape: false, footPx: 50, addPage: p > 0 });
@@ -287,7 +288,7 @@ function rebarPdfName(order) { return `הזמנת ברזל ${order.order_no}.pdf
 async function rebarDownloadPdf() {
   try {
     toast('מפיק PDF…');
-    const blob = await rebarExportPdf({ order: state.order, items: state.items, site: state.ctx.site });
+    const blob = await rebarExportPdf({ order: state.order, items: state.items, site: state.ctx.site, company: state.company });
     await rebarShareOrDownload(blob, rebarPdfName(state.order));
   } catch (err) {
     console.error(err);
@@ -302,7 +303,7 @@ async function rebarIssue() {
   const { user, site } = state.ctx, order = state.order;
   try {
     toast('מפיק PDF…');
-    const blob = await rebarExportPdf({ order, items: state.items, site });
+    const blob = await rebarExportPdf({ order, items: state.items, site, company: state.company });
     const name = rebarPdfName(order);
     const path = `${site.id}/rebar_orders/${order.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.pdf`;
     const { error: upErr } = await sb.storage.from('documents').upload(path, blob, { contentType: 'application/pdf' });

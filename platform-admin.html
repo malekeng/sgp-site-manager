@@ -182,6 +182,10 @@
         <div class="field full"><label>אימייל הבעלים *</label><input type="email" name="owner_email" required></div>
         <div class="field"><label>שם הבעלים</label><input type="text" name="owner_full_name"></div>
         <div class="field"><label>שם משתמש</label><input type="text" name="owner_username"></div>
+        <div class="field"><label>ח.פ / ע.מ</label><input type="text" name="tax_id" inputmode="numeric" maxlength="20"></div>
+        <div class="field"><label>טלפון החברה</label><input type="tel" name="phone" maxlength="30"></div>
+        <div class="field full"><label>כתובת החברה</label><input type="text" name="address" maxlength="200"></div>
+        <div class="field full"><label>אימייל החברה</label><input type="email" name="email" maxlength="200"></div>
       </div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary" id="companySubmitBtn">יצירה ושליחת הזמנה</button>
@@ -213,6 +217,7 @@
 <script src="js/supabase-client.js"></script>
 <script src="js/policies.js"></script>
 <script src="js/app.js"></script>
+<script src="js/company-details.js"></script>
 <script src="js/support.js"></script>
 <script src="js/operator.js"></script>
 <script>
@@ -491,6 +496,7 @@
         <div style="font-size:12.5px;color:var(--steel);">
           ${esc(r.contact_name)} · ${esc(r.email)}${r.phone ? ' · ' + esc(r.phone) : ''}
         </div>
+        ${r.tax_id || r.address ? `<div style="font-size:12.5px;color:var(--steel);">${[r.tax_id ? 'ח.פ ' + esc(r.tax_id) : '', esc(r.address || '')].filter(Boolean).join(' · ')}</div>` : ''}
         ${r.note ? `<div style="font-size:12.5px;">${esc(r.note)}</div>` : ''}
         <div class="header-actions" style="margin-top:4px;">
           <button class="btn btn-sm btn-primary" data-approve="${r.id}">אישור ופתיחת חברה</button>
@@ -527,6 +533,10 @@
       form.slug.value = slugify(request.company_name);
       form.owner_email.value = request.email || '';
       form.owner_full_name.value = request.contact_name || '';
+      form.tax_id.value = request.tax_id || '';
+      form.phone.value = request.phone || '';
+      form.address.value = request.address || '';
+      form.email.value = request.email || '';
     }
     document.getElementById('companyModalTitle').textContent = request ? 'אישור בקשה — פתיחת חברה' : 'חברה חדשה';
     document.getElementById('companyModalBackdrop').classList.add('open');
@@ -552,6 +562,14 @@
     btn.disabled = true;
 
     const fd = new FormData(e.target);
+    const tax = normalizeTaxId(fd.get('tax_id'));
+    if (tax.error) { showMsg(msgEl, tax.error, 'error'); btn.disabled = false; return; }
+    const details = {
+      tax_id: tax.value,
+      phone: (fd.get('phone') || '').trim() || null,
+      address: (fd.get('address') || '').trim() || null,
+      email: (fd.get('email') || '').trim() || null,
+    };
     const payload = {
       name: fd.get('name'),
       slug: fd.get('slug'),
@@ -570,6 +588,13 @@
       });
       const out = await res.json();
       if (!res.ok) { showMsg(msgEl, 'שגיאה: ' + (out.error || res.status), 'error'); btn.disabled = false; return; }
+      // the company's details (the approval trigger already copied the request's; these are the reviewed values)
+      // (a blank field is left alone, so it never erases what the request brought)
+      const filled = Object.fromEntries(Object.entries(details).filter(([, v]) => v !== null));
+      if (Object.keys(filled).length) {
+        const { data: upd, error: updErr } = await sb.from('organizations').update(filled).eq('id', out.organization_id).select('id');
+        if (updErr || !upd || !upd.length) toast('החברה נוצרה, אך פרטיה לא נשמרו — הבעלים ישלים אותם בהגדרות החברה', 'error');
+      }
       toast('החברה נוצרה והזמנה נשלחה לבעלים', 'success');
       document.getElementById('companyModalBackdrop').classList.remove('open');
       loadOrgs(); loadRequests();

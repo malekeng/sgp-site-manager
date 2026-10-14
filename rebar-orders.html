@@ -46,7 +46,22 @@
 .contact-row { display: grid; grid-template-columns: 1fr 1fr 1fr 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
 .contact-row input { padding: 8px 10px; border: 2px solid var(--border); border-radius: var(--radius-sm); font: inherit; min-width: 0; }
 @media (max-width: 560px) { .contact-row { grid-template-columns: 1fr 1fr 32px; } .contact-row input[data-k="role"] { grid-column: 1 / -2; } }
-.orderer-line { font-size: 13.5px; color: var(--navy); font-weight: 600; padding: 9px 0; }
+.sender-card { border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; }
+.sender-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 2px; }
+.sender-title { font-size: 13.5px; font-weight: 800; color: var(--navy); }
+.sender-line { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px; color: var(--navy); }
+.sender-line:first-child { border-top: 0; }
+.sender-k { font-size: 12px; font-weight: 700; color: var(--steel); }
+.sender-v { min-width: 0; overflow-wrap: anywhere; }
+.sender-from { font-size: 11.5px; color: var(--steel-light); margin-inline-start: 6px; white-space: nowrap; }
+.sender-gap {
+  display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 0 0; margin-inline-start: 6px;
+  padding: 3px 10px; border-radius: 999px; background: rgba(255, 169, 64, 0.16); color: #8A5300; font-size: 12px; font-weight: 700;
+}
+.sender-gap a { color: inherit; text-decoration: underline; }
+.sender-gap input { width: 130px; padding: 3px 8px; border: 1.5px solid var(--border); border-radius: 8px; font: inherit; background: var(--sheet); }
+.sender-edit { display: none; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+.sender-card.is-open .sender-edit { display: block; }
 .locked-note { font-size: 12.5px; color: var(--steel); font-weight: 600; }
 .shape-thumb { display: block; width: 150px; height: 60px; }
 .cell-note { font-size: 11.5px; font-weight: 600; color: var(--steel); margin-top: 2px; white-space: nowrap; }
@@ -226,14 +241,24 @@ select.iw-box { width: 76px; padding: 4px 2px; cursor: pointer; }
         <div class="field"><label for="f-order_no">מס' הזמנה *</label><input id="f-order_no" maxlength="40"></div>
         <div class="field"><label for="f-supplier">ספק</label><input id="f-supplier" list="supplierList" maxlength="120"><datalist id="supplierList"></datalist></div>
         <div class="field"><label for="f-required_date">תאריך אספקה נדרש</label><input id="f-required_date" type="date"></div>
-        <div class="field full"><label for="f-delivery_address">כתובת למשלוח</label><input id="f-delivery_address" maxlength="200"></div>
-        <div class="field full"><label for="f-driver_notes">הערות לנהג</label><textarea id="f-driver_notes" rows="2" maxlength="500"></textarea></div>
         <div class="field"><label for="f-waste_pct">פחת (%)</label><input id="f-waste_pct" inputmode="decimal"></div>
-        <div class="field"><label>מזמין</label><div class="orderer-line" id="ordererLine"></div></div>
-        <div class="field full">
-          <label>אנשי קשר בשטח</label>
-          <div id="contactsList"></div>
-          <div><button type="button" class="btn btn-outline btn-sm" id="addContactBtn">+ איש קשר</button></div>
+        <!-- the sender and the delivery: filled from the account, the company and the site's last order;
+             folded to a summary, opened to edit (spec 2026-10-14-sender-details-once §4) -->
+        <div class="field full sender-card" id="senderCard">
+          <div class="sender-head"><span class="sender-title">המזמין והמשלוח</span>
+            <button type="button" class="btn btn-outline btn-sm" id="senderToggle">עריכה</button></div>
+          <div id="senderSummary"></div>
+          <div class="sender-edit" id="senderEdit">
+            <div class="form-grid">
+              <div class="field full"><label for="f-delivery_address">כתובת למשלוח</label><input id="f-delivery_address" maxlength="200"></div>
+              <div class="field full"><label for="f-driver_notes">הערות לנהג</label><textarea id="f-driver_notes" rows="2" maxlength="500"></textarea></div>
+              <div class="field full">
+                <label>אנשי קשר בשטח</label>
+                <div id="contactsList"></div>
+                <div><button type="button" class="btn btn-outline btn-sm" id="addContactBtn">+ איש קשר</button></div>
+              </div>
+            </div>
+          </div>
         </div>
       </form>
     </div>

@@ -57,9 +57,13 @@
           <label>שם משתמש</label>
           <input type="text" name="username" id="username" disabled style="opacity:0.7;">
         </div>
-        <div class="field full">
+        <div class="field">
           <label>אימייל</label>
           <input type="email" id="email" disabled style="opacity:0.7;">
+        </div>
+        <div class="field">
+          <label for="phone">טלפון</label>
+          <input type="tel" id="phone" name="phone" inputmode="tel" maxlength="30" autocomplete="tel">
         </div>
         <div class="field full">
           <label>תפקיד בשטח</label>
@@ -132,6 +136,7 @@
 
   // Fill form
   document.getElementById('fullName').value = profile.full_name || '';
+  document.getElementById('phone').value = profile.phone || '';
   document.getElementById('username').value = profile.username || '';
   document.getElementById('email').value = profile.email || '';
   avatarInitials.textContent = initials(profile);
@@ -206,14 +211,18 @@
     const payload = {
       full_name: document.getElementById('fullName').value.trim() || null,
       job_title: jobTitle,
+      phone: document.getElementById('phone').value.trim() || null,
     };
 
-    const { error } = await sb.from('profiles').update(payload).eq('id', user.id);
+    // .select() + length: row security hides a refused write, which used to look saved
+    const { data: saved, error } = await sb.from('profiles').update(payload).eq('id', user.id).select('id');
     btn.disabled = false;
     if (error) { showMsg(formMsg, 'שגיאה: ' + error.message, 'error'); return; }
+    if (!saved || !saved.length) { showMsg(formMsg, 'השמירה לא בוצעה — אין הרשאה', 'error'); return; }
 
     profile.full_name = payload.full_name;
     profile.job_title = payload.job_title;
+    profile.phone = payload.phone;
     avatarInitials.textContent = initials(profile);
     toast('הפרופיל נשמר', 'success');
   });
