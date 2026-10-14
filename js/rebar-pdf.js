@@ -127,7 +127,9 @@ function rebarPdfCells(it, drawings) {
   const p = it.params || {};
   if (it.kind === 'bar') {
     const img = drawings[it.line_no] ? `<img src="${drawings[it.line_no]}" style="width:150px;height:55px;display:block;">` : '<span style="color:#9FAAB0;">כמו בקובץ</span>';
-    return cell(img, 'padding:4px 8px;') + alias + cell(rebarPdfEsc(it.steel)) + num(it.diameter_mm, 1) + num(it.length_cm, 1) + tail;
+    // a bar's note (a lift: "2 ליפטים × 632") under its name
+    const named = it.note ? cell((it.alias ? rebarPdfEsc(it.alias) : '—') + `<div style="font-size:10px;color:#637178;font-weight:600;margin-top:2px;">${rebarPdfEsc(it.note)}</div>`) : alias;
+    return cell(img, 'padding:4px 8px;') + named + cell(rebarPdfEsc(it.steel)) + num(it.diameter_mm, 1) + num(it.length_cm, 1) + tail;
   }
   if (it.kind === 'element') {
     // a spacer is counted, not weighed: its weights print as a dash

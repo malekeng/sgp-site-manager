@@ -383,7 +383,8 @@ function roLineCells(it) {
   const approx = c.approx ? ' <span class="approx-badge">חישוב משוער</span>' : '';
   if (it.kind === 'bar') {
     const drawing = it.shape ? `<span class="shape-thumb">${shapeSvg(it.shape, { w: 150, h: 60, stroke: 1.6 })}</span>` : '<span class="cell-muted">כמו בקובץ</span>';
-    return `<td>${drawing}</td><td>${it.alias ? esc(it.alias) : '<span class="cell-muted">—</span>'}</td><td>${esc(it.steel)}</td>
+    const note = it.note ? `<div class="cell-note">${esc(it.note)}</div>` : '';   // a lift: "2 ליפטים × 632"
+    return `<td>${drawing}</td><td>${it.alias ? esc(it.alias) : '<span class="cell-muted">—</span>'}${note}</td><td>${esc(it.steel)}</td>
       <td class="num-cell">${esc(fmtNum(it.diameter_mm, 1))}</td><td class="num-cell">${esc(fmtNum(it.length_cm, 1))}${approx}</td>`;
   }
   if (it.kind === 'mesh') {
