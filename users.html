@@ -200,9 +200,26 @@
   </div>
 </div>
 
+<!-- Temporary password: shown once, cleared when the window closes -->
+<div class="modal-backdrop" id="tempPassBackdrop">
+  <div class="modal">
+    <h3>סיסמה זמנית</h3>
+    <p id="tempPassFor" style="font-size:13px;color:var(--steel);"></p>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin:12px 0;">
+      <bdi id="tempPassValue" dir="ltr" style="font-family:ui-monospace,Consolas,monospace;font-size:20px;font-weight:700;letter-spacing:1px;user-select:all;"></bdi>
+      <button type="button" class="btn btn-outline btn-sm" id="tempPassCopy">העתקה</button>
+    </div>
+    <p id="tempPassNote" style="font-size:12.5px;line-height:1.6;"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="tempPassClose">סגירה</button>
+    </div>
+  </div>
+</div>
+
 <script src="js/supabase-client.js"></script>
 <script src="js/policies.js"></script>
 <script src="js/app.js"></script>
+<script src="js/temp-password.js"></script>
 <script>
 (async function () {
   const auth = await requireAuth('users.html');
@@ -263,6 +280,7 @@
               ${u.role !== 'contractor' ? `<button class="icon-btn" data-resend="${u.id}" title="שליחת הזמנה מחדש" aria-label="שליחת הזמנה מחדש ל-${esc(u.full_name || u.username)}">${uiIcon('send')}</button>` : ''}
               ${u.id !== user.id ? `<button class="icon-btn danger" data-del-user="${u.id}" title="מחיקה" aria-label="מחיקת ${esc(u.full_name || u.username)}">${uiIcon('trash')}</button>` : ''}
             ` : ''}
+            ${tempPasswordAllowed(profile.role, u.role, u.id === user.id) ? `<button class="icon-btn" data-temp-pass="${u.id}" title="סיסמה זמנית" aria-label="סיסמה זמנית ל-${esc(u.full_name || u.username)}">${uiIcon('lock')}</button>` : ''}
           </div>
         </td>
       </tr>
@@ -272,6 +290,7 @@
     body.querySelectorAll('[data-edit-user]').forEach(b => b.addEventListener('click', () => openEdit(b.dataset.editUser)));
     body.querySelectorAll('[data-resend]').forEach(b => b.addEventListener('click', () => resendInvite(b.dataset.resend)));
     body.querySelectorAll('[data-del-user]').forEach(b => b.addEventListener('click', () => deleteUser(b.dataset.delUser)));
+    body.querySelectorAll('[data-temp-pass]').forEach(b => b.addEventListener('click', () => setTempPassword(b.dataset.tempPass)));
   }
 
   function renderSiteChecks(containerId, selectedIds) {
@@ -542,6 +561,46 @@
     if (error) { toast('שגיאה בשליחה: ' + error.message, 'error'); return; }
     toast('נשלח קישור למשתמש', 'success');
   }
+
+  // "סיסמה זמנית": the server makes the password and returns it once; an email login must
+  // replace it at the next login, a contractor keeps it (as when the account was created).
+  async function setTempPassword(id) {
+    const u = usersCache.find(x => x.id === id);
+    if (!u) return;
+    const who = u.full_name || u.username;
+    const next = u.role === 'contractor' ? 'הקבלן ייכנס איתה במסך הכניסה לקבלנים.' : 'בכניסה הבאה המשתמש יתבקש לקבוע סיסמה משלו.';
+    if (!confirm(`לקבוע סיסמה זמנית עבור ${who}?\n\nהסיסמה הנוכחית תפסיק לעבוד מיד. ${next}`)) return;
+
+    const { data: { session } } = await sb.auth.getSession();
+    try {
+      const res = await fetch(SUPABASE_FUNCTIONS_URL + '/set-temp-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ organization_id: org.id, user_id: id }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.password) throw new Error(result.error || 'שגיאה לא ידועה');
+      document.getElementById('tempPassFor').textContent = 'עבור ' + who;
+      document.getElementById('tempPassValue').textContent = result.password;
+      document.getElementById('tempPassNote').textContent = `מסרו את הסיסמה ל${u.role === 'contractor' ? 'קבלן' : 'משתמש'} בעל־פה או בהודעה אישית. ${next} הסיסמה מוצגת פעם אחת בלבד.`;
+      document.getElementById('tempPassBackdrop').classList.add('open');
+    } catch (err) {
+      toast('שגיאה בקביעת סיסמה זמנית: ' + err.message, 'error');
+    }
+  }
+  document.getElementById('tempPassCopy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById('tempPassValue').textContent);
+      toast('הסיסמה הועתקה', 'success');
+    } catch { toast('לא ניתן להעתיק — סמנו את הסיסמה והעתיקו ידנית', 'error'); }
+  });
+  document.getElementById('tempPassClose').addEventListener('click', () => {
+    document.getElementById('tempPassValue').textContent = '';   // not left on the page
+    document.getElementById('tempPassBackdrop').classList.remove('open');
+  });
 
   async function deleteUser(id) {
     const u = usersCache.find(x => x.id === id);

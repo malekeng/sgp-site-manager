@@ -293,9 +293,25 @@ function checkPasswordMatch() {
 newPasswordEl.addEventListener('input', checkPasswordMatch);
 confirmPasswordEl.addEventListener('input', checkPasswordMatch);
 
+const TEMP_PASSWORD_INTRO = 'נכנסתם עם סיסמה זמנית. קבעו עכשיו סיסמה משלכם כדי להמשיך.';
+
 async function goToDashboardIfSignedIn() {
   const { data: { session } } = await sb.auth.getSession();
+  // a temporary password is replaced first (every page's requireAuth sends such a user here)
+  if (session && mustChangePassword(session.user)) { showSetPasswordOnly(session.user.email, TEMP_PASSWORD_INTRO); return; }
   if (session) window.location.href = 'dashboard.html';
+}
+
+// A session that only needs a new password (an email link, or a temporary password):
+// screen 3 without the email and code fields.
+function showSetPasswordOnly(email, intro) {
+  linkVerified = true;
+  showScreen(verifyCodeForm);
+  document.getElementById('verifyEmailField').style.display = 'none';
+  document.getElementById('verifyCodeField').style.display = 'none';
+  verifyCodeForm.email.value = email || '';
+  verifyCodeForm.code.required = false;
+  document.getElementById('verifyIntro').textContent = intro;
 }
 
 // ===== Navigation between screens =====
@@ -353,7 +369,7 @@ loginForm.addEventListener('submit', async e => {
   setBusy(btn, btnText, true, 'מתחבר...', 'כניסה');
 
   const fd = new FormData(loginForm);
-  const { error } = await sb.auth.signInWithPassword({
+  const { data, error } = await sb.auth.signInWithPassword({
     email: fd.get('email'),
     password: fd.get('password'),
   });
@@ -361,6 +377,11 @@ loginForm.addEventListener('submit', async e => {
   if (error) {
     showErr('שגיאה בהתחברות: אימייל או סיסמה שגויים');
     setBusy(btn, btnText, false, '', 'כניסה');
+    return;
+  }
+  if (mustChangePassword(data.user)) {
+    setBusy(btn, btnText, false, '', 'כניסה');
+    showSetPasswordOnly(data.user.email, TEMP_PASSWORD_INTRO);
     return;
   }
   window.location.href = 'dashboard.html';
@@ -426,7 +447,10 @@ verifyCodeForm.addEventListener('submit', async e => {
     }
   }
 
-  const { error: updateErr } = await sb.auth.updateUser({ password: pass });
+  // a temporary password's flag goes with it
+  const { data: { session: current } } = await sb.auth.getSession();
+  const { error: updateErr } = await sb.auth.updateUser(mustChangePassword(current && current.user)
+    ? { password: pass, data: { must_change_password: false } } : { password: pass });
   if (updateErr) {
     showErr('שגיאה בשמירת הסיסמה: ' + updateErr.message);
     setBusy(btn, btnText, false, '', 'אישור וכניסה');
@@ -519,12 +543,7 @@ async function handleAuthLinkIfPresent() {
   }
 
   // Session is already established -- just need a new password, no code to type.
-  showScreen(verifyCodeForm);
-  document.getElementById('verifyEmailField').style.display = 'none';
-  document.getElementById('verifyCodeField').style.display = 'none';
-  verifyCodeForm.email.value = email;
-  verifyCodeForm.code.required = false;
-  document.getElementById('verifyIntro').textContent = 'האימות הצליח — קבעו סיסמה חדשה כדי להשלים את הכניסה.';
+  showSetPasswordOnly(email, 'האימות הצליח — קבעו סיסמה חדשה כדי להשלים את הכניסה.');
   return true;
 }
 

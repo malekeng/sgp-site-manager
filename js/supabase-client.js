@@ -5,3 +5,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const SUPABASE_FUNCTIONS_URL = SUPABASE_URL + '/functions/v1';
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Signed in with a temporary password (users.html "סיסמה זמנית"): a new one must be set
+// before anything else opens (index.html shows that screen; requireAuth sends them there).
+function mustChangePassword(user) {
+  return !!(user && user.user_metadata && user.user_metadata.must_change_password === true);
+}

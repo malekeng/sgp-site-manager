@@ -697,6 +697,11 @@ async function requireAuth(activePage) {
     window.location.href = 'index.html';
     return null;
   }
+  // a temporary password (users.html "סיסמה זמנית") is replaced before any page opens
+  if (mustChangePassword(session.user)) {
+    window.location.href = 'index.html';
+    return null;
+  }
 
   const { data: profile, error: profErr } = await sb
     .from('profiles')
