@@ -392,10 +392,13 @@ function roLineCells(it) {
       <td class="num-cell"><bdi dir="ltr">${esc(`${p.x}×${p.y}`)}</bdi></td><td class="num-cell"><bdi dir="ltr">${esc(d)}</bdi></td><td class="num-cell"><bdi dir="ltr">${esc(step)}</bdi></td><td>${esc(it.steel)}</td>`;
   }
   if (it.kind === 'element') {
-    const svg = elementSvg(it.params, { w: 150, h: 60, stroke: 1.6 });
-    return `<td>${svg ? `<span class="shape-thumb">${svg}</span>` : '<span class="cell-muted">—</span>'}</td>
+    const pic = roElementThumb(it, 150, 60, 1.6);
+    const t = (it.params || {}).type;
+    return `<td>${pic ? `<span class="shape-thumb">${pic}</span>` : '<span class="cell-muted">—</span>'}</td>
       <td>${it.alias ? esc(it.alias) : '<span class="cell-muted">—</span>'}</td><td>${esc(elementLabel(it))}${approx}</td>
-      <td>${it.params && it.params.type === 'kranz' ? `<bdi dir="ltr">${esc(elementDesc(it))}</bdi>` : esc(elementDesc(it))}</td>`;
+      <td>${t === 'kranz' || t === 'column' ? `<bdi dir="ltr">${esc(elementDesc(it))}</bdi>`
+        : t !== 'beam' ? esc(elementDesc(it))
+        : elementDescParts(it).map(s => `<bdi${/[֐-׿]/.test(s) ? '' : ' dir="ltr"'} class="el-part">${esc(s)}</bdi>`).join(' · ')}</td>`;
   }
   const p = it.params || {};
   return `<td>${it.alias ? esc(it.alias) : '<span class="cell-muted">—</span>'}</td><td>${esc(p.pile_type || 'בסיס')}</td>
@@ -456,6 +459,7 @@ function roRenderSections() {
         </div>
       </div>`;
   }).join('');
+  roFillImages(document.getElementById('sectionsHost'));
 }
 
 // a line's delivered share: received / ordered, with a small bar
@@ -803,16 +807,73 @@ function roLiftBodyHtml() {
   </div></div>`;
 }
 
-// ---- אלמנט: a corner mesh (drawn), a spacer, or another ready element ----
+// ---- אלמנט: a corner mesh, a column or beam cage, a spacer, or another ready element ----
+// Each line is drawn in 2D or 3D (spec 2026-10-19 §2); only a kranz in 2D is edited on the drawing.
+function roElView() { return elementView({ type: dlg.f.type, view: dlg.f.view }); }
+function roElPicture() { return dlg.kind === 'element' && !!roElView() && !(dlg.f.type === 'kranz' && roElView() === '2d'); }
+
+// the line as it would be saved, for the drawing (a missing quantity does not matter here)
+function roElementItem() {
+  return buildItem('element', { ...dlg.f, qty: parseNum(dlg.f.qty) > 0 ? dlg.f.qty : 1 }, 1);
+}
+
+// The stage of an element: the drawing (the kranz 2D keeps its SVG and its boxes), the 2D/3D switch.
+function roElementStageHtml() {
+  const views = dlg.f.type === 'spacer' ? '' : `<div class="iw-viewseg">${roSeg('view', roElView(), [['2d', '2D'], ['3d', '3D']])}</div>`;
+  return `<div class="iw-stage" id="iwStage"><svg id="iwSvg" class="iw-svg" aria-hidden="true"></svg><div class="iw-draw" id="iwDraw"></div>
+    <span class="iw-badge iw-badge-len" id="iwLen"></span>${views}</div>`;
+}
+
+function roCageCardHtml() {
+  const f = dlg.f, col = f.type === 'column';
+  const dOpts = REBAR_BAR_D.map(d => [d, 'Ø' + d]), sOpts = REBAR_STEPS.map(x => [x, '@' + x]);
+  const num = 'inputmode="decimal" autocomplete="off"', int = 'inputmode="numeric" autocomplete="off"';
+  const bars = col
+    ? `${roRow('מוטות לאורך a', 'n_a', f.n_a, null, int)}${roRow('מוטות לאורך b', 'n_b', f.n_b, null, int)}${roRow('קוטר מוטות', 'd_long', f.d_long, dOpts)}`
+    : `${roRow('ב.ע. — מספר', 'n_top', f.n_top, null, int)}${roRow('ב.ע. — קוטר', 'd_top', f.d_top, dOpts)}
+       ${roRow('ב.ת. — מספר', 'n_bot', f.n_bot, null, int)}${roRow('ב.ת. — קוטר', 'd_bot', f.d_bot, dOpts)}`;
+  return `${roRow(col ? 'a — רוחב (ס״מ)' : 'b — רוחב (ס״מ)', col ? 'a' : 'b', col ? f.a : f.b, null, num)}
+    ${roRow(col ? 'b — עומק (ס״מ)' : 'h — גובה (ס״מ)', col ? 'b' : 'h', col ? f.b : f.h, null, num)}
+    ${roRow('L — אורך (ס״מ)', 'L', f.L, null, num)}
+    <div class="iw-sep"></div>${bars}<div class="iw-sep"></div>
+    ${roRow('חישוק — קוטר', 'diameter_mm', f.diameter_mm, dOpts)}
+    <div class="field iw-row" data-field="legs"><label>ענפים</label>${roSeg('legs', f.legs, [['2', '2'], ['4', '4']])}<div class="field-error-msg"></div></div>
+    ${String(f.legs) === '4' ? roRow('רוחב חישוק פנימי (ס״מ)', 'inner', f.inner, null, num) : ''}
+    ${roRow('פסיעה באמצע', 's', f.s, sOpts)}
+    ${roRow(col ? 'ציפוף בקצוות — אורך (ס״מ)' : 'ציפוף ליד סמכים — אורך (ס״מ)', 'end', f.end, null, num)}
+    ${roRow('ציפוף — פסיעה', 's_end', f.s_end, sOpts)}
+    <div class="iw-sep"></div>
+    ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}`;
+}
+
+// "אחר": its picture or sketch, uploaded once and kept with the line
+function roElementImageHtml() {
+  const f = dlg.f;
+  const preview = f.image_path ? `<img class="iw-upload-img" data-img-path="${esc(f.image_path)}" alt="התמונה של האלמנט">
+    <button type="button" class="btn btn-outline btn-sm" data-img-remove>הסרה</button>` : '';
+  return `<div class="iw-upload" data-field="image_path">${preview}
+    <label class="btn btn-outline btn-sm iw-upload-btn">${dlg.uploading ? 'מעלה…' : 'העלאת תמונה / שרטוט'}
+      <input type="file" accept="image/png,image/jpeg,image/webp" data-img-file hidden ${dlg.uploading ? 'disabled' : ''}></label></div>`;
+}
+
 function roElementBodyHtml() {
   const f = dlg.f;
   const types = `<div class="iw-typebar">${roSeg('type', f.type, REBAR_ELEMENT_TYPES)}</div>`;
+  if (f.type === 'column' || f.type === 'beam') {
+    return `${types}<div class="iw-body">${roElementStageHtml()}<div class="iw-card">${roCageCardHtml()}${roFootHtml(true)}</div></div>`;
+  }
+  if (f.type === 'spacer') {
+    return `${types}<div class="iw-body">${roElementStageHtml()}<div class="iw-card">
+      ${roRow('גובה (מ״מ)', 'height_mm', f.height_mm, REBAR_SPACER_HEIGHTS)}
+      ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}
+      <div class="field-hint">נספר ביחידות, לא נכלל במשקל · אורך 2 מ׳</div>${roFootHtml(true)}</div></div>`;
+  }
   if (f.type === 'kranz') {
     const lens = [['A', 'a', 0], ['B', 'b', 1]].map(([letter, key, k]) => `<div class="field iw-lrow" data-field="${key}">
       <span class="iw-letter">${letter}</span><input data-len="${k}" data-seg="${k}" inputmode="decimal" value="${esc(f[key] ?? '')}" aria-label="צלע ${letter} (ס״מ)">
       <span class="iw-ang">${k ? '' : '90°'}</span><div class="field-error-msg"></div></div>`).join('');
     return `${types}<div class="iw-body">
-      <div class="iw-stage" id="iwStage"><svg id="iwSvg" class="iw-svg" aria-hidden="true"></svg><span class="iw-badge iw-badge-len" id="iwLen"></span></div>
+      ${roElementStageHtml()}
       <div class="iw-card">
         ${roSeg('variant', f.variant, REBAR_KRANZ_VARIANTS)}
         <div class="iw-sec" style="margin-top:10px;"><span>מוט רוחב (ס״מ)</span><span>זווית</span></div>${lens}
@@ -827,20 +888,74 @@ function roElementBodyHtml() {
         ${roFootHtml(true)}
       </div></div>`;
   }
-  const fields = f.type === 'spacer'
-    ? `${roRow('גובה (מ״מ)', 'height_mm', f.height_mm, REBAR_SPACER_HEIGHTS)}
-       ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}
-       <div class="field-hint">נספר ביחידות, לא נכלל במשקל · אורך 2 מ׳</div>`
-    : `${roRow('שם האלמנט', 'name', f.name, null, 'maxlength="120"')}
-       ${roRow('ק״ג ליחידה', 'unit_kg', f.unit_kg, null, 'inputmode="decimal" placeholder="לא חובה"')}
-       ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}`;
+  const fields = `${roRow('שם האלמנט', 'name', f.name, null, 'maxlength="120"')}
+     ${roRow('ק״ג ליחידה', 'unit_kg', f.unit_kg, null, 'inputmode="decimal" placeholder="לא חובה"')}
+     ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}
+     ${roElementImageHtml()}`;
   return `${types}<div class="iw-body iw-body-form"><div class="iw-card iw-card-narrow">${fields}${roFootHtml(true)}</div></div>`;
+}
+
+// A small picture of an element line: its drawing, or its uploaded image (filled in by roFillImages).
+function roElementThumb(it, w, h, stroke) {
+  const svg = elementDrawing(it, { w, h, stroke, bare: true });   // the line lists the sizes
+  if (svg) return svg;
+  const path = it.params && it.params.image_path;
+  return path ? `<img class="el-img" data-img-path="${esc(path)}" alt="">` : null;
+}
+
+// Uploaded images are private: each <img data-img-path> gets a signed link (kept for the visit).
+const roImgUrls = new Map();
+async function roFillImages(root) {
+  for (const img of (root || document).querySelectorAll('img[data-img-path]')) {
+    const path = img.dataset.imgPath;
+    if (!roImgUrls.has(path)) roImgUrls.set(path, await getStorageUrl(path));
+    const url = roImgUrls.get(path);
+    if (url) img.src = url; else img.replaceWith(document.createTextNode('—'));
+  }
+}
+
+// The picked image, shrunk to at most 1600 px and saved as JPEG under the site's folder.
+function roShrinkImage(file, max) {
+  return new Promise((resolve, reject) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => (b ? resolve(b) : reject(new Error('לא ניתן לשמור את התמונה'))), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('לא ניתן לקרוא את התמונה')); };
+    img.src = url;
+  });
+}
+
+async function roUploadElementImage(file) {
+  if (!file) return;
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { toast('בחרו קובץ תמונה (JPG, PNG או WEBP)', 'error'); return; }
+  roReadItemForm();
+  dlg.uploading = true;
+  roRenderItemDialog();
+  try {
+    const blob = await roShrinkImage(file, 1600);
+    const path = `${state.ctx.site.id}/rebar_elements/${crypto.randomUUID()}.jpg`;
+    const { error } = await sb.storage.from('documents').upload(path, blob, { contentType: 'image/jpeg' });
+    if (error) throw error;
+    dlg.f.image_path = path;
+  } catch (err) {
+    toast('העלאת התמונה נכשלה — ' + (err.message || err), 'error');
+  }
+  dlg.uploading = false;
+  roRenderItemDialog();
 }
 
 function roTrayHtml() {
   const n = dlg.added.length, kg = dlg.added.reduce((a, r) => a + (Number(r.total_kg) || 0), 0);
   const items = dlg.added.map((r, j) => {
-    const el = r.kind === 'element' ? elementSvg(r.params, { w: 40, h: 22, stroke: 1.6 }) : null;
+    const el = r.kind === 'element' ? roElementThumb(r, 40, 22, 1.6) : null;
     const pic = r.shape ? roMini(r.shape, 40, 22) : el ? el.replace(/<text[\s\S]*?<\/text>/g, '') : r.kind === 'mesh' ? RO_MESH_MINI : `<span class="iw-item-kind">${esc(RO_SECTIONS[r.kind].item)}</span>`;
     return `<div class="iw-item">
       ${pic}
@@ -882,6 +997,7 @@ function roRenderItemDialog() {
     ${editing ? '' : `<div class="iw-tray" id="iwTray">${roTrayHtml()}</div>`}`;
   if (document.getElementById('iwStage')) roStageMount();
   roItemPreview();
+  roFillImages(modal);
 }
 
 // ---- the drawing ----
@@ -905,7 +1021,7 @@ function roStageMount() {
     box('y', 'Y — גובה (ס״מ)');
     box('s', asym ? 'פסיעת המוטות לאורך X (ס״מ)' : 'פסיעה (ס״מ)', 'iw-box-s' + (asym ? ' iw-box-kx' : ''));
     if (asym) box('s_x', 'פסיעת המוטות לאורך Y (ס״מ)', 'iw-box-s iw-box-ky');
-  } else if (!dlg.freehand) {
+  } else if (!dlg.freehand && !roElPicture()) {
     const shape = roDialogShape();
     const boxes = shape.family === 'hoop' ? [{ seg: 'D', k: 0, label: 'קוטר החישוק' }]
       : shape.segments.map((_, i) => ({ seg: i, k: shapeInputIndex(shape, i), label: 'צלע ' + roLetter(i) }));
@@ -934,6 +1050,10 @@ function roStageDraw() {
   if (!w || !h) return;
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
   if (dlg.kind === 'mesh') { roMeshDraw(stage, svg, w, h); return; }
+  const draw = document.getElementById('iwDraw');
+  // the drawing starts under the 2D/3D switch and the count badge (.iw-draw top in the page CSS)
+  if (roElPicture()) { svg.innerHTML = ''; roElementDraw(draw, w, h - 48); return; }
+  if (draw) draw.innerHTML = '';
   const badge = document.getElementById('iwLen');
   if (dlg.freehand) {
     let g = '';
@@ -990,6 +1110,20 @@ function roStageDraw() {
     box.style.left = roClamp(l.x + l.nx * o, 36, w - 36) + 'px';   // a box never leaves the drawing
     box.style.top = roClamp(l.y + l.ny * o, 18, h - 18) + 'px';
   });
+}
+
+// An element drawn as a picture (3D, a cage's 2D, a spacer): the badge counts what the factory makes.
+function roElementDraw(draw, w, h) {
+  const item = roElementItem(), p = item.params || {};
+  const svg = elementDrawing(item, { view: roElView(), w, h, stroke: 2 });
+  draw.innerHTML = svg || '<div class="iw-draw-hint">השלימו את המידות כדי לראות את השרטוט</div>';
+  const badge = document.getElementById('iwLen');
+  if (!badge) return;
+  if (svg && (p.type === 'column' || p.type === 'beam')) {
+    const hoops = cageHoopPositions(p.L, p.s, p.end, p.s_end).length;
+    badge.textContent = `${fmtNum(hoops, 0)} חישוקים${Number(p.legs) === 4 ? ' כפולים' : ''}`;
+  } else if (svg && p.type === 'kranz') badge.textContent = `${fmtNum(Math.ceil(Number(p.L) / Number(p.s)), 0)} מוטות רוחב`;
+  else badge.textContent = '';
 }
 
 // A mesh: every bar at its spacing (bars along X in navy, along Y in green), X under it and Y
@@ -1123,6 +1257,7 @@ function roRenumber(kind) {
 }
 
 function roSaveLine() {
+  if (dlg.uploading) { toast('ממתינים לסיום העלאת התמונה', 'error'); return; }
   roReadItemForm();
   dlg.tried = true;
   const errs = roItemErrors();
@@ -1194,13 +1329,17 @@ function roItemDialogEvents() {
     const set = e.target.closest('[data-set]');
     if (set) {
       roReadItemForm();
-      dlg.f[set.dataset.set] = set.dataset.val;
+      // a new element type starts from that type's own defaults, keeping the quantity and the name
+      if (dlg.kind === 'element' && set.dataset.set === 'type' && set.dataset.val !== dlg.f.type) {
+        dlg.f = { ...rebarElementForm(null, set.dataset.val), qty: dlg.f.qty, alias: dlg.f.alias };
+      } else dlg.f[set.dataset.set] = set.dataset.val;
       dlg.hl = null;
       // an asymmetric mesh starts from the X bars' diameter and spacing
       if (dlg.kind === 'mesh' && dlg.f.type === 'asym') { dlg.f.d_y = dlg.f.d_y || dlg.f.diameter_mm; dlg.f.s_x = dlg.f.s_x || dlg.f.s; }
       roRenderItemDialog();
       return;
     }
+    if (e.target.closest('[data-img-remove]')) { roReadItemForm(); dlg.f.image_path = ''; roRenderItemDialog(); return; }
     const bundle = e.target.closest('[data-bundle]');
     if (bundle) { roReadItemForm(); roSetField('qty', String((parseNum(dlg.f.qty) || 0) + Number(bundle.dataset.bundle)), null); return; }
     if (e.target.closest('[data-gallery]')) { roReadItemForm(); dlg.gallery = !dlg.gallery; roRenderItemDialog(); return; }
@@ -1237,6 +1376,7 @@ function roItemDialogEvents() {
     roItemPreview();
   });
   modal.addEventListener('change', e => {
+    if (e.target.matches('[data-img-file]')) { roUploadElementImage(e.target.files && e.target.files[0]); return; }
     if (e.target.matches('[data-sym]')) {
       const shape = roDialogShape(), cat = rebarShape(dlg.f.code);
       if (e.target.checked) Object.assign(dlg.f, { shape: null, lens: cat.inputs.map(i => String(shape.segments[i].len)) });
@@ -1400,7 +1540,7 @@ function roOpenReceiptDialog() {
   const prior = roReceiptPrior();
   const lines = state.items.map(it => {
     const left = Math.max(0, Number(it.qty) - (prior[it.id] || 0));
-    const elSvg = it.kind === 'element' ? elementSvg(it.params, { w: 110, h: 44, stroke: 1.4 }) : null;
+    const elSvg = it.kind === 'element' ? roElementThumb(it, 110, 44, 1.4) : null;
     const desc = it.kind === 'bar'
       ? (it.shape ? `<span class="shape-thumb" style="width:110px;height:44px">${shapeSvg(it.shape, { w: 110, h: 44, stroke: 1.4 })}</span>` : '')
       : it.kind === 'element' ? (elSvg ? `<span class="shape-thumb" style="width:110px;height:44px">${elSvg}</span>` : esc(elementDesc(it)))
@@ -1442,6 +1582,7 @@ function roOpenReceiptDialog() {
       <button type="button" class="btn btn-outline" data-rc-x>ביטול</button>
     </div>`;
   document.getElementById('receiptBackdrop').classList.add('open');
+  roFillImages(document.getElementById('receiptModal'));
   roReceiptChecks();
 }
 

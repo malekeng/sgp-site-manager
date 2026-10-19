@@ -213,6 +213,230 @@ function elementSvg(p, opts = {}) {
   return out + '</svg>';
 }
 
+// ---- a drawing for every element: 2D or 3D (spec 2026-10-19 §2, §4) ----
+// Each type's views, its default first; "other" carries an uploaded image instead.
+const RB_ELEMENT_VIEWS = { kranz: ['3d', '2d'], column: ['3d', '2d'], beam: ['3d', '2d'], spacer: ['2d'] };
+
+function elementDefaultView(type) {
+  const v = RB_ELEMENT_VIEWS[type];
+  return v ? v[0] : null;
+}
+
+// The view a line is drawn in: its own choice when the type has that view, else the default.
+function elementView(p) {
+  const v = RB_ELEMENT_VIEWS[(p || {}).type];
+  if (!v) return null;
+  return v.includes(p.view) ? p.view : v[0];
+}
+
+const RB_INK = '#0E1A20', RB_DIM = '#637178';
+const rbF = v => v.toFixed(1);
+const rbHead = (w, h) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+// A text with Hebrew in it is laid out right-to-left, or "ב.ע. 2Ø12" shows as "2 ב.ע.Ø12";
+// `anchor` keeps meaning the visual side (start = left), so it is flipped for those.
+function rbText(x, y, t, anchor = 'middle', size = 12) {
+  const rtl = /[֐-׿]/.test(t);
+  const a = rtl && anchor !== 'middle' ? (anchor === 'start' ? 'end' : 'start') : anchor;
+  return `<text x="${rbF(x)}" y="${rbF(y)}" font-size="${Math.round(size * 10) / 10}" font-family="Arial, sans-serif" text-anchor="${a}" direction="${rtl ? 'rtl' : 'ltr'}" unicode-bidi="embed" dominant-baseline="middle" fill="${RB_INK}">${t}</text>`;
+}
+function rbSeg(p, q, width, cls = '', color = RB_INK) {
+  return `<line${cls ? ` class="${cls}"` : ''} x1="${rbF(p[0])}" y1="${rbF(p[1])}" x2="${rbF(q[0])}" y2="${rbF(q[1])}" stroke="${color}" stroke-width="${width}" stroke-linecap="round"/>`;
+}
+
+// An isometric view — x along the element, z across it, y up — fitted into w×h. The section is
+// drawn larger than to scale (at least ~22% of the length) so its bars stay readable; the
+// dimensions written on it are the true ones. `oblique` (the small thumbnails): the length runs
+// level and the depth goes up at 45°, so a long element fills a wide, low box.
+function rbIso(L, y0, y1, z0, z1, w, h, pad, oblique) {
+  const C = Math.cos(Math.PI / 6), S = 0.5, D = 0.35;
+  const ks = Math.max(1, (L * 0.22) / Math.max(y1 - y0, z1 - z0, 1e-6));
+  const raw = oblique
+    ? (x, y, z) => [x + z * ks * D, -(y + z * D) * ks]
+    : (x, y, z) => [(x - z * ks) * C, (x + z * ks) * S - y * ks];
+  const pts = [];
+  for (const x of [0, L]) for (const y of [y0, y1]) for (const z of [z0, z1]) pts.push(raw(x, y, z));
+  const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+  const minX = Math.min(...xs), minY = Math.min(...ys);
+  const bw = Math.max(...xs) - minX || 1, bh = Math.max(...ys) - minY || 1;
+  const k = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh);
+  const ox = (w - bw * k) / 2 - minX * k, oy = (h - bh * k) / 2 - minY * k;
+  return (x, y, z) => { const r = raw(x, y, z); return [ox + r[0] * k, oy + r[1] * k]; };
+}
+
+// The text unit of a drawing: 1 for the small ones (table rows, thumbnails), larger for the big
+// ones on the PDF's drawings page, so their numbers stay readable once shrunk.
+function rbUnit(w, h) { return Math.max(1, Math.min(w, h) / 240); }
+
+// The hoops a drawing shows: all of them up to `max`, else every k-th (one k for every zone,
+// so the dense ends still look denser).
+function cageDrawnHoops(L, s, end, s_end, max = 80) {
+  const all = cageHoopPositions(L, s, end, s_end);
+  if (all.length <= max) return all;
+  const k = Math.ceil(all.length / max);
+  return all.filter((_, i) => i % k === 0);
+}
+
+// A cage's section: width W (across, z) and height H (y); a column is a×b, a beam b×h.
+function rbCageSection(p) {
+  const col = p.type === 'column';
+  return { W: Number(col ? p.a : p.b), H: Number(col ? p.b : p.h) };
+}
+
+// Where a cage's bars sit in its section, as [y, z] in cm, a little inside the hoop: a column has
+// n_a bars on each a-side and n_b on each b-side (corners shared); a beam n_top on top, n_bot below.
+function rbCageBars(p) {
+  const { W, H } = rbCageSection(p), c = Math.min(W, H) * 0.1;
+  const spread = (n, len) => (n < 2 ? [len / 2] : Array.from({ length: n }, (_, i) => c + (len - 2 * c) * i / (n - 1)));
+  const out = [];
+  if (p.type === 'column') {
+    for (const z of spread(Number(p.n_a), W)) out.push([c, z], [H - c, z]);
+    for (const y of spread(Number(p.n_b), H).slice(1, -1)) out.push([y, c], [y, W - c]);
+  } else {
+    for (const z of spread(Number(p.n_top), W)) out.push([H - c, z]);
+    for (const z of spread(Number(p.n_bot), W)) out.push([c, z]);
+  }
+  return out;
+}
+
+// A cage drawing needs every size it is built from; otherwise there is no drawing.
+function rbCageOk(p) {
+  const nums = p.type === 'column' ? [p.a, p.b, p.L, p.n_a, p.n_b, p.s] : [p.b, p.h, p.L, p.n_top, p.n_bot, p.s];
+  return nums.every(v => Number(v) > 0) && (Number(p.legs) !== 4 || Number(p.inner) > 0);
+}
+
+// The texts beside a cage: its bars (one line for a column, ב.ע./ב.ת. for a beam) and its hoops.
+function rbCageTexts(item) {
+  const p = item.params;
+  const bars = p.type === 'column'
+    ? [`${rbLabel(2 * (Number(p.n_a) + Number(p.n_b)) - 4)}Ø${rbLabel(p.d_long)}`]
+    : [`ב.ע. ${rbLabel(p.n_top)}Ø${rbLabel(p.d_top)}`, `ב.ת. ${rbLabel(p.n_bot)}Ø${rbLabel(p.d_bot)}`];
+  return { bars, hoops: `${Number(p.legs) === 4 ? '4L ' : ''}Ø${rbLabel(item.diameter_mm)}@${rbLabel(p.s)}` };
+}
+
+// 3D: every bar along L, a hoop (and the inner one) at each drawn position; the bars and hoops
+// written top-left, the section top-right, the length under the front edge.
+function rbCage3d(item, w, h, stroke, bare) {
+  const p = item.params, L = Number(p.L), { W, H } = rbCageSection(p), u = rbUnit(w, h);
+  const pad = bare ? 2 : Math.max(18, Math.round(Math.min(w, h) * 0.16));
+  const P = rbIso(L, 0, H, 0, W, w, h, pad, bare);
+  let out = rbHead(w, h);
+  out += rbCageBars(p).map(([y, z]) => rbSeg(P(0, y, z), P(L, y, z), (stroke * 0.9).toFixed(2), 'bar')).join('');
+  const rings = [[0, W]];
+  if (Number(p.legs) === 4) rings.push([(W - Number(p.inner)) / 2, (W + Number(p.inner)) / 2]);
+  const hw = Math.max(0.6, stroke * 0.35).toFixed(2);
+  for (const x of cageDrawnHoops(L, p.s, p.end, p.s_end)) {
+    for (const [z0, z1] of rings) {
+      const pts = [P(x, 0, z0), P(x, H, z0), P(x, H, z1), P(x, 0, z1)];
+      out += `<polygon class="hoop" points="${pts.map(q => rbF(q[0]) + ',' + rbF(q[1])).join(' ')}" fill="none" stroke="${RB_INK}" stroke-width="${hw}"/>`;
+    }
+  }
+  const t = rbCageTexts(item);
+  [...t.bars, t.hoops].forEach((s, i) => { out += rbText(4 * u, (10 + i * 14) * u, s, 'start', 12 * u); });
+  out += rbText(w - 4 * u, 10 * u, `${rbLabel(W)}×${rbLabel(H)}`, 'end', 12 * u);
+  const a0 = P(0, 0, W), a1 = P(L, 0, W);
+  out += rbText((a0[0] + a1[0]) / 2, Math.min(h - 8 * u, (a0[1] + a1[1]) / 2 + 14 * u), 'L=' + rbLabel(L), 'middle', 12 * u);
+  return out + '</svg>';
+}
+
+// 2D: the section on the right (hoops as rectangles, one circle per bar, the sizes) and the side
+// view on the left (the bars, a tick per drawn hoop, and the zones with their lengths and spacing).
+function rbCage2d(item, w, h, stroke) {
+  const p = item.params, L = Number(p.L), { W, H } = rbCageSection(p), u = rbUnit(w, h);
+  const pad = Math.max(16, Math.round(Math.min(w, h) * 0.14));
+  const t = rbCageTexts(item);
+  let out = rbHead(w, h);
+  // the section
+  const box = Math.min(h - 2 * pad - 16 * u, w * 0.32), k = box / Math.max(W, H);
+  const sx = w - pad - W * k, sy = (h - H * k) / 2;
+  const at = (y, z) => [sx + z * k, sy + (H - y) * k];
+  out += `<rect x="${rbF(sx)}" y="${rbF(sy)}" width="${rbF(W * k)}" height="${rbF(H * k)}" fill="none" stroke="${RB_INK}" stroke-width="${(stroke * 0.6).toFixed(2)}" rx="2"/>`;
+  if (Number(p.legs) === 4) {
+    const i = Number(p.inner);
+    out += `<rect x="${rbF(sx + (W - i) / 2 * k)}" y="${rbF(sy)}" width="${rbF(i * k)}" height="${rbF(H * k)}" fill="none" stroke="${RB_INK}" stroke-width="${(stroke * 0.5).toFixed(2)}" rx="2"/>`;
+  }
+  const r = Math.max(2, Math.min(W, H) * k * 0.06);
+  out += rbCageBars(p).map(([y, z]) => { const q = at(y, z); return `<circle cx="${rbF(q[0])}" cy="${rbF(q[1])}" r="${rbF(r)}" fill="${RB_INK}"/>`; }).join('');
+  out += rbText(sx + W * k / 2, sy + H * k + 11 * u, rbLabel(W), 'middle', 12 * u);
+  out += rbText(sx - 4 * u, sy + H * k / 2, rbLabel(H), 'end', 12 * u);
+  const title = t.bars.join(' · '), est = title.length * 6 * u;   // ~6 px a character at 11 px: kept inside the drawing
+  out += rbText(Math.min(sx + W * k / 2, w - 2 - est / 2), sy - 9 * u, title, 'middle', 11 * u);
+  // the side view
+  const x0 = pad, x1 = sx - 30 * u, ty = h / 2 - 12 * u, by = h / 2 + 12 * u, kx = (x1 - x0) / L;
+  out += rbSeg([x0, ty], [x1, ty], (stroke * 0.8).toFixed(2)) + rbSeg([x0, by], [x1, by], (stroke * 0.8).toFixed(2));
+  for (const x of cageDrawnHoops(L, p.s, p.end, p.s_end)) out += rbSeg([x0 + x * kx, ty], [x0 + x * kx, by], Math.max(0.6, stroke * 0.3).toFixed(2));
+  const end = Number(p.end) || 0, dy = by + 16 * u;
+  const zones = end > 0 && 2 * end < L ? [[0, end, p.s_end], [end, L - end, p.s], [L - end, L, p.s_end]]
+    : [[0, L, end > 0 ? p.s_end : p.s]];
+  for (const [a, b, step] of zones) {
+    const xa = x0 + a * kx, xb = x0 + b * kx;
+    out += rbSeg([xa, dy - 4 * u], [xa, dy + 4 * u], 0.8 * u, '', RB_DIM) + rbSeg([xb, dy - 4 * u], [xb, dy + 4 * u], 0.8 * u, '', RB_DIM) + rbSeg([xa, dy], [xb, dy], 0.8 * u, '', RB_DIM);
+    if (zones.length > 1) out += rbText((xa + xb) / 2, dy + 10 * u, rbLabel(b - a), 'middle', 11 * u);
+    out += rbText((xa + xb) / 2, ty - 9 * u, '@' + rbLabel(step), 'middle', 11 * u);
+  }
+  out += rbText((x0 + x1) / 2, Math.min(h - 6 * u, dy + 22 * u), 'L=' + rbLabel(L), 'middle', 12 * u);
+  out += rbText(x0, 10 * u, t.hoops, 'start', 12 * u);
+  return out + '</svg>';
+}
+
+// A corner mesh in 3D: ⌈L/s⌉ cross bars bent a then b (down for the upper mesh, up for the lower),
+// and the longitudinal bars 10, 30, 50 … cm from the free end, along L.
+function rbKranz3d(p, w, h, stroke, bare) {
+  const L = Number(p.L), a = Number(p.a), b = Number(p.b), s = Number(p.s);
+  if (![L, a, b, s].every(v => v > 0)) return null;
+  const turn = p.variant === 'lower' ? 1 : -1, pad = bare ? 2 : Math.max(18, Math.round(Math.min(w, h) * 0.16)), u = rbUnit(w, h);
+  const P = rbIso(L, Math.min(0, turn * b), Math.max(0, turn * b), 0, a, w, h, pad, bare);
+  let out = rbHead(w, h);
+  const n = Math.ceil(L / s), cw = Math.max(0.6, stroke * 0.4).toFixed(2);
+  for (let i = 0; i < n; i++) {
+    const x = n > 1 ? L * i / (n - 1) : L / 2;
+    const pts = [P(x, 0, 0), P(x, 0, a), P(x, turn * b, a)];
+    out += `<polyline class="cross" points="${pts.map(q => rbF(q[0]) + ',' + rbF(q[1])).join(' ')}" fill="none" stroke="${RB_INK}" stroke-width="${cw}" stroke-linejoin="round"/>`;
+  }
+  for (let i = 0; i < (Number(p.n_long) || 0) && 10 + 20 * i < a; i++) {
+    const z = 10 + 20 * i;
+    out += rbSeg(P(0, 0, z), P(L, 0, z), (stroke * 0.9).toFixed(2), 'bar');
+  }
+  const e0 = P(L, 0, 0), e1 = P(L, 0, a), e2 = P(L, turn * b, a);
+  out += rbText((e0[0] + e1[0]) / 2 + 10 * u, (e0[1] + e1[1]) / 2 - 8 * u, rbLabel(p.a), 'start', 12 * u);
+  out += rbText((e1[0] + e2[0]) / 2 + 8 * u, (e1[1] + e2[1]) / 2, rbLabel(p.b), 'start', 12 * u);
+  const f0 = P(0, 0, 0), f1 = P(L, 0, 0);
+  out += rbText((f0[0] + f1[0]) / 2 + 14 * u, (f0[1] + f1[1]) / 2 - 12 * u, 'L=' + rbLabel(L), 'middle', 12 * u);
+  return out + '</svg>';
+}
+
+// A spacer seen from the side: base, top wire and the zigzag between, 2 m long; the height is
+// drawn larger than to scale and written in mm.
+function rbSpacer2d(p, w, h, stroke) {
+  const H = Number(p.height_mm) / 10, L = 200;
+  if (!(H > 0)) return null;
+  const pad = Math.max(16, Math.round(Math.min(w, h) * 0.16)), u = rbUnit(w, h);
+  const x0 = pad, x1 = w - pad - 34 * u, y1 = pad + 4 * u, y0 = h - pad - 10 * u;
+  let out = rbHead(w, h);
+  const sw = (stroke * 0.8).toFixed(2);
+  out += rbSeg([x0, y0], [x1, y0], sw) + rbSeg([x0, y1], [x1, y1], sw);
+  const n = L / 10, pts = Array.from({ length: n + 1 }, (_, i) => `${rbF(x0 + (x1 - x0) * i / n)},${rbF(i % 2 ? y1 : y0)}`);
+  out += `<polyline points="${pts.join(' ')}" fill="none" stroke="${RB_INK}" stroke-width="${(stroke * 0.6).toFixed(2)}" stroke-linejoin="round"/>`;
+  out += rbSeg([x1 + 10 * u, y1], [x1 + 10 * u, y0], 0.8 * u, '', RB_DIM) + rbText(x1 + 14 * u, (y0 + y1) / 2, 'h=' + rbLabel(p.height_mm), 'start', 11 * u);
+  out += rbText((x0 + x1) / 2, y0 + 14 * u, rbLabel(L), 'middle', 12 * u);
+  return out + '</svg>';
+}
+
+// The drawing of an element line in its view (or opts.view): an SVG string, or null for "other"
+// (its image is shown instead) and for sizes that cannot be drawn. opts.bare (the small
+// thumbnails, whose line already lists every size): no text, and a 3D view fills the box.
+function elementDrawing(item, opts = {}) {
+  const p = (item && item.params) || {};
+  const view = elementView({ ...p, view: opts.view || p.view });
+  if (!view) return null;
+  const w = opts.w || 300, h = opts.h || 120, stroke = opts.stroke || 2, bare = !!opts.bare;
+  let svg = null;
+  if (p.type === 'kranz') svg = view === '2d' ? elementSvg(p, { w, h, stroke }) : rbKranz3d(p, w, h, stroke, bare);
+  else if (p.type === 'column' || p.type === 'beam') {
+    if (rbCageOk(p)) svg = view === '2d' ? rbCage2d(item, w, h, stroke) : rbCage3d(item, w, h, stroke, bare);
+  } else if (p.type === 'spacer') svg = rbSpacer2d(p, w, h, stroke);
+  return svg && bare ? svg.replace(/<text[\s\S]*?<\/text>/g, '') : svg;
+}
+
 // ---- meshes (2026-10-14) ----
 // A mesh's bars as meshCalc weighs them — ceil(y/s) bars along X spaced s apart, ceil(x/s_x)
 // along Y — laid at their spacing and centred, so the ends stick out equally on both edges.

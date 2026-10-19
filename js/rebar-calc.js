@@ -69,6 +69,42 @@ function rebarLiftQty(d, lengthCm, lifts) {
   return { unit_kg: unit, per_lift: perLift, qty, lift_kg: rebarRound(perLift * unit, 2), total_kg: rebarRound(qty * unit, 2) };
 }
 
+// A cage's hoops (spec 2026-10-19 §3.3), in cm from one end: dense over `end` cm at both ends
+// (step s_end), at step s in the middle. Each zone is split into equal gaps no longer than its
+// step, so the count is 2·⌈end/s_end⌉ + ⌈(L−2·end)/s⌉ + 1 (or ⌈L/s_end⌉ + 1 when the ends meet).
+function cageHoopPositions(L, s, end, s_end) {
+  L = Number(L); s = Number(s); end = Number(end) || 0;
+  const se = Number(s_end) > 0 ? Number(s_end) : s;
+  if (!(L > 0) || !(s > 0)) return [];
+  const pos = [0];
+  const fill = (from, to, step) => {
+    const n = Math.ceil((to - from) / step - 1e-9);
+    for (let i = 1; i <= n; i++) pos.push(rebarRound(from + (to - from) * i / n, 4));
+  };
+  if (end > 0 && 2 * end < L) { fill(0, end, se); fill(end, L - end, s); fill(L - end, L, se); }
+  else fill(0, L, end > 0 ? se : s);
+  return pos;
+}
+
+// A column or beam cage: its longitudinal bars over L, and per hoop position the outer hoop
+// w×h plus, with four legs, an inner hoop inner×h; a hoop is 2(w+h) cm plus a d-cm hook at
+// each end, as shapeLength counts a stirrup. Not measured on a supplier's note: approximate.
+function cageCalc(p, d) {
+  const col = p.type === 'column', L = Number(p.L);
+  const w = Number(col ? p.a : p.b), h = Number(col ? p.b : p.h);
+  const hoops = cageHoopPositions(L, p.s, p.end, p.s_end).length;
+  const hoopCm = 2 * (w + h) + 2 * d + (Number(p.legs) === 4 ? 2 * (Number(p.inner) + h) + 2 * d : 0);
+  const meters = {};
+  if (col) rebarAddMeters(meters, Number(p.d_long), (2 * (Number(p.n_a) + Number(p.n_b)) - 4) * L / 100);
+  else {
+    rebarAddMeters(meters, Number(p.d_top), Number(p.n_top) * L / 100);
+    rebarAddMeters(meters, Number(p.d_bot), Number(p.n_bot) * L / 100);
+  }
+  rebarAddMeters(meters, d, hoops * hoopCm / 100);
+  const kg = Object.entries(meters).reduce((a, [dd, m]) => a + m * rebarW(Number(dd)), 0);
+  return { length_cm: L, unit_kg: rebarRound(kg, 2), meters, approx: true, weighed: true };
+}
+
 // An element (spec 2026-10-14 §3). A corner mesh ("רשת קרנץ") is weighed from its bars the
 // way a mesh is: ceil(L/s) cross bars of a+b cm, plus n_long bars along L — not measured on a
 // supplier's note yet, so approximate. A spacer is counted, not weighed; "other" carries its
@@ -80,6 +116,7 @@ function elementCalc(p, d) {
     const meters = rebarAddMeters(rebarAddMeters({}, d, mT), p.d_long, mL);
     return { length_cm: p.L, unit_kg: rebarRound(mT * rebarW(d) + mL * rebarW(p.d_long), 2), meters, approx: true, weighed: true };
   }
+  if (p.type === 'column' || p.type === 'beam') return cageCalc(p, Number(d));
   if (p.type === 'spacer') return { length_cm: 200, unit_kg: 0, meters: {}, approx: false, weighed: false };
   return { length_cm: null, unit_kg: rebarRound(Number(p.unit_kg) || 0, 2), meters: {}, approx: false, weighed: true };
 }

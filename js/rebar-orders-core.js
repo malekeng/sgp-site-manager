@@ -95,6 +95,25 @@ function validateItem(kind, f) {
       if (!REBAR_BAR_D.includes(num('d_long'))) e.d_long = 'בחרו קוטר מהרשימה';
     } else if (f.type === 'spacer') {
       if (!REBAR_SPACER_HEIGHTS.includes(num('height_mm'))) e.height_mm = 'בחרו גובה מהרשימה';
+    } else if (f.type === 'column' || f.type === 'beam') {
+      const col = f.type === 'column';
+      for (const [k, name] of [...(col ? [['a', 'רוחב'], ['b', 'עומק']] : [['b', 'רוחב'], ['h', 'גובה']]), ['L', 'אורך']]) {
+        if (!pos(k)) e[k] = `${name} — מספר גדול מ-0`;
+      }
+      const count = k => { const v = num(k); if (!(v !== null && Number.isInteger(v) && v >= 2)) e[k] = 'מספר מוטות — מספר שלם 2 ומעלה'; };
+      const dia = k => { if (!REBAR_BAR_D.includes(num(k))) e[k] = 'בחרו קוטר מהרשימה'; };
+      if (col) { count('n_a'); count('n_b'); dia('d_long'); } else { count('n_top'); count('n_bot'); dia('d_top'); dia('d_bot'); }
+      dia('diameter_mm');
+      const legs = num('legs');
+      if (legs !== 2 && legs !== 4) e.legs = 'ענפים — 2 או 4';
+      else if (legs === 4) {
+        const w = num(col ? 'a' : 'b'), inner = num('inner');
+        if (!(inner !== null && inner > 0 && w !== null && inner < w)) e.inner = 'רוחב החישוק הפנימי — קטן מרוחב הכלוב';
+      }
+      if (!REBAR_STEPS.includes(num('s'))) e.s = 'בחרו פסיעה מהרשימה';
+      const end = num('end');
+      if (!(end !== null && end >= 0)) e.end = 'אורך הציפוף — מספר 0 ומעלה';
+      else if (end > 0 && !REBAR_STEPS.includes(num('s_end'))) e.s_end = 'בחרו פסיעה מהרשימה';
     } else if (f.type === 'other') {
       if (!String(f.name || '').trim()) e.name = 'שם האלמנט — חובה';
       if (f.unit_kg !== undefined && f.unit_kg !== null && f.unit_kg !== '' && !(num('unit_kg') >= 0)) e.unit_kg = 'משקל ליחידה — מספר 0 ומעלה';
@@ -133,13 +152,21 @@ function buildItem(kind, f, lineNo) {
     if (f.type === 'asym') { row.params.d_y = parseNum(f.d_y); row.params.s_x = parseNum(f.s_x); }
   } else if (kind === 'element') {
     row.steel = 'מצולע';
+    const view = f.view === '2d' || f.view === '3d' ? f.view : null;   // stored only when chosen
     if (f.type === 'kranz') {
       row.params = { type: 'kranz', variant: f.variant === 'lower' ? 'lower' : 'upper' };
       for (const k of ['L', 's', 'a', 'b', 'n_long', 'd_long']) row.params[k] = parseNum(f[k]);
+      if (view) row.params.view = view;
+    } else if (f.type === 'column' || f.type === 'beam') {
+      row.params = { type: f.type };
+      for (const k of REBAR_CAGE_KEYS[f.type]) row.params[k] = parseNum(f[k]);
+      if (row.params.legs === 4) row.params.inner = parseNum(f.inner);
+      if (view) row.params.view = view;
     } else {
       row.diameter_mm = null;
       row.params = f.type === 'spacer' ? { type: 'spacer', height_mm: parseNum(f.height_mm) }
         : { type: 'other', name: String(f.name || '').trim(), unit_kg: parseNum(f.unit_kg) ?? 0 };
+      if (f.type !== 'spacer' && f.image_path) row.params.image_path = String(f.image_path);
     }
   } else if (kind === 'pile') {
     row.params = {
@@ -174,35 +201,64 @@ function buildLiftItem(f, lineNo) {
 }
 
 // ---- אלמנט: a corner mesh, a spacer, or another ready element (spec 2026-10-14 §3) ----
-const REBAR_ELEMENT_TYPES = [['kranz', 'רשת קרנץ'], ['spacer', 'שומר מרחק'], ['other', 'אחר']];
+const REBAR_ELEMENT_TYPES = [['kranz', 'רשת קרנץ'], ['column', 'כלוב עמוד'], ['beam', 'כלוב קורה'], ['spacer', 'שומר מרחק'], ['other', 'אחר']];
+// A cage's fields as saved (spec 2026-10-19 §3.1); `inner` is saved too when it has four legs.
+const REBAR_CAGE_KEYS = {
+  column: ['a', 'b', 'L', 'n_a', 'n_b', 'd_long', 'legs', 's', 'end', 's_end'],
+  beam: ['b', 'h', 'L', 'n_top', 'd_top', 'n_bot', 'd_bot', 'legs', 's', 'end', 's_end'],
+};
+const REBAR_CAGE_DEFAULTS = {
+  column: { a: 30, b: 30, L: 300, n_a: 2, n_b: 2, d_long: 16, diameter_mm: 8, legs: 2, inner: '', s: 20, end: 80, s_end: 10 },
+  beam: { b: 30, h: 50, L: 500, n_top: 2, d_top: 12, n_bot: 3, d_bot: 16, diameter_mm: 8, legs: 2, inner: '', s: 20, end: 70, s_end: 10 },
+};
 const REBAR_KRANZ_VARIANTS = [['upper', 'קרנץ עליון (ע.)'], ['lower', 'קרנץ תחתון (ת.)']];
 const REBAR_SPACER_HEIGHTS = Array.from({ length: 22 }, (_, i) => 70 + i * 10);   // 70…280 mm
 
-// The window's form for an element: the defaults for a new one, or a saved row read back.
-function rebarElementForm(item) {
+// The window's form for an element: the defaults for a new one (of `type`, kranz if none), or a
+// saved row read back. A cage's own defaults replace the kranz ones it shares names with (a, b, L).
+function rebarElementForm(item, type) {
   const p = (item && item.params) || {};
-  return {
+  const t = type || p.type || 'kranz';
+  const f = {
     alias: item ? item.alias || '' : '', note: item ? item.note || '' : '', qty: item ? item.qty : '', steel: 'מצולע',
-    type: p.type || 'kranz', variant: p.variant || 'upper', L: p.L ?? 600, diameter_mm: item && p.type === 'kranz' ? item.diameter_mm : 8,
+    type: t, variant: p.variant || 'upper', L: p.L ?? 600, diameter_mm: item && p.type === 'kranz' ? item.diameter_mm : 8,
     s: p.s ?? 20, a: p.a ?? 80, b: p.b ?? 15, n_long: p.n_long ?? 3, d_long: p.d_long ?? 8,
     height_mm: p.height_mm ?? 120, name: p.name || '', unit_kg: p.type === 'other' && p.unit_kg ? p.unit_kg : '',
+    view: p.view || '', image_path: p.image_path || '',
   };
+  if (REBAR_CAGE_DEFAULTS[t]) {
+    Object.assign(f, REBAR_CAGE_DEFAULTS[t]);
+    if (p.type === t) {
+      for (const k of REBAR_CAGE_KEYS[t]) if (p[k] !== undefined && p[k] !== null) f[k] = p[k];
+      f.inner = p.inner ?? '';
+      f.diameter_mm = item.diameter_mm;
+    }
+  }
+  return f;
 }
 
 // The "סוג" text of an element, for the order table and the PDF.
 function elementLabel(item) {
   const p = item.params || {};
   if (p.type === 'kranz') return (REBAR_KRANZ_VARIANTS.find(v => v[0] === p.variant) || REBAR_KRANZ_VARIANTS[0])[1];
-  return (REBAR_ELEMENT_TYPES.find(t => t[0] === p.type) || REBAR_ELEMENT_TYPES[2])[1];
+  return (REBAR_ELEMENT_TYPES.find(t => t[0] === p.type) || REBAR_ELEMENT_TYPES.find(t => t[0] === 'other'))[1];
 }
 
-// The "פירוט" text of an element, for the order table and the PDF.
-function elementDesc(item) {
+// The "פירוט" of an element in its parts, for the order table and the PDF. A beam's parts are
+// shown each in its own direction (a right-to-left line would turn 30×50 into 50×30).
+function elementDescParts(item) {
   const p = item.params || {}, n = v => String(Number(v));
-  if (p.type === 'kranz') return `L=${n(p.L)} · Ø${n(item.diameter_mm)}@${n(p.s)} · ${n(p.n_long)}Ø${n(p.d_long)}`;
-  if (p.type === 'spacer') return `גובה ${n(p.height_mm)} מ״מ · אורך 2 מ׳`;   // plain Hebrew: a mixed LTR wrapper garbles it
-  return p.name || '';
+  if (p.type === 'kranz') return [`L=${n(p.L)}`, `Ø${n(item.diameter_mm)}@${n(p.s)}`, `${n(p.n_long)}Ø${n(p.d_long)}`];
+  if (p.type === 'column' || p.type === 'beam') {
+    const st = [`${Number(p.legs) === 4 ? '4L ' : ''}Ø${n(item.diameter_mm)}@${n(p.s)}`].concat(Number(p.end) > 0 ? [`@${n(p.s_end)}×${n(p.end)}`] : []);
+    // a column is pure technical text (kept left-to-right as one run); a beam names ב.ע./ב.ת.
+    if (p.type === 'column') return [`${n(p.a)}×${n(p.b)}`, `L=${n(p.L)}`, `${2 * (Number(p.n_a) + Number(p.n_b)) - 4}Ø${n(p.d_long)}`, ...st];
+    return [`${n(p.b)}×${n(p.h)}`, `L=${n(p.L)}`, `ב.ע. ${n(p.n_top)}Ø${n(p.d_top)}`, `ב.ת. ${n(p.n_bot)}Ø${n(p.d_bot)}`, ...st];
+  }
+  if (p.type === 'spacer') return [`גובה ${n(p.height_mm)} מ״מ`, 'אורך 2 מ׳'];   // plain Hebrew: a mixed LTR wrapper garbles it
+  return p.name ? [p.name] : [];
 }
+function elementDesc(item) { return elementDescParts(item).join(' · '); }
 
 const REBAR_ORDER_RESET = ['id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'sent_at', 'sent_by',
   'closed_at', 'closed_by', 'close_reason', 'source_ref'];

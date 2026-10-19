@@ -134,9 +134,9 @@ function rebarPdfCells(it, drawings) {
   }
   if (it.kind === 'element') {
     // a spacer is counted, not weighed: its weights print as a dash
-    const img = drawings['e' + it.line_no] ? `<img src="${drawings['e' + it.line_no]}" style="width:150px;height:55px;display:block;">` : '—';
+    const img = drawings['e' + it.line_no] ? `<img src="${drawings['e' + it.line_no]}" style="width:150px;height:55px;display:block;object-fit:contain;">` : '—';
     const weights = p.type === 'spacer' ? num(it.qty, 0) + cell('—', 'text-align:left;') + cell('—', 'text-align:left;') : tail;
-    return cell(img, 'padding:4px 8px;') + alias + cell(rebarPdfEsc(elementLabel(it))) + (p.type === 'kranz' ? cell(rebarPdfLtr(elementDesc(it)), 'text-align:left;') : cell(rebarPdfEsc(elementDesc(it)))) + weights;
+    return cell(img, 'padding:4px 8px;') + alias + cell(rebarPdfEsc(elementLabel(it))) + cell(rebarPdfElementDesc(it), rebarPdfDescLtr(it) ? 'text-align:left;' : '') + weights;
   }
   if (it.kind === 'mesh') {
     const asym = p.type === 'asym';
@@ -202,6 +202,43 @@ function rebarPdfSummary(summary, wastePct) {
     </div>`;
 }
 
+// An element's "פירוט": pure technical text (kranz, column) is kept left-to-right as one run, pure
+// Hebrew (a spacer) is plain; in a mixed line (a beam's ב.ע./ב.ת.) each technical part gets its own
+// left-to-right box and the Hebrew parts none — one wrapper around it all would garble the Hebrew.
+function rebarPdfDescLtr(it) { const t = (it.params || {}).type; return t === 'kranz' || t === 'column'; }
+function rebarPdfElementDesc(it) {
+  if (rebarPdfDescLtr(it)) return rebarPdfLtr(elementDesc(it));
+  const parts = elementDescParts(it), heb = s => /[֐-׿]/.test(s);
+  if (parts.every(heb)) return rebarPdfEsc(elementDesc(it));   // all Hebrew (a spacer): one plain run
+  // each part on one line: ב.ע. stays beside its 2Ø12
+  return parts.map(s => (/[֐-׿]/.test(s) ? `<span style="white-space:nowrap;">${rebarPdfEsc(s)}</span>` : rebarPdfLtr(s))).join(' · ');
+}
+
+// ---- "שרטוטי אלמנטים" (spec 2026-10-19 §6): every element with a large drawing, 6 to a page ----
+const REBAR_PDF_DRAWINGS_PER_PAGE = 6;
+
+function rebarPdfDrawnElements(items, drawings) {
+  return (items || []).filter(it => it.kind === 'element' && (drawings || {})['E' + it.line_no]).sort((a, b) => a.line_no - b.line_no);
+}
+
+function rebarPdfDrawingPages({ orgName, order, items, drawings, start, total }) {
+  const els = rebarPdfDrawnElements(items, drawings), pages = [];
+  for (let i = 0; i < els.length; i += REBAR_PDF_DRAWINGS_PER_PAGE) {
+    const boxes = els.slice(i, i + REBAR_PDF_DRAWINGS_PER_PAGE).map(it => `
+      <div data-drawing="${it.line_no}" style="width:410px;box-sizing:border-box;border:1px solid #E3E9E6;border-radius:12px;padding:10px 12px;">
+        <div style="font-size:12px;font-weight:800;color:#0E1A20;margin-bottom:6px;">שורה ${it.line_no} · ${rebarPdfEsc(elementLabel(it))}${it.alias ? ' · ' + rebarPdfEsc(it.alias) : ''} · כמות ${rebarPdfNum(it.qty, 0)}</div>
+        <img src="${drawings['E' + it.line_no]}" style="width:386px;height:222px;display:block;object-fit:contain;">
+        <div style="font-size:11.5px;color:#0E1A20;margin-top:6px;${rebarPdfDescLtr(it) ? 'text-align:left;' : ''}">${rebarPdfElementDesc(it)}</div>
+      </div>`).join('');
+    pages.push(rebarPdfNextHead(orgName, order) + `
+      <div style="padding:16px 40px 0;">
+        <div style="font-size:15px;font-weight:800;color:#0E1A20;margin-bottom:12px;">שרטוטי אלמנטים</div>
+        <div style="display:flex;flex-wrap:wrap;gap:20px;">${boxes}</div>
+      </div>` + rebarPdfFoot(orgName, order, start + pages.length, total));
+  }
+  return pages;
+}
+
 // One HTML string per A4 page. Lines flow bar → mesh → pile, REBAR_PDF_ROWS per page,
 // never split; the summary goes on the last page when it has room, else on a page of its own.
 function rebarPdfPages({ orgName, logoHtml, site, order, items, summary, drawings, genStr, company }) {
@@ -219,7 +256,8 @@ function rebarPdfPages({ orgName, logoHtml, site, order, items, summary, drawing
   const lastCap = chunks.length === 1 ? REBAR_PDF_ROWS.first : REBAR_PDF_ROWS.next;
   if (lastCap - last.length < REBAR_PDF_SUMMARY_ROWS) chunks.push([]);
   const gen = genStr || new Date().toLocaleDateString('he-IL');
-  const total = chunks.length;
+  const drawingPages = Math.ceil(rebarPdfDrawnElements(items, drawings).length / REBAR_PDF_DRAWINGS_PER_PAGE);
+  const total = chunks.length + drawingPages;
   return chunks.map((chunk, p) => {
     const head = p === 0 ? rebarPdfFirstHead({ orgName, logoHtml, site, order, summary, genStr: gen, company }) : rebarPdfNextHead(orgName, order);
     const body = Object.keys(RP_SECTIONS).map(kind => {
@@ -227,9 +265,9 @@ function rebarPdfPages({ orgName, logoHtml, site, order, items, summary, drawing
       if (!own.length) return '';
       return rebarPdfTable(kind, own.map(it => ({ it, n: lines.indexOf(it) })), drawings || {});
     }).join('');
-    const sum = p === total - 1 ? rebarPdfSummary(summary, order.waste_pct ?? 3) : '';
+    const sum = p === chunks.length - 1 ? rebarPdfSummary(summary, order.waste_pct ?? 3) : '';
     return head + body + sum + rebarPdfFoot(orgName, order, p + 1, total);
-  });
+  }).concat(rebarPdfDrawingPages({ orgName, order, items, drawings: drawings || {}, start: chunks.length + 1, total }));
 }
 
 // ---- in the browser ----
@@ -248,13 +286,40 @@ function rebarSvgToPng(svg, w, h) {
   });
 }
 
+// An uploaded image (an "אחר" element) as a data URL the page engine can paint; null if it cannot be read.
+async function rebarImageDataUrl(path) {
+  const url = await getStorageUrl(path);
+  if (!url) return null;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob); });
+}
+
+// An element's two drawings: bare for its row (the cell is small and "פירוט" lists every size), with
+// its dimensions for "שרטוטי אלמנטים". null for an "אחר" (its image is used instead).
+function rebarPdfElementSvgs(it) {
+  const small = elementDrawing(it, { w: 300, h: 110, stroke: 2.2, bare: true });
+  return small ? { small, large: elementDrawing(it, { w: 800, h: 460, stroke: 2.2 }) } : null;
+}
+
 async function rebarExportPdf({ order, items, site, company }) {
   const summary = orderSummary(items, order.waste_pct ?? 3);
   const drawings = {};
   for (const it of items) {
     if (it.kind === 'bar' && it.shape) drawings[it.line_no] = await rebarSvgToPng(shapeSvg(it.shape, { w: 300, h: 110, stroke: 2.2 }), 300, 110);
-    const el = it.kind === 'element' ? elementSvg(it.params, { w: 300, h: 110, stroke: 2.2 }) : null;
-    if (el) drawings['e' + it.line_no] = await rebarSvgToPng(el, 300, 110);
+    if (it.kind === 'element') {
+      // a drawing in its view (small for the row, large for "שרטוטי אלמנטים"), or the uploaded image of
+      // an "אחר"; an image that cannot be fetched leaves no entry, so the row shows a dash and has no box
+      const svgs = rebarPdfElementSvgs(it);
+      if (svgs) {
+        drawings['e' + it.line_no] = await rebarSvgToPng(svgs.small, 300, 110);
+        drawings['E' + it.line_no] = await rebarSvgToPng(svgs.large, 800, 460);
+      } else if (it.params && it.params.image_path) {
+        const img = await rebarImageDataUrl(it.params.image_path).catch(() => null);
+        if (img) drawings['e' + it.line_no] = drawings['E' + it.line_no] = img;
+      }
+    }
     // drawn smaller than a bar so its numbers stay readable at the cell's 150×55
     const mesh = it.kind === 'mesh' ? meshSvg(it.params, it.diameter_mm, { w: 210, h: 77, stroke: 2 }) : null;
     if (mesh) drawings['m' + it.line_no] = await rebarSvgToPng(mesh, 210, 77);

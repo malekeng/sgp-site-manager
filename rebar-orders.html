@@ -190,6 +190,18 @@ select.iw-box { width: 76px; padding: 4px 2px; cursor: pointer; }
 .iw-bundle:empty { display: none; }
 .iw-bundle b { color: var(--navy); }
 .iw-bundle .btn { flex: 0 0 auto; }
+/* element drawings (2026-10-19): the picture on the stage, the 2D/3D switch, the "אחר" image */
+.iw-draw { position: absolute; inset: 48px 0 0 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.iw-draw:empty { display: none; }
+.iw-draw svg { display: block; }
+.iw-draw-hint { font-size: 13px; font-weight: 600; color: var(--steel); }
+.iw-viewseg { position: absolute; top: 10px; left: 10px; z-index: 2; }
+.iw-upload { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 10px; }
+.iw-upload-img { width: 120px; height: 80px; object-fit: contain; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--sheet); }
+.iw-upload-btn { cursor: pointer; }
+.shape-thumb img.el-img, .iw-item img.el-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.iw-item img.el-img { width: 40px; height: 22px; }
+.el-part { white-space: nowrap; }   /* a beam's ב.ע. stays beside its 2Ø12 */
 @media (max-width: 760px) {
   .modal.item-win { padding: 18px 14px 14px; }
   .iw-card-narrow { max-width: none; }
