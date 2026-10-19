@@ -214,25 +214,38 @@ function rebarPdfElementDesc(it) {
   return parts.map(s => (/[֐-׿]/.test(s) ? `<span style="white-space:nowrap;">${rebarPdfEsc(s)}</span>` : rebarPdfLtr(s))).join(' · ');
 }
 
-// ---- "שרטוטי אלמנטים" (spec 2026-10-19 §6): every element with a large drawing, 6 to a page ----
+// A pile's sizes under its drawing: the technical parts left-to-right, the spiral (Hebrew) whole.
+function rebarPdfPileDesc(it) {
+  const p = it.params || {}, L = (Number(p.L1) || 0) + (Number(p.L2) || 0) + (Number(p.L3) || 0);
+  return [`d/D ${p.d}/${p.D}`, `${p.n}Ø${it.diameter_mm}`, `L=${L}`].map(rebarPdfLtr).join(' · ')
+    + ` · <span style="white-space:nowrap;">${rebarPdfEsc(`ספירלה Ø${p.d_spiral} @${p.p1}/@${p.p2}`)}</span>`;
+}
+
+// ---- "שרטוטים" (spec 2026-10-19 §6; piles too since 2026-10-19): every element or pile with a
+// large drawing, 6 to a page ----
 const REBAR_PDF_DRAWINGS_PER_PAGE = 6;
 
 function rebarPdfDrawnElements(items, drawings) {
-  return (items || []).filter(it => it.kind === 'element' && (drawings || {})['E' + it.line_no]).sort((a, b) => a.line_no - b.line_no);
+  return (items || []).filter(it => (it.kind === 'element' || it.kind === 'pile') && (drawings || {})['E' + it.line_no])
+    .sort((a, b) => a.line_no - b.line_no);
 }
 
 function rebarPdfDrawingPages({ orgName, order, items, drawings, start, total }) {
   const els = rebarPdfDrawnElements(items, drawings), pages = [];
   for (let i = 0; i < els.length; i += REBAR_PDF_DRAWINGS_PER_PAGE) {
-    const boxes = els.slice(i, i + REBAR_PDF_DRAWINGS_PER_PAGE).map(it => `
+    const boxes = els.slice(i, i + REBAR_PDF_DRAWINGS_PER_PAGE).map(it => {
+      const pile = it.kind === 'pile';
+      const label = pile ? 'כלונס ' + ((it.params || {}).pile_type || 'בסיס') : elementLabel(it);
+      return `
       <div data-drawing="${it.line_no}" style="width:410px;box-sizing:border-box;border:1px solid #E3E9E6;border-radius:12px;padding:10px 12px;">
-        <div style="font-size:12px;font-weight:800;color:#0E1A20;margin-bottom:6px;">שורה ${it.line_no} · ${rebarPdfEsc(elementLabel(it))}${it.alias ? ' · ' + rebarPdfEsc(it.alias) : ''} · כמות ${rebarPdfNum(it.qty, 0)}</div>
+        <div style="font-size:12px;font-weight:800;color:#0E1A20;margin-bottom:6px;">שורה ${it.line_no} · ${rebarPdfEsc(label)}${it.alias ? ' · ' + rebarPdfEsc(it.alias) : ''} · כמות ${rebarPdfNum(it.qty, 0)}</div>
         <img src="${drawings['E' + it.line_no]}" style="width:386px;height:222px;display:block;object-fit:contain;">
-        <div style="font-size:11.5px;color:#0E1A20;margin-top:6px;${rebarPdfDescLtr(it) ? 'text-align:left;' : ''}">${rebarPdfElementDesc(it)}</div>
-      </div>`).join('');
+        <div style="font-size:11.5px;color:#0E1A20;margin-top:6px;${!pile && rebarPdfDescLtr(it) ? 'text-align:left;' : ''}">${pile ? rebarPdfPileDesc(it) : rebarPdfElementDesc(it)}</div>
+      </div>`;
+    }).join('');
     pages.push(rebarPdfNextHead(orgName, order) + `
       <div style="padding:16px 40px 0;">
-        <div style="font-size:15px;font-weight:800;color:#0E1A20;margin-bottom:12px;">שרטוטי אלמנטים</div>
+        <div style="font-size:15px;font-weight:800;color:#0E1A20;margin-bottom:12px;">שרטוטים</div>
         <div style="display:flex;flex-wrap:wrap;gap:20px;">${boxes}</div>
       </div>` + rebarPdfFoot(orgName, order, start + pages.length, total));
   }
@@ -296,11 +309,12 @@ async function rebarImageDataUrl(path) {
   return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob); });
 }
 
-// An element's two drawings: bare for its row (the cell is small and "פירוט" lists every size), with
-// its dimensions for "שרטוטי אלמנטים". null for an "אחר" (its image is used instead).
+// An element's (or a pile's) two drawings: bare for its row (the cell is small and "פירוט" lists
+// every size), with its dimensions for "שרטוטים". null for an "אחר" (its image is used instead).
 function rebarPdfElementSvgs(it) {
-  const small = elementDrawing(it, { w: 300, h: 110, stroke: 2.2, bare: true });
-  return small ? { small, large: elementDrawing(it, { w: 800, h: 460, stroke: 2.2 }) } : null;
+  const draw = it.kind === 'pile' ? pileDrawing : elementDrawing;
+  const small = draw(it, { w: 300, h: 110, stroke: 2.2, bare: true });
+  return small ? { small, large: draw(it, { w: 800, h: 460, stroke: 2.2 }) } : null;
 }
 
 async function rebarExportPdf({ order, items, site, company }) {
@@ -308,8 +322,8 @@ async function rebarExportPdf({ order, items, site, company }) {
   const drawings = {};
   for (const it of items) {
     if (it.kind === 'bar' && it.shape) drawings[it.line_no] = await rebarSvgToPng(shapeSvg(it.shape, { w: 300, h: 110, stroke: 2.2 }), 300, 110);
-    if (it.kind === 'element') {
-      // a drawing in its view (small for the row, large for "שרטוטי אלמנטים"), or the uploaded image of
+    if (it.kind === 'element' || it.kind === 'pile') {
+      // a drawing in its view (small for the row, large for "שרטוטים"), or the uploaded image of
       // an "אחר"; an image that cannot be fetched leaves no entry, so the row shows a dash and has no box
       const svgs = rebarPdfElementSvgs(it);
       if (svgs) {

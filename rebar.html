@@ -138,6 +138,8 @@
 // A row made by a rebar order (rebar_order_id) belongs to that order: the database keeps it in
 // sync and refuses edits, so the row opens the order instead, and deleting it deletes the order.
 const rbOrderHref = id => `rebar-orders.html#o=${id}`;
+// still waiting for steel: not fully supplied and not closed (2026-10-19 receive buttons)
+const rbStillOwed = row => row.supply_status !== 'כן' && !row.order_closed;
 
 initCrudPage({
   table: 'rebar_deliveries', docInsights: true, icon: '🔩',
@@ -146,9 +148,14 @@ initCrudPage({
   dateField: 'order_date',
   orderBy: { column: 'order_date', ascending: false },
   rowActions: row => row.rebar_order_id ? `
+    ${rbStillOwed(row) ? `<a class="icon-btn" href="rebar-orders.html#receive=${row.rebar_order_id}" title="התקבל משלוח" aria-label="התקבל משלוח">${ico3d('incoming', 18)}</a>
+    <a class="icon-btn" href="rebar-orders.html#receive-all=${row.rebar_order_id}" title="התקבלה כל ההזמנה" aria-label="התקבלה כל ההזמנה">${uiIcon('check')}</a>` : ''}
     <a class="icon-btn" href="${rbOrderHref(row.rebar_order_id)}" title="פתיחת ההזמנה" aria-label="פתיחת ההזמנה">${uiIcon('eye')}</a>
     ${rebarTrackingEditable(row) ? `<a class="icon-btn" href="rebar-orders.html#edit=${row.rebar_order_id}" title="עריכת ההזמנה" aria-label="עריכת ההזמנה">${uiIcon('pencil')}</a>` : ''}
     <button class="icon-btn danger" data-del-order="${row.rebar_order_id}" data-order-no="${esc(row.plan_ref || '')}" title="מחיקת ההזמנה" aria-label="מחיקת ההזמנה">${uiIcon('trash')}</button>` : null,
+  // a row entered by hand (no order): "התקבלה במלואה" in one step
+  rowExtraActions: row => rbStillOwed(row)
+    ? `<button class="icon-btn" data-full-supply="${row.id}" title="התקבלה במלואה" aria-label="התקבלה במלואה">${uiIcon('check')}</button>` : '',
   openRecord: row => {
     if (!row.rebar_order_id) return false;
     location.href = rbOrderHref(row.rebar_order_id);
@@ -307,7 +314,20 @@ async function rbDeleteOrder(id, orderNo, draft) {
 document.getElementById('tableBody').addEventListener('click', e => {
   const del = e.target.closest('[data-del-order]');
   if (del) rbDeleteOrder(del.dataset.delOrder, del.dataset.orderNo, false);
+  const full = e.target.closest('[data-full-supply]');
+  if (full) rbMarkFullySupplied(full.dataset.fullSupply);
 });
+
+// A row entered by hand: everything arrived — supplied "כן" and the order closed (as an order's
+// row does when it is received in full). The lock button opens it again.
+async function rbMarkFullySupplied(id) {
+  if (!confirm('לסמן שההזמנה התקבלה במלואה?\n\nהשורה תסומן "סופק: כן" וההזמנה תיסגר. אפשר לפתוח אותה שוב בכפתור המנעול.')) return;
+  const { data, error } = await sb.from('rebar_deliveries').update({ supply_status: 'כן', order_closed: true }).eq('id', id).select('id');
+  if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+  if (!data || !data.length) { toast('השורה לא עודכנה — אין הרשאה או שהשורה נמחקה', 'error'); return; }
+  toast('סומן שההזמנה התקבלה במלואה', 'success');
+  if (window.sgpCrud) await window.sgpCrud.reload();
+}
 document.getElementById('draftsBody').addEventListener('click', e => {
   const del = e.target.closest('[data-del-draft]');
   if (del) rbDeleteOrder(del.dataset.delDraft, del.dataset.orderNo, true);

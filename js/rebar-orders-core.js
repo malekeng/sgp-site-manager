@@ -173,6 +173,7 @@ function buildItem(kind, f, lineNo) {
       pile_type: f.pile_type || 'בסיס', d: parseNum(f.d), D: parseNum(f.D), n: parseNum(f.n),
       L1: parseNum(f.L1), L2: parseNum(f.L2), L3: parseNum(f.L3), p1: parseNum(f.p1), p2: parseNum(f.p2),
       d_spiral: parseNum(f.d_spiral), steel_spiral: f.steel_spiral || 'מצולע', additions: f.additions || [],
+      ...(f.view === '2d' || f.view === '3d' ? { view: f.view } : {}),   // stored only when chosen (2026-10-19)
     };
   }
   const c = itemCalc(row);
@@ -301,8 +302,8 @@ function rebarDbError(err) {
 
 // The order screen's address: #o=<id> opens an order, #edit=<id> opens it for editing, #new starts one.
 function rebarOrderRoute(hash) {
-  const m = /^#(o|edit)=([0-9a-f-]{36})$/.exec(hash || '');
-  if (m) return { mode: m[1] === 'o' ? 'open' : 'edit', id: m[2] };
+  const m = /^#(o|edit|receive|receive-all)=([0-9a-f-]{36})$/.exec(hash || '');
+  if (m) return { mode: { o: 'open', edit: 'edit', receive: 'receive', 'receive-all': 'receive_all' }[m[1]], id: m[2] };
   return hash === '#new' ? { mode: 'new', id: null } : { mode: null, id: null };
 }
 

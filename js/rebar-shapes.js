@@ -421,6 +421,127 @@ function rbSpacer2d(p, w, h, stroke) {
   return out + '</svg>';
 }
 
+// ---- piles (2026-10-19): a round cage of n bars on the diameter d, L1+L2+L3 long, wound by a
+// spiral at p1 over L2 and p2 over L3 (none over L1, the part that goes into the cap) ----
+function pileView(p) { return p && p.view === '2d' ? '2d' : '3d'; }
+
+// The spiral turns a drawing shows: all of them up to `max`, else every k-th (one k for both
+// zones, so the dense zone still looks denser).
+function pileDrawnTurns(p, max = 80) {
+  const t2 = Number(p.L2) > 0 ? Number(p.L2) / Number(p.p1) : 0, t3 = Number(p.L3) > 0 ? Number(p.L3) / Number(p.p2) : 0;
+  const k = Math.max(1, Math.ceil((t2 + t3) / max));
+  return { k, n: Math.ceil(t2 / k - 1e-9) + Math.ceil(t3 / k - 1e-9) };
+}
+
+function rbPileOk(p) {
+  const L1 = Number(p.L1) || 0, L2 = Number(p.L2) || 0, L3 = Number(p.L3) || 0;
+  return Number(p.d) > 0 && Number.isInteger(Number(p.n)) && Number(p.n) >= 3 && Math.min(L1, L2, L3) >= 0 && L1 + L2 + L3 > 0
+    && (L2 === 0 || Number(p.p1) > 0) && (L3 === 0 || Number(p.p2) > 0);
+}
+
+function rbPileTexts(item) {
+  const p = item.params;
+  return {
+    bars: `${rbLabel(p.n)}Ø${rbLabel(item.diameter_mm)}`,
+    spiral: `ספירלה Ø${rbLabel(p.d_spiral)} @${rbLabel(p.p1)}/@${rbLabel(p.p2)}`,
+    size: `d=${rbLabel(p.d)}${Number(p.D) > 0 ? ' · D=' + rbLabel(p.D) : ''}`,
+  };
+}
+
+// the spiral's zones along the cage: [from, length, pitch]
+function rbPileZones(p) {
+  const L1 = Number(p.L1) || 0, L2 = Number(p.L2) || 0, L3 = Number(p.L3) || 0;
+  return [[L1, L2, Number(p.p1)], [L1 + L2, L3, Number(p.p2)]].filter(z => z[1] > 0);
+}
+
+// 3D: the cage lying down, every bar along it and the spiral around them; the bars and spiral
+// written top-left, d/D top-right, the length under the front edge.
+function rbPile3d(item, w, h, stroke, bare) {
+  const p = item.params, L = (Number(p.L1) || 0) + (Number(p.L2) || 0) + (Number(p.L3) || 0), r = Number(p.d) / 2, u = rbUnit(w, h);
+  const pad = bare ? 2 : Math.max(18, Math.round(Math.min(w, h) * 0.16));
+  const P = rbIso(L, -r, r, -r, r, w, h, pad, bare);
+  let out = rbHead(w, h);
+  const n = Number(p.n);
+  for (let i = 0; i < n; i++) {
+    const a = 2 * Math.PI * i / n, y = r * 0.9 * Math.cos(a), z = r * 0.9 * Math.sin(a);
+    out += rbSeg(P(0, y, z), P(L, y, z), (stroke * 0.9).toFixed(2), 'bar');
+  }
+  const { k } = pileDrawnTurns(p), pts = [];
+  let turn = 0;
+  for (const [x0, len, pitch] of rbPileZones(p)) {
+    const step = pitch * k, segs = Math.max(1, Math.round(len / step * 16));
+    for (let j = 0; j <= segs; j++) {
+      const ang = turn + 2 * Math.PI * (len * j / segs) / step;
+      pts.push(P(x0 + len * j / segs, r * Math.cos(ang), r * Math.sin(ang)));
+    }
+    turn += 2 * Math.PI * len / step;
+  }
+  if (pts.length) out += `<polyline class="spiral" points="${pts.map(q => rbF(q[0]) + ',' + rbF(q[1])).join(' ')}" fill="none" stroke="${RB_INK}" stroke-width="${Math.max(0.6, stroke * 0.35).toFixed(2)}" stroke-linejoin="round"/>`;
+  const t = rbPileTexts(item);
+  out += rbText(4 * u, 10 * u, t.bars, 'start', 12 * u) + rbText(4 * u, 24 * u, t.spiral, 'start', 12 * u);
+  out += rbText(w - 4 * u, 10 * u, t.size, 'end', 12 * u);
+  const a0 = P(0, -r, r), a1 = P(L, -r, r);
+  out += rbText((a0[0] + a1[0]) / 2, Math.min(h - 8 * u, (a0[1] + a1[1]) / 2 + 14 * u), 'L=' + rbLabel(L), 'middle', 12 * u);
+  return out + '</svg>';
+}
+
+// 2D: the section on the right (d, the dashed D around it, one dot per bar) and the side view on
+// the left (the bars, the spiral as a zigzag, the zones with their lengths and steps).
+function rbPile2d(item, w, h, stroke) {
+  const p = item.params, L1 = Number(p.L1) || 0, L = L1 + (Number(p.L2) || 0) + (Number(p.L3) || 0);
+  const d = Number(p.d), D = Number(p.D) > 0 ? Number(p.D) : 0, n = Number(p.n), u = rbUnit(w, h), t = rbPileTexts(item);
+  const pad = Math.max(16, Math.round(Math.min(w, h) * 0.14));
+  let out = rbHead(w, h);
+  // the section
+  const R = Math.max(d, D) / 2, k = Math.min(h - 2 * pad - 24 * u, w * 0.26) / (2 * R);
+  const cx = w - pad - R * k, cy = h / 2;
+  if (D) out += `<circle cx="${rbF(cx)}" cy="${rbF(cy)}" r="${rbF(D / 2 * k)}" fill="none" stroke="${RB_DIM}" stroke-width="${(0.8 * u).toFixed(2)}" stroke-dasharray="${rbF(4 * u)} ${rbF(3 * u)}"/>`;
+  out += `<circle cx="${rbF(cx)}" cy="${rbF(cy)}" r="${rbF(d / 2 * k)}" fill="none" stroke="${RB_INK}" stroke-width="${(stroke * 0.6).toFixed(2)}"/>`;
+  const rb = Math.max(1.5, d * k * 0.035), rr = d / 2 * k - rb - 1;
+  for (let i = 0; i < n; i++) {
+    const a = 2 * Math.PI * i / n;
+    out += `<circle class="bar" cx="${rbF(cx + rr * Math.cos(a))}" cy="${rbF(cy + rr * Math.sin(a))}" r="${rbF(rb)}" fill="${RB_INK}"/>`;
+  }
+  out += rbText(cx, cy - R * k - 9 * u, t.bars, 'middle', 11 * u);
+  out += rbText(cx, cy + R * k + 11 * u, t.size, 'middle', 11 * u);
+  // the side view
+  const x0 = pad, x1 = cx - R * k - 30 * u, ty = h / 2 - 12 * u, by = h / 2 + 12 * u, kx = (x1 - x0) / L;
+  const sw = (stroke * 0.8).toFixed(2);
+  out += rbSeg([x0, ty], [x1, ty], sw) + rbSeg([x0, by], [x1, by], sw);
+  const { k: every } = pileDrawnTurns(p), zz = [];
+  for (const [a, len, pitch] of rbPileZones(p)) {
+    const half = pitch * every / 2, m = Math.max(1, Math.round(len / half));
+    for (let j = 0; j <= m; j++) zz.push(`${rbF(x0 + (a + len * j / m) * kx)},${rbF(j % 2 ? by : ty)}`);
+  }
+  if (zz.length) out += `<polyline class="spiral" points="${zz.join(' ')}" fill="none" stroke="${RB_INK}" stroke-width="${Math.max(0.6, stroke * 0.3).toFixed(2)}"/>`;
+  const dy = by + 16 * u;
+  const zones = [[0, L1, null], ...rbPileZones(p).map(([a, len, pitch]) => [a, a + len, pitch])].filter(z => z[1] > z[0]);
+  // a zone's length goes under it; one that would run into the label before it drops a row
+  let lastRight = -Infinity, rows = 1;
+  for (const [a, b, step] of zones) {
+    const xa = x0 + a * kx, xb = x0 + b * kx, label = rbLabel(b - a), half = label.length * 3.4 * u, mid = (xa + xb) / 2;
+    out += rbSeg([xa, dy - 4 * u], [xa, dy + 4 * u], 0.8 * u, '', RB_DIM) + rbSeg([xb, dy - 4 * u], [xb, dy + 4 * u], 0.8 * u, '', RB_DIM) + rbSeg([xa, dy], [xb, dy], 0.8 * u, '', RB_DIM);
+    const second = mid - half < lastRight + 2 * u;
+    out += rbText(mid, dy + (second ? 22 : 10) * u, label, 'middle', 11 * u);
+    if (second) rows = 2; else lastRight = mid + half;
+    if (step) out += rbText(mid, ty - 9 * u, '@' + rbLabel(step), 'middle', 11 * u);
+  }
+  out += rbText((x0 + x1) / 2, Math.min(h - 6 * u, dy + (rows === 2 ? 34 : 22) * u), 'L=' + rbLabel(L), 'middle', 12 * u);
+  out += rbText(x0, 10 * u, t.spiral, 'start', 12 * u);
+  return out + '</svg>';
+}
+
+// A pile line's drawing in its view (or opts.view), or null for sizes that cannot be drawn;
+// opts.bare as for elements.
+function pileDrawing(item, opts = {}) {
+  const p = (item && item.params) || {};
+  if (!rbPileOk(p)) return null;
+  const view = opts.view === '2d' || opts.view === '3d' ? opts.view : pileView(p);
+  const w = opts.w || 300, h = opts.h || 120, stroke = opts.stroke || 2, bare = !!opts.bare;
+  const svg = view === '2d' ? rbPile2d(item, w, h, stroke) : rbPile3d(item, w, h, stroke, bare);
+  return bare ? svg.replace(/<text[\s\S]*?<\/text>/g, '') : svg;
+}
+
 // The drawing of an element line in its view (or opts.view): an SVG string, or null for "other"
 // (its image is shown instead) and for sizes that cannot be drawn. opts.bare (the small
 // thumbnails, whose line already lists every size): no text, and a 3D view fills the box.

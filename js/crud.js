@@ -227,6 +227,8 @@ async function initCrudPage(config) {
         : '';
       // a page may give some rows their own buttons (a row that belongs to another record)
       const ownActions = config.rowActions ? config.rowActions(row) : null;
+      // …or one more button in front of the usual ones
+      const extraActions = config.rowExtraActions ? config.rowExtraActions(row) || '' : '';
       return `
         <tr>
           ${cells}
@@ -234,7 +236,7 @@ async function initCrudPage(config) {
           ${auditCell}
           <td class="row-actions">
             <div class="row-actions-inner">
-              ${ownActions !== null && ownActions !== undefined ? ownActions : `${toggleBtn}
+              ${ownActions !== null && ownActions !== undefined ? ownActions : `${extraActions}${toggleBtn}
               <button class="icon-btn" data-edit="${row.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
               <button class="icon-btn danger" data-del="${row.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>`}
             </div>

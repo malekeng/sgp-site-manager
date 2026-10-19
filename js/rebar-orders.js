@@ -140,6 +140,7 @@ function roRenderActions() {
     b.push(`<button class="btn btn-outline" data-act="pdf">${pdf('PDF')}</button>`);
   }
   if (['sent', 'partial', 'complete'].includes(s)) b.unshift(`<button class="btn btn-primary" data-act="receive">${ico3d('incoming', 20)} קבלת משלוח</button>`);
+  if (s === 'sent' || s === 'partial') b.splice(1, 0, `<button class="btn btn-outline" data-act="receive-all">${uiIcon('check')} התקבלה כל ההזמנה</button>`);
   if (s === 'sent' && !state.receipts.length) b.push(`<button class="btn btn-outline" data-act="reopen">${uiIcon('lock-open')} פתח לעריכה</button>`);
   if (s === 'sent' || s === 'partial') b.push(`<button class="btn btn-outline" data-act="close">${uiIcon('lock')} סגור הזמנה</button>`);
   if (o.id) b.push(`<button class="btn btn-outline" data-act="dup">${uiIcon('copy')} שכפול</button>`);
@@ -360,6 +361,7 @@ async function roAction(act) {
     return roSetStatus({ status: 'draft' }, 'ההזמנה חזרה לטיוטה');
   }
   if (act === 'receive') return roOpenReceiptDialog();
+  if (act === 'receive-all') return roReceiveAll();
   if (act === 'issue') {
     if (typeof rebarIssue === 'function') return rebarIssue();
     return toast('הפקת PDF אינה זמינה כרגע', 'error');
@@ -400,8 +402,9 @@ function roLineCells(it) {
         : t !== 'beam' ? esc(elementDesc(it))
         : elementDescParts(it).map(s => `<bdi${/[֐-׿]/.test(s) ? '' : ' dir="ltr"'} class="el-part">${esc(s)}</bdi>`).join(' · ')}</td>`;
   }
-  const p = it.params || {};
-  return `<td>${it.alias ? esc(it.alias) : '<span class="cell-muted">—</span>'}</td><td>${esc(p.pile_type || 'בסיס')}</td>
+  const p = it.params || {}, pic = roElementThumb(it, 150, 60, 1.6);
+  return `<td>${pic ? `<span class="shape-thumb">${pic}</span>` : '<span class="cell-muted">—</span>'}</td>
+    <td>${it.alias ? esc(it.alias) : '<span class="cell-muted">—</span>'}</td><td>${esc(p.pile_type || 'בסיס')}</td>
     <td class="num-cell"><bdi dir="ltr">${esc(`${p.d}/${p.D}`)}</bdi></td><td class="num-cell"><bdi dir="ltr">${esc(`${p.n}×Ø${fmtNum(it.diameter_mm, 1)}`)}</bdi></td>
     <td class="num-cell">${esc(fmtNum(it.length_cm, 1))}</td><td class="num-cell"><bdi dir="ltr">${esc(`Ø${p.d_spiral} @${p.p1}/@${p.p2}`)}</bdi></td>`;
 }
@@ -409,7 +412,7 @@ function roLineCells(it) {
 const RO_SECTION_HEADS = {
   bar: ['שרטוט', 'כינוי', 'סוג פלדה', 'קוטר (מ״מ)', 'אורך (ס״מ)'],
   mesh: ['כינוי', 'סוג רשת', 'X×Y (ס״מ)', 'קוטר (מ״מ)', 'פסיעה (ס״מ)', 'סוג פלדה'],
-  pile: ['כינוי', 'סוג כלונס', 'd/D (ס״מ)', 'מוטות', 'אורך (ס״מ)', 'ספירלה'],
+  pile: ['שרטוט', 'כינוי', 'סוג כלונס', 'd/D (ס״מ)', 'מוטות', 'אורך (ס״מ)', 'ספירלה'],
   element: ['שרטוט', 'כינוי', 'סוג', 'פירוט'],
 };
 
@@ -584,7 +587,7 @@ function roFormFromItem(kind, it) {
   return {
     ...base, pile_type: p.pile_type || 'בסיס', d: p.d ?? 70, D: p.D ?? 80, n: p.n ?? 14, diameter_mm: it ? it.diameter_mm : 16,
     L1: p.L1 ?? 70, L2: p.L2 ?? 200, L3: p.L3 ?? 1350, p1: p.p1 ?? 10, p2: p.p2 ?? 20, d_spiral: p.d_spiral ?? 10,
-    steel_spiral: p.steel_spiral || 'מצולע', additions: p.additions || [],
+    steel_spiral: p.steel_spiral || 'מצולע', additions: p.additions || [], view: p.view || '',
   };
 }
 
@@ -625,15 +628,7 @@ function roDialogShape() {
 }
 
 // one form field; `opts` is a list for a select ([value, text] pairs or plain values)
-function roField(label, k, value, opts, extra = '') {
-  const v = value ?? '';
-  const input = opts
-    ? `<select data-k="${k}">${opts.map(o => { const [val, text] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(text)}</option>`; }).join('')}</select>`
-    : `<input data-k="${k}" value="${esc(v)}" ${extra}>`;
-  return `<div class="field" data-field="${k}"><label>${label}</label>${input}<div class="field-error-msg"></div></div>`;
-}
-
-// the same field on one line (label beside the control), for the narrow card
+// a field on one line (label beside the control), for the narrow card
 function roRow(label, k, value, opts, extra = '') {
   const id = 'iw-' + k, v = value ?? '';
   const control = opts
@@ -743,29 +738,30 @@ function roBundleHtml(errs) {
     <button type="button" class="btn btn-outline btn-sm" data-bundle="${n}">+ חבילה</button>`;
 }
 
-function roPileFieldsHtml() {
-  const f = dlg.f;
+// A pile's card beside its drawing (2026-10-19): the same fields, one per line; the quantity is in the foot.
+function roPileCardHtml() {
+  const f = dlg.f, num = 'inputmode="decimal" autocomplete="off"';
   const adds = RO_PILE_ADDITIONS.map(a => `<label class="check-line"><input type="checkbox" data-addition="${esc(a)}" ${f.additions.includes(a) ? 'checked' : ''}> ${esc(a)}</label>`).join('');
-  return `<div class="form-grid">
-    ${roField('סוג כלונס', 'pile_type', f.pile_type, ['בסיס', 'דיפון'])}
-    ${roField('כינוי', 'alias', f.alias, null, 'maxlength="60"')}
-    ${roField('d — קוטר הכלוב (ס״מ)', 'd', f.d, null, 'inputmode="decimal"')}
-    ${roField('D — קוטר הכלונס (ס״מ)', 'D', f.D, null, 'inputmode="decimal"')}
-    ${roField('מוטות אורך — מספר', 'n', f.n, null, 'inputmode="numeric"')}
-    ${roField('מוטות אורך — קוטר (מ״מ)', 'diameter_mm', f.diameter_mm, REBAR_PILE_D)}
-    ${roField('סוג פלדה', 'steel', f.steel, REBAR_STEELS)}
-    ${roField('L1 — ללא ספירלה (ס״מ)', 'L1', f.L1, null, 'inputmode="decimal"')}
-    ${roField('L2 (ס״מ)', 'L2', f.L2, null, 'inputmode="decimal"')}
-    ${roField('L3 (ס״מ)', 'L3', f.L3, null, 'inputmode="decimal"')}
-    ${roField('פסיעה ב-L2 (ס״מ)', 'p1', f.p1, REBAR_STEPS)}
-    ${roField('פסיעה ב-L3 (ס״מ)', 'p2', f.p2, REBAR_STEPS)}
-    ${roField('ספירלה — קוטר (מ״מ)', 'd_spiral', f.d_spiral, REBAR_SPIRAL_D)}
-    ${roField('ספירלה — סוג פלדה', 'steel_spiral', f.steel_spiral, REBAR_STEELS)}
-    <div class="field full"><label>תוספות</label><div class="check-row">${adds}</div>
+  return `${roRow('סוג כלונס', 'pile_type', f.pile_type, ['בסיס', 'דיפון'])}
+    ${roRow('d — קוטר הכלוב (ס״מ)', 'd', f.d, null, num)}
+    ${roRow('D — קוטר הכלונס (ס״מ)', 'D', f.D, null, num)}
+    <div class="iw-sep"></div>
+    ${roRow('מוטות אורך — מספר', 'n', f.n, null, 'inputmode="numeric" autocomplete="off"')}
+    ${roRow('מוטות אורך — קוטר', 'diameter_mm', f.diameter_mm, REBAR_PILE_D.map(d => [d, 'Ø' + d]))}
+    ${roRow('סוג פלדה', 'steel', f.steel, REBAR_STEELS)}
+    <div class="iw-sep"></div>
+    ${roRow('L1 — ללא ספירלה (ס״מ)', 'L1', f.L1, null, num)}
+    ${roRow('L2 (ס״מ)', 'L2', f.L2, null, num)}
+    ${roRow('פסיעה ב-L2', 'p1', f.p1, REBAR_STEPS.map(x => [x, '@' + x]))}
+    ${roRow('L3 (ס״מ)', 'L3', f.L3, null, num)}
+    ${roRow('פסיעה ב-L3', 'p2', f.p2, REBAR_STEPS.map(x => [x, '@' + x]))}
+    ${roRow('ספירלה — קוטר', 'd_spiral', f.d_spiral, REBAR_SPIRAL_D.map(d => [d, 'Ø' + d]))}
+    ${roRow('ספירלה — סוג פלדה', 'steel_spiral', f.steel_spiral, REBAR_STEELS)}
+    <div class="iw-sep"></div>
+    <div class="field"><label>תוספות</label><div class="check-row">${adds}</div>
       <div class="field-hint">התוספות מודפסות בהזמנה ואינן נכללות במשקל</div></div>
-    ${roField('הערה', 'note', f.note, null, 'maxlength="200"')}
-    ${roField('כמות (יח׳)', 'qty', f.qty, null, 'inputmode="numeric"')}
-  </div>`;
+    ${roRow('הערה', 'note', f.note, null, 'maxlength="200"')}
+    ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}`;
 }
 
 // the bottom of the card: quantity (a bar's), the weight, and the button
@@ -809,13 +805,19 @@ function roLiftBodyHtml() {
 
 // ---- אלמנט: a corner mesh, a column or beam cage, a spacer, or another ready element ----
 // Each line is drawn in 2D or 3D (spec 2026-10-19 §2); only a kranz in 2D is edited on the drawing.
-function roElView() { return elementView({ type: dlg.f.type, view: dlg.f.view }); }
-function roElPicture() { return dlg.kind === 'element' && !!roElView() && !(dlg.f.type === 'kranz' && roElView() === '2d'); }
+// A pile (2026-10-19) is drawn the same way: 3D by default, 2D on the switch.
+function roElView() { return dlg.kind === 'pile' ? pileView(dlg.f) : elementView({ type: dlg.f.type, view: dlg.f.view }); }
+function roElPicture() {
+  return dlg.kind === 'pile' || (dlg.kind === 'element' && !!roElView() && !(dlg.f.type === 'kranz' && roElView() === '2d'));
+}
 
 // the line as it would be saved, for the drawing (a missing quantity does not matter here)
 function roElementItem() {
-  return buildItem('element', { ...dlg.f, qty: parseNum(dlg.f.qty) > 0 ? dlg.f.qty : 1 }, 1);
+  return buildItem(dlg.kind, { ...dlg.f, qty: parseNum(dlg.f.qty) > 0 ? dlg.f.qty : 1 }, 1);
 }
+
+// an element's or a pile's drawing
+function roLineDrawing(item, opts) { return item.kind === 'pile' ? pileDrawing(item, opts) : elementDrawing(item, opts); }
 
 // The stage of an element: the drawing (the kranz 2D keeps its SVG and its boxes), the 2D/3D switch.
 function roElementStageHtml() {
@@ -897,7 +899,7 @@ function roElementBodyHtml() {
 
 // A small picture of an element line: its drawing, or its uploaded image (filled in by roFillImages).
 function roElementThumb(it, w, h, stroke) {
-  const svg = elementDrawing(it, { w, h, stroke, bare: true });   // the line lists the sizes
+  const svg = roLineDrawing(it, { w, h, stroke, bare: true });   // the line lists the sizes
   if (svg) return svg;
   const path = it.params && it.params.image_path;
   return path ? `<img class="el-img" data-img-path="${esc(path)}" alt="">` : null;
@@ -955,7 +957,7 @@ async function roUploadElementImage(file) {
 function roTrayHtml() {
   const n = dlg.added.length, kg = dlg.added.reduce((a, r) => a + (Number(r.total_kg) || 0), 0);
   const items = dlg.added.map((r, j) => {
-    const el = r.kind === 'element' ? roElementThumb(r, 40, 22, 1.6) : null;
+    const el = r.kind === 'element' || r.kind === 'pile' ? roElementThumb(r, 40, 22, 1.6) : null;
     const pic = r.shape ? roMini(r.shape, 40, 22) : el ? el.replace(/<text[\s\S]*?<\/text>/g, '') : r.kind === 'mesh' ? RO_MESH_MINI : `<span class="iw-item-kind">${esc(RO_SECTIONS[r.kind].item)}</span>`;
     return `<div class="iw-item">
       ${pic}
@@ -988,7 +990,7 @@ function roRenderItemDialog() {
          </div>
          <div class="iw-card">${roBarCardHtml()}${roFootHtml(true)}</div>
        </div>`
-    : `<div class="iw-body iw-body-form"><div class="iw-card">${roPileFieldsHtml()}${roFootHtml(false)}</div></div>`;
+    : `<div class="iw-body">${roElementStageHtml()}<div class="iw-card">${roPileCardHtml()}${roFootHtml(true)}</div></div>`;
   modal.innerHTML = `
     <button class="icon-btn modal-close" data-x aria-label="סגירה">${uiIcon('x', 18)}</button>
     <div class="iw-head"><h3>${editing ? 'עריכת ' + sec.item : 'הוספת פריטים'}</h3>${kinds}</div>
@@ -1115,11 +1117,14 @@ function roStageDraw() {
 // An element drawn as a picture (3D, a cage's 2D, a spacer): the badge counts what the factory makes.
 function roElementDraw(draw, w, h) {
   const item = roElementItem(), p = item.params || {};
-  const svg = elementDrawing(item, { view: roElView(), w, h, stroke: 2 });
+  const svg = roLineDrawing(item, { view: roElView(), w, h, stroke: 2 });
   draw.innerHTML = svg || '<div class="iw-draw-hint">השלימו את המידות כדי לראות את השרטוט</div>';
   const badge = document.getElementById('iwLen');
   if (!badge) return;
-  if (svg && (p.type === 'column' || p.type === 'beam')) {
+  if (svg && item.kind === 'pile') {
+    const turns = (Number(p.L2) > 0 ? Number(p.L2) / Number(p.p1) : 0) + (Number(p.L3) > 0 ? Number(p.L3) / Number(p.p2) : 0);
+    badge.textContent = `${fmtNum(p.n, 0)} מוטות · ${fmtNum(Math.ceil(turns), 0)} סיבובי ספירלה`;
+  } else if (svg && (p.type === 'column' || p.type === 'beam')) {
     const hoops = cageHoopPositions(p.L, p.s, p.end, p.s_end).length;
     badge.textContent = `${fmtNum(hoops, 0)} חישוקים${Number(p.legs) === 4 ? ' כפולים' : ''}`;
   } else if (svg && p.type === 'kranz') badge.textContent = `${fmtNum(Math.ceil(Number(p.L) / Number(p.s)), 0)} מוטות רוחב`;
@@ -1688,6 +1693,38 @@ async function roSaveReceipt() {
   await roOpenOrder(o.id);
 }
 
+// "התקבלה כל ההזמנה" (2026-10-19): one receipt, dated today, for everything still owed on the order
+// (an order often arrives in several deliveries; the last one is recorded in one step).
+async function roReceiveAll() {
+  const o = state.order;
+  if (!o || !['sent', 'partial'].includes(o.status)) return;
+  const lines = receiveAllLines(state.items, state.receiptItems);
+  if (!lines.length) { toast('כל השורות כבר התקבלו'); return; }
+  const rest = state.receipts.length ? 'כל מה שנשאר' : 'כל ההזמנה';
+  if (!confirm(`לרשום ש${rest} בהזמנה ${o.order_no} התקבל היום (${lines.length} שורות)?
+
+אפשר למחוק את הקבלה אחר כך אם נרשמה בטעות.`)) return;
+  const { user, site } = state.ctx;
+  let receiptId = null;
+  try {
+    const { data: receipt, error } = await sb.from('rebar_receipts').insert({
+      site_id: site.id, order_id: o.id, received_on: roToday(), notes: 'התקבלה כל ההזמנה', created_by: user.id,
+    }).select('id').single();
+    if (error) throw error;
+    receiptId = receipt.id;
+    const { error: e2 } = await sb.from('rebar_receipt_items').insert(lines.map(l => ({
+      site_id: site.id, receipt_id: receiptId, item_id: l.item_id, qty_received: l.qty, created_by: user.id,
+    })));
+    if (e2) throw e2;
+  } catch (err) {
+    if (receiptId) await sb.from('rebar_receipts').delete().eq('id', receiptId);   // no half receipt
+    toast(rebarDbError(err), 'error');
+    return;
+  }
+  toast('נרשם שכל ההזמנה התקבלה', 'success');
+  await roOpenOrder(o.id);
+}
+
 function roReceiptEvents() {
   const modal = document.getElementById('receiptModal');
   modal.addEventListener('click', e => {
@@ -1810,6 +1847,13 @@ function roReceiptEvents() {
     if (route.mode === 'edit' && state.order && state.order.id === route.id && state.order.status === 'sent') {
       if (state.receipts.length) toast(rebarDbError({ message: 'rebar_order_has_receipts' }), 'error');
       else if (confirm(RO_REOPEN_Q)) await roSetStatus({ status: 'draft' }, 'ההזמנה פתוחה לעריכה');
+    }
+    // the receive buttons of the ברזל page; the address then shows the order, so a reload does not repeat it
+    if ((route.mode === 'receive' || route.mode === 'receive_all') && state.order && state.order.id === route.id) {
+      history.replaceState(null, '', '#o=' + route.id);
+      if (!['sent', 'partial'].includes(state.order.status)) toast('ההזמנה הזו כבר התקבלה במלואה או נסגרה');
+      else if (route.mode === 'receive') roOpenReceiptDialog();
+      else await roReceiveAll();
     }
   } else location.replace('rebar.html');   // the orders are listed in the ברזל page
 })();

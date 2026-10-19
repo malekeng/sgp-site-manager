@@ -22,6 +22,13 @@ function receivedByItem(receiptItems) {
   return out;
 }
 
+// "התקבלה כל ההזמנה": what is still owed on each line, as receipt lines (none for a line received in full)
+function receiveAllLines(items, receiptItems) {
+  const got = receivedByItem(receiptItems);
+  return (items || []).map(it => ({ item_id: it.id, qty: Math.max(0, (Number(it.qty) || 0) - (got[it.id] || 0)) }))
+    .filter(l => l.qty > 0);
+}
+
 // kg received counts at most what a line ordered, so extra steel never shows past 100%
 function orderProgress(items, receiptItems) {
   const got = receivedByItem(receiptItems);
