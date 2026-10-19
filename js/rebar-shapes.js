@@ -454,9 +454,18 @@ function rbPileZones(p) {
   return [[L1, L2, Number(p.p1)], [L1 + L2, L3, Number(p.p2)]].filter(z => z[1] > 0);
 }
 
+// The zones with their keys, for the boxes of the window: [key, from, to, step, step key].
+function rbPileKeyedZones(p) {
+  const L1 = Number(p.L1) || 0, L2 = Number(p.L2) || 0, L3 = Number(p.L3) || 0;
+  return [['L1', 0, L1, null, null], ['L2', L1, L1 + L2, Number(p.p1), 'p1'], ['L3', L1 + L2, L1 + L2 + L3, Number(p.p2), 'p2']]
+    .filter(z => z[2] > z[1]);
+}
+const RB_BOX_HALF = 34;   // half a box of the window, in px: two boxes closer than this share no row
+
 // 3D: the cage lying down, every bar along it and the spiral around them; the bars and spiral
-// written top-left, d/D top-right, the length under the front edge.
-function rbPile3d(item, w, h, stroke, bare) {
+// written top-left, d/D top-right, the length under the front edge. ed.boxed (the window): the
+// sizes are boxes at ed.marks[key] instead of text.
+function rbPile3d(item, w, h, stroke, bare, ed = {}) {
   const p = item.params, L = (Number(p.L1) || 0) + (Number(p.L2) || 0) + (Number(p.L3) || 0), r = Number(p.d) / 2, u = rbUnit(w, h);
   const pad = bare ? 2 : Math.max(18, Math.round(Math.min(w, h) * 0.16));
   const P = rbIso(L, -r, r, -r, r, w, h, pad, bare);
@@ -479,15 +488,30 @@ function rbPile3d(item, w, h, stroke, bare) {
   if (pts.length) out += `<polyline class="spiral" points="${pts.map(q => rbF(q[0]) + ',' + rbF(q[1])).join(' ')}" fill="none" stroke="${RB_INK}" stroke-width="${Math.max(0.6, stroke * 0.35).toFixed(2)}" stroke-linejoin="round"/>`;
   const t = rbPileTexts(item);
   out += rbText(4 * u, 10 * u, t.bars, 'start', 12 * u) + rbText(4 * u, 24 * u, t.spiral, 'start', 12 * u);
-  out += rbText(w - 4 * u, 10 * u, t.size, 'end', 12 * u);
   const a0 = P(0, -r, r), a1 = P(L, -r, r);
-  out += rbText((a0[0] + a1[0]) / 2, Math.min(h - 8 * u, (a0[1] + a1[1]) / 2 + 14 * u), 'L=' + rbLabel(L), 'middle', 12 * u);
+  if (ed.boxed) {
+    const m = ed.marks || {}, top = 12 * u;
+    // [d][box]   [D][box] at the top right; each letter right before its box
+    m.D = [w - RB_BOX_HALF - 6, top]; m.d = [m.D[0] - 4 * RB_BOX_HALF - 10, top];
+    out += rbText(m.D[0] - RB_BOX_HALF - 4, top, 'D', 'end', 12 * u) + rbText(m.d[0] - RB_BOX_HALF - 4, top, 'd', 'end', 12 * u);
+    let lastRight = -Infinity;
+    for (const [key, a, b, , stepKey] of rbPileKeyedZones(p)) {
+      const lo = P((a + b) / 2, -r, r), hi = P((a + b) / 2, r, -r);
+      const second = lo[0] - RB_BOX_HALF < lastRight + 4;
+      m[key] = [lo[0], Math.min(h - 14, lo[1] + (second ? 46 : 18))];
+      if (!second) lastRight = lo[0] + RB_BOX_HALF;
+      if (stepKey) m[stepKey] = [hi[0], Math.max(14, hi[1] - 18)];
+    }
+  } else out += rbText(w - 4 * u, 10 * u, t.size, 'end', 12 * u);
+  // with boxes under the edge, the total length goes to the bottom corner
+  if (ed.boxed) out += rbText(4 * u, h - 8 * u, 'L=' + rbLabel(L), 'start', 12 * u);
+  else out += rbText((a0[0] + a1[0]) / 2, Math.min(h - 8 * u, (a0[1] + a1[1]) / 2 + 14 * u), 'L=' + rbLabel(L), 'middle', 12 * u);
   return out + '</svg>';
 }
 
 // 2D: the section on the right (d, the dashed D around it, one dot per bar) and the side view on
 // the left (the bars, the spiral as a zigzag, the zones with their lengths and steps).
-function rbPile2d(item, w, h, stroke) {
+function rbPile2d(item, w, h, stroke, ed = {}) {
   const p = item.params, L1 = Number(p.L1) || 0, L = L1 + (Number(p.L2) || 0) + (Number(p.L3) || 0);
   const d = Number(p.d), D = Number(p.D) > 0 ? Number(p.D) : 0, n = Number(p.n), u = rbUnit(w, h), t = rbPileTexts(item);
   const pad = Math.max(16, Math.round(Math.min(w, h) * 0.14));
@@ -503,7 +527,11 @@ function rbPile2d(item, w, h, stroke) {
     out += `<circle class="bar" cx="${rbF(cx + rr * Math.cos(a))}" cy="${rbF(cy + rr * Math.sin(a))}" r="${rbF(rb)}" fill="${RB_INK}"/>`;
   }
   out += rbText(cx, cy - R * k - 9 * u, t.bars, 'middle', 11 * u);
-  out += rbText(cx, cy + R * k + 11 * u, t.size, 'middle', 11 * u);
+  if (ed.boxed) {
+    const m = ed.marks || {}, y = cy + R * k + 14 * u;
+    m.d = [cx - RB_BOX_HALF - 16, y]; m.D = [cx + RB_BOX_HALF + 24, y];
+    out += rbText(m.d[0] - RB_BOX_HALF - 4, y, 'd', 'end', 11 * u) + rbText(m.D[0] - RB_BOX_HALF - 4, y, 'D', 'end', 11 * u);
+  } else out += rbText(cx, cy + R * k + 11 * u, t.size, 'middle', 11 * u);
   // the side view
   const x0 = pad, x1 = cx - R * k - 30 * u, ty = h / 2 - 12 * u, by = h / 2 + 12 * u, kx = (x1 - x0) / L;
   const sw = (stroke * 0.8).toFixed(2);
@@ -515,18 +543,20 @@ function rbPile2d(item, w, h, stroke) {
   }
   if (zz.length) out += `<polyline class="spiral" points="${zz.join(' ')}" fill="none" stroke="${RB_INK}" stroke-width="${Math.max(0.6, stroke * 0.3).toFixed(2)}"/>`;
   const dy = by + 16 * u;
-  const zones = [[0, L1, null], ...rbPileZones(p).map(([a, len, pitch]) => [a, a + len, pitch])].filter(z => z[1] > z[0]);
-  // a zone's length goes under it; one that would run into the label before it drops a row
+  // a zone's length goes under it; one that would run into the label (or box) before it drops a row
   let lastRight = -Infinity, rows = 1;
-  for (const [a, b, step] of zones) {
-    const xa = x0 + a * kx, xb = x0 + b * kx, label = rbLabel(b - a), half = label.length * 3.4 * u, mid = (xa + xb) / 2;
+  for (const [key, a, b, step, stepKey] of rbPileKeyedZones(p)) {
+    const xa = x0 + a * kx, xb = x0 + b * kx, label = rbLabel(b - a), mid = (xa + xb) / 2;
+    const half = ed.boxed ? RB_BOX_HALF : label.length * 3.4 * u, row2 = ed.boxed ? 2 * RB_BOX_HALF / 3 + 14 * u : 12 * u;
     out += rbSeg([xa, dy - 4 * u], [xa, dy + 4 * u], 0.8 * u, '', RB_DIM) + rbSeg([xb, dy - 4 * u], [xb, dy + 4 * u], 0.8 * u, '', RB_DIM) + rbSeg([xa, dy], [xb, dy], 0.8 * u, '', RB_DIM);
-    const second = mid - half < lastRight + 2 * u;
-    out += rbText(mid, dy + (second ? 22 : 10) * u, label, 'middle', 11 * u);
+    const second = mid - half < lastRight + 2 * u, y = dy + 10 * u + (second ? row2 : 0);
+    if (ed.boxed) (ed.marks || {})[key] = [mid, y]; else out += rbText(mid, y, label, 'middle', 11 * u);
     if (second) rows = 2; else lastRight = mid + half;
-    if (step) out += rbText(mid, ty - 9 * u, '@' + rbLabel(step), 'middle', 11 * u);
+    if (step) {
+      if (ed.boxed) (ed.marks || {})[stepKey] = [mid, ty - 14 * u]; else out += rbText(mid, ty - 9 * u, '@' + rbLabel(step), 'middle', 11 * u);
+    }
   }
-  out += rbText((x0 + x1) / 2, Math.min(h - 6 * u, dy + (rows === 2 ? 34 : 22) * u), 'L=' + rbLabel(L), 'middle', 12 * u);
+  out += rbText((x0 + x1) / 2, Math.min(h - 6 * u, dy + (rows === 2 ? 34 : 22) * u + (ed.boxed ? 12 * u : 0)), 'L=' + rbLabel(L), 'middle', 12 * u);
   out += rbText(x0, 10 * u, t.spiral, 'start', 12 * u);
   return out + '</svg>';
 }
@@ -538,7 +568,8 @@ function pileDrawing(item, opts = {}) {
   if (!rbPileOk(p)) return null;
   const view = opts.view === '2d' || opts.view === '3d' ? opts.view : pileView(p);
   const w = opts.w || 300, h = opts.h || 120, stroke = opts.stroke || 2, bare = !!opts.bare;
-  const svg = view === '2d' ? rbPile2d(item, w, h, stroke) : rbPile3d(item, w, h, stroke, bare);
+  const ed = { marks: opts.marks, boxed: !!opts.boxed };   // the window's boxes (2026-10-19)
+  const svg = view === '2d' ? rbPile2d(item, w, h, stroke, ed) : rbPile3d(item, w, h, stroke, bare, ed);
   return bare ? svg.replace(/<text[\s\S]*?<\/text>/g, '') : svg;
 }
 

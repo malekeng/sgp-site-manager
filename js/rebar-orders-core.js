@@ -154,7 +154,7 @@ function buildItem(kind, f, lineNo) {
     row.steel = 'מצולע';
     const view = f.view === '2d' || f.view === '3d' ? f.view : null;   // stored only when chosen
     if (f.type === 'kranz') {
-      row.params = { type: 'kranz', variant: f.variant === 'lower' ? 'lower' : 'upper' };
+      row.params = { type: 'kranz' };   // one kranz: upper and lower are the same element (2026-10-19)
       for (const k of ['L', 's', 'a', 'b', 'n_long', 'd_long']) row.params[k] = parseNum(f[k]);
       if (view) row.params.view = view;
     } else if (f.type === 'column' || f.type === 'beam') {
@@ -212,7 +212,6 @@ const REBAR_CAGE_DEFAULTS = {
   column: { a: 30, b: 30, L: 300, n_a: 2, n_b: 2, d_long: 16, diameter_mm: 8, legs: 2, inner: '', s: 20, end: 80, s_end: 10 },
   beam: { b: 30, h: 50, L: 500, n_top: 2, d_top: 12, n_bot: 3, d_bot: 16, diameter_mm: 8, legs: 2, inner: '', s: 20, end: 70, s_end: 10 },
 };
-const REBAR_KRANZ_VARIANTS = [['upper', 'קרנץ עליון (ע.)'], ['lower', 'קרנץ תחתון (ת.)']];
 const REBAR_SPACER_HEIGHTS = Array.from({ length: 22 }, (_, i) => 70 + i * 10);   // 70…280 mm
 
 // The window's form for an element: the defaults for a new one (of `type`, kranz if none), or a
@@ -222,7 +221,7 @@ function rebarElementForm(item, type) {
   const t = type || p.type || 'kranz';
   const f = {
     alias: item ? item.alias || '' : '', note: item ? item.note || '' : '', qty: item ? item.qty : '', steel: 'מצולע',
-    type: t, variant: p.variant || 'upper', L: p.L ?? 600, diameter_mm: item && p.type === 'kranz' ? item.diameter_mm : 8,
+    type: t, L: p.L ?? 600, diameter_mm: item && p.type === 'kranz' ? item.diameter_mm : 8,
     s: p.s ?? 20, a: p.a ?? 80, b: p.b ?? 15, n_long: p.n_long ?? 3, d_long: p.d_long ?? 8,
     height_mm: p.height_mm ?? 120, name: p.name || '', unit_kg: p.type === 'other' && p.unit_kg ? p.unit_kg : '',
     view: p.view || '', image_path: p.image_path || '',
@@ -241,7 +240,6 @@ function rebarElementForm(item, type) {
 // The "סוג" text of an element, for the order table and the PDF.
 function elementLabel(item) {
   const p = item.params || {};
-  if (p.type === 'kranz') return (REBAR_KRANZ_VARIANTS.find(v => v[0] === p.variant) || REBAR_KRANZ_VARIANTS[0])[1];
   return (REBAR_ELEMENT_TYPES.find(t => t[0] === p.type) || REBAR_ELEMENT_TYPES.find(t => t[0] === 'other'))[1];
 }
 

@@ -621,7 +621,7 @@ function roDialogShape() {
   const f = dlg.f;
   if (dlg.kind === 'element') {   // the corner mesh's cross bar, drawn and edited like a bar's legs
     return { code: 'KR', family: 'figura', hooks: 0, equal: [], inputs: [0, 1],
-      segments: [{ len: parseNum(f.a) ?? 0, turn: f.variant === 'lower' ? -90 : 90 }, { len: parseNum(f.b) ?? 0, turn: 0 }] };
+      segments: [{ len: parseNum(f.a) ?? 0, turn: 90 }, { len: parseNum(f.b) ?? 0, turn: 0 }] };
   }
   const base = rebarBaseShape(f);
   if (!base) return null;
@@ -881,7 +881,6 @@ function roElementBodyHtml() {
     return `${types}<div class="iw-body">
       ${roElementStageHtml()}
       <div class="iw-card">
-        ${roSeg('variant', f.variant, REBAR_KRANZ_VARIANTS)}
         <div class="iw-sec" style="margin-top:10px;"><span>מוט רוחב (ס״מ)</span><span>זווית</span></div>${lens}
         <div class="iw-sep"></div>
         ${roRow('אורך הרשת L (ס״מ)', 'L', f.L, null, 'inputmode="decimal"')}
@@ -1027,6 +1026,20 @@ function roStageMount() {
     box('y', 'Y — גובה (ס״מ)');
     box('s', asym ? 'פסיעת המוטות לאורך X (ס״מ)' : 'פסיעה (ס״מ)', 'iw-box-s' + (asym ? ' iw-box-kx' : ''));
     if (asym) box('s_x', 'פסיעת המוטות לאורך Y (ס״מ)', 'iw-box-s iw-box-ky');
+  } else if (dlg.kind === 'pile') {   // the zones, their steps and d/D sit on the drawing too (2026-10-19)
+    for (const [k, label] of [['L1', 'L1 — ללא ספירלה (ס״מ)'], ['L2', 'L2 (ס״מ)'], ['L3', 'L3 (ס״מ)'], ['p1', 'פסיעה ב-L2'], ['p2', 'פסיעה ב-L3'],
+      ['d', 'd — קוטר הכלוב (ס״מ)'], ['D', 'D — קוטר הכלונס (ס״מ)']]) {
+      const el = document.createElement(k[0] === 'p' ? 'select' : 'input');
+      el.className = 'iw-box' + (k[0] === 'p' ? ' iw-box-s' : '');
+      el.dataset.mk = k;
+      el.setAttribute('aria-label', label);
+      el.title = label;
+      if (el.tagName === 'SELECT') el.innerHTML = REBAR_STEPS.map(s => `<option value="${s}">@${s}</option>`).join('');
+      else { el.inputMode = 'decimal'; el.autocomplete = 'off'; }
+      el.value = dlg.f[k] ?? '';
+      el.hidden = true;   // shown where the drawing puts it
+      stage.appendChild(el);
+    }
   } else if (!dlg.freehand && !roElPicture()) {
     const shape = roDialogShape();
     const boxes = shape.family === 'hoop' ? [{ seg: 'D', k: 0, label: 'קוטר החישוק' }]
@@ -1096,7 +1109,7 @@ function roStageDraw() {
     if (shape.hooks > 1) g += tick(P[P.length - 1], P[P.length - 2], -45);
   }
   if (dlg.kind === 'element') {   // the corner mesh's longitudinal bars, 10, 30, 50 … cm from the free end
-    const a = parseNum(dlg.f.a), n = parseNum(dlg.f.n_long) || 0, side = dlg.f.variant === 'lower' ? -1 : 1;
+    const a = parseNum(dlg.f.a), n = parseNum(dlg.f.n_long) || 0, side = 1;
     for (let i = 0; a > 0 && i < n && 10 + 20 * i < a; i++) {
       const x = P[0].x + (10 + 20 * i) / a * (P[1].x - P[0].x);
       g += `<circle cx="${x.toFixed(1)}" cy="${(P[0].y + side * 10).toFixed(1)}" r="6" class="iw-ring"/>`;
@@ -1120,9 +1133,18 @@ function roStageDraw() {
 
 // An element drawn as a picture (3D, a cage's 2D, a spacer): the badge counts what the factory makes.
 function roElementDraw(draw, w, h) {
-  const item = roElementItem(), p = item.params || {};
-  const svg = roLineDrawing(item, { view: roElView(), w, h, stroke: 2 });
+  const item = roElementItem(), p = item.params || {}, marks = {};
+  const svg = roLineDrawing(item, { view: roElView(), w, h, stroke: 2, marks, boxed: item.kind === 'pile' });
   draw.innerHTML = svg || '<div class="iw-draw-hint">השלימו את המידות כדי לראות את השרטוט</div>';
+  // a pile's boxes go where the drawing put their sizes (the drawing starts 48 px down); a size the
+  // drawing has no place for (a zone of 0) keeps no box, and a drawing that failed keeps them where they were
+  if (item.kind === 'pile' && svg) {
+    document.querySelectorAll('#iwStage .iw-box[data-mk]').forEach(el => {
+      const m = marks[el.dataset.mk];
+      el.hidden = !m;
+      if (m) { el.style.left = roClamp(m[0], 36, w - 36) + 'px'; el.style.top = roClamp(m[1] + 48, 18, h + 48 - 18) + 'px'; }
+    });
+  }
   const badge = document.getElementById('iwLen');
   if (!badge) return;
   if (svg && item.kind === 'pile') {
@@ -1380,7 +1402,7 @@ function roItemDialogEvents() {
     const mk = e.target.closest('[data-mk]');
     if (mk) { roSetField(mk.dataset.mk, mk.value, mk); return; }
     roReadItemForm();
-    if (dlg.kind === 'mesh' && e.target.dataset.k) document.querySelectorAll(`#itemModal [data-mk="${e.target.dataset.k}"]`).forEach(b => { b.value = e.target.value; });
+    if ((dlg.kind === 'mesh' || dlg.kind === 'pile') && e.target.dataset.k) document.querySelectorAll(`#itemModal [data-mk="${e.target.dataset.k}"]`).forEach(b => { b.value = e.target.value; });
     if (document.getElementById('iwStage')) roStageDraw();
     roItemPreview();
   });
