@@ -315,8 +315,9 @@
         <td class="row-actions">
           <div class="row-actions-inner">
             <button class="btn btn-sm btn-outline" data-open="${s.id}">פתיחה</button>
-            <button class="icon-btn" data-edit-sheet="${s.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
-            <button class="icon-btn danger" data-del-sheet="${s.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
+            ${canChangeRecord(s, window.sgpWho) ? `<button class="icon-btn" data-edit-sheet="${s.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
+            <button class="icon-btn danger" data-del-sheet="${s.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>`
+              : `<span class="icon-btn" style="cursor:default;opacity:.6;" title="רק מי שרשם את הגיליון או מנהל הפרויקט יכולים לשנות אותו ואת שורותיו">${uiIcon('lock')}</span>`}
           </div>
         </td>
       </tr>
@@ -601,8 +602,8 @@
         <td class="num-cell">${waste ? fmtNum(waste) + '%' : '—'}</td>
         <td class="num-cell" style="font-weight:700;">${fmtNum(it.total)} <span style="font-size:11px;font-weight:600;color:var(--steel);">${esc(t.unit)}</span></td>
         <td class="row-actions"><div class="row-actions-inner">
-          <button class="icon-btn" data-edit-item="${it.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
-          <button class="icon-btn danger" data-del-item="${it.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
+          ${canChangeRecord(currentSheet, window.sgpWho) ? `<button class="icon-btn" data-edit-item="${it.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
+          <button class="icon-btn danger" data-del-item="${it.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>` : ''}
         </div></td>
       </tr>`;
     }).join('');

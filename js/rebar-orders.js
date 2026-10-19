@@ -29,7 +29,10 @@ function roToday() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-function roIsDraft() { return !state.order || state.order.status === 'draft'; }
+// record ownership (2026-10-19): an order is edited, sent, reopened, closed or deleted by its author or
+// a project manager; anyone may receive deliveries for it or copy it. A new order is the writer's own.
+function roMine() { return !state.order || !state.order.id || canChangeRecord(state.order, window.sgpWho); }
+function roIsDraft() { return (!state.order || state.order.status === 'draft') && roMine(); }
 function roStatusPill(o) {
   const pill = `<span class="lic-status lic-status-${RO_STATUS_TONE[o.status] || 'open'}">${esc(REBAR_STATUS_LABELS[o.status] || o.status)}</span>`;
   return pill + (isOverdue(o, roToday()) ? ` <span class="lic-status lic-status-fail">באיחור</span>` : '');
@@ -130,22 +133,23 @@ function roRenderEditor() {
 }
 
 function roRenderActions() {
-  const o = state.order, s = o.status;
+  const o = state.order, s = o.status, mine = roMine();
   const pdf = label => `<img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="20" height="20">${label}`;
   const b = [];
-  if (s === 'draft') {
+  if (s === 'draft' && mine) {
     b.push(`<button class="btn btn-primary" data-act="save">שמור</button>`);
     b.push(`<button class="btn btn-outline" data-act="issue">${pdf('הפק PDF וסמן כנשלחה')}</button>`);
-  } else {
+  } else if (s !== 'draft') {
     b.push(`<button class="btn btn-outline" data-act="pdf">${pdf('PDF')}</button>`);
   }
   if (['sent', 'partial', 'complete'].includes(s)) b.unshift(`<button class="btn btn-primary" data-act="receive">${ico3d('incoming', 20)} קבלת משלוח</button>`);
   if (s === 'sent' || s === 'partial') b.splice(1, 0, `<button class="btn btn-outline" data-act="receive-all">${uiIcon('check')} התקבלה כל ההזמנה</button>`);
-  if (s === 'sent' && !state.receipts.length) b.push(`<button class="btn btn-outline" data-act="reopen">${uiIcon('lock-open')} פתח לעריכה</button>`);
-  if (s === 'sent' || s === 'partial') b.push(`<button class="btn btn-outline" data-act="close">${uiIcon('lock')} סגור הזמנה</button>`);
+  if (mine && s === 'sent' && !state.receipts.length) b.push(`<button class="btn btn-outline" data-act="reopen">${uiIcon('lock-open')} פתח לעריכה</button>`);
+  if (mine && (s === 'sent' || s === 'partial')) b.push(`<button class="btn btn-outline" data-act="close">${uiIcon('lock')} סגור הזמנה</button>`);
   if (o.id) b.push(`<button class="btn btn-outline" data-act="dup">${uiIcon('copy')} שכפול</button>`);
   // an order that received nothing can be deleted (its tracking row goes with it); otherwise it is closed
-  if (o.id && !state.receipts.length) b.push(`<button class="btn btn-danger" data-act="delete">${uiIcon('trash')} מחק</button>`);
+  if (mine && o.id && !state.receipts.length) b.push(`<button class="btn btn-danger" data-act="delete">${uiIcon('trash')} מחק</button>`);
+  if (!mine) b.push(`<span class="cell-muted" style="align-self:center;font-size:12px;">${uiIcon('lock', 13)} רק מי שרשם את ההזמנה או מנהל הפרויקט יכולים לשנות אותה</span>`);
   b.push(`<button class="btn btn-outline" data-act="back">חזרה לברזל</button>`);
   document.getElementById('edActions').innerHTML = b.join('');
 }
@@ -1496,7 +1500,7 @@ function roRenderReceipts() {
       <td class="num-cell">${esc(fmtNum(kg, 0))}</td>
       <td>${top ? `<details><summary>${top === 'warn' ? '<span class="lic-status lic-status-progress">לבדיקה</span>' : top === 'ok' ? '<span class="lic-status lic-status-done">תואם</span>' : '<span class="lic-status lic-status-open">מידע</span>'}</summary>${roChecksHtml(checks)}</details>` : '<span class="cell-muted">—</span>'}</td>
       <td>${docs || '<span class="cell-muted">—</span>'}</td>
-      <td class="row-actions">${canDelete ? `<div class="row-actions-inner"><button class="icon-btn danger" data-rc-del="${r.id}" title="מחיקת הקבלה" aria-label="מחיקת הקבלה">${uiIcon('trash')}</button></div>` : ''}</td>
+      <td class="row-actions">${canDelete && canChangeRecord(r, window.sgpWho) ? `<div class="row-actions-inner"><button class="icon-btn danger" data-rc-del="${r.id}" title="מחיקת הקבלה" aria-label="מחיקת הקבלה">${uiIcon('trash')}</button></div>` : ''}</td>
     </tr>`;
   }).join('');
   host.innerHTML = `
@@ -1844,7 +1848,7 @@ function roReceiptEvents() {
   else if (route.mode) {
     await roOpenOrder(route.id);
     // the pencil of the tracking table: a sent order that received nothing goes back to editing
-    if (route.mode === 'edit' && state.order && state.order.id === route.id && state.order.status === 'sent') {
+    if (route.mode === 'edit' && state.order && state.order.id === route.id && state.order.status === 'sent' && roMine()) {
       if (state.receipts.length) toast(rebarDbError({ message: 'rebar_order_has_receipts' }), 'error');
       else if (confirm(RO_REOPEN_Q)) await roSetStatus({ status: 'draft' }, 'ההזמנה פתוחה לעריכה');
     }

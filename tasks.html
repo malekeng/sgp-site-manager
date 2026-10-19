@@ -268,12 +268,17 @@
       </div>`;
     }
 
+    // record ownership (2026-10-19): the opener or a project manager edits; the assignee moves the status
+    const canMove = canSetTaskStatus(t, window.sgpWho), canEdit = canChangeRecord(t, window.sgpWho);
     const currentIdx = COLUMNS.findIndex(c => c.status === t.status);
-    const prevCol = COLUMNS[currentIdx - 1];
-    const nextCol = COLUMNS[currentIdx + 1];
+    const prevCol = canMove ? COLUMNS[currentIdx - 1] : null;
+    const nextCol = canMove ? COLUMNS[currentIdx + 1] : null;
+    const editBtn = canEdit
+      ? `<button type="button" class="icon-btn" data-edit="${t.id}" title="עריכה" style="flex:1;">${uiIcon('pencil', 15)} עריכה</button>`
+      : `<span class="icon-btn" style="flex:1;cursor:default;opacity:.6;" title="רק מי שפתח את המשימה או מנהל הפרויקט יכולים לערוך אותה">${uiIcon('lock', 15)}</span>`;
 
     return `
-      <div class="kanban-card" draggable="true" data-id="${t.id}">
+      <div class="kanban-card" draggable="${canMove}" data-id="${t.id}">
         <div class="kanban-card-title">${esc(t.title)}</div>
         ${t.description ? `<div class="kanban-card-desc">${esc(t.description)}</div>` : ''}
         ${locationPill}
@@ -285,7 +290,7 @@
         ${photosHtml}
         <div class="kanban-card-actions">
           ${prevCol ? `<button type="button" class="icon-btn" data-move="${t.id}" data-to="${prevCol.status}" title="העבר ל${prevCol.title}" aria-label="העבר ל${prevCol.title}">${uiIcon('chevron-left')}</button>` : '<span></span>'}
-          <button type="button" class="icon-btn" data-edit="${t.id}" title="עריכה" style="flex:1;">${uiIcon('pencil', 15)} עריכה</button>
+          ${editBtn}
           ${nextCol ? `<button type="button" class="icon-btn" data-move="${t.id}" data-to="${nextCol.status}" title="העבר ל${nextCol.title}" aria-label="העבר ל${nextCol.title}">${uiIcon('chevron-right')}</button>` : '<span></span>'}
         </div>
       </div>
@@ -322,7 +327,7 @@
 
   async function moveTask(id, newStatus) {
     const task = tasks.find(t => t.id === id);
-    if (!task || task.status === newStatus) return;
+    if (!task || task.status === newStatus || !canSetTaskStatus(task, window.sgpWho)) return;
     task.status = newStatus; // optimistic
     renderBoard();
     const { error } = await sb.from('tasks').update({ status: newStatus, updated_by: user.id, updated_at: new Date().toISOString() }).eq('id', id);

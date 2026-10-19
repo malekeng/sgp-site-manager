@@ -11,3 +11,19 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 function mustChangePassword(user) {
   return !!(user && user.user_metadata && user.user_metadata.must_change_password === true);
 }
+
+// Who may edit or delete a row (spec 2026-10-19-record-ownership; the database enforces the same):
+// its author, the company's owner/admin, or a member whose job title is "מנהל פרויקט".
+// who = { id, role, jobTitle } (window.sgpWho, set by requireAuth).
+const PROJECT_MANAGER_TITLE = 'מנהל פרויקט';
+function canManageAll(who) {
+  return !!who && (who.role === 'owner' || who.role === 'admin' || (who.role === 'site_user' && who.jobTitle === PROJECT_MANAGER_TITLE));
+}
+function canChangeRecord(row, who, author = 'created_by') {
+  if (!who || !row) return false;
+  return canManageAll(who) || (!!row[author] && row[author] === who.id);
+}
+// a task's assignee may also move its status
+function canSetTaskStatus(task, who) {
+  return canChangeRecord(task, who) || (!!who && !!task && !!task.assignee_id && task.assignee_id === who.id);
+}

@@ -151,6 +151,14 @@
   }
   await showAvatar(profile.avatar_path);
 
+  // the job title grants permissions ("מנהל פרויקט", 2026-10-19): only the company's owner/admin sets it
+  const canSetJob = profile.role === 'owner' || profile.role === 'admin';
+  if (!canSetJob) {
+    jobSelect.disabled = true;
+    jobOther.disabled = true;
+    jobSelect.closest('.field').insertAdjacentHTML('beforeend', '<div class="field-hint">נקבע ע״י מנהל החברה</div>');
+  }
+
   jobSelect.addEventListener('change', () => {
     const isOther = jobSelect.value === 'אחר';
     jobOther.style.display = isOther ? 'block' : 'none';
@@ -210,9 +218,9 @@
 
     const payload = {
       full_name: document.getElementById('fullName').value.trim() || null,
-      job_title: jobTitle,
       phone: document.getElementById('phone').value.trim() || null,
     };
+    if (canSetJob) payload.job_title = jobTitle;
 
     // .select() + length: row security hides a refused write, which used to look saved
     const { data: saved, error } = await sb.from('profiles').update(payload).eq('id', user.id).select('id');
@@ -221,7 +229,7 @@
     if (!saved || !saved.length) { showMsg(formMsg, 'השמירה לא בוצעה — אין הרשאה', 'error'); return; }
 
     profile.full_name = payload.full_name;
-    profile.job_title = payload.job_title;
+    if (canSetJob) profile.job_title = payload.job_title;
     profile.phone = payload.phone;
     avatarInitials.textContent = initials(profile);
     toast('הפרופיל נשמר', 'success');

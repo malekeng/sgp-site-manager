@@ -186,7 +186,7 @@
         <td class="num-cell">${counts[p.id] || 0}</td>
         <td class="row-actions"><div class="row-actions-inner">
           <button class="btn btn-sm btn-outline" data-open="${p.id}">פתיחה</button>
-          <button class="icon-btn danger" data-del="${p.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
+          ${canChangeRecord(p, window.sgpWho) ? `<button class="icon-btn danger" data-del="${p.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>` : ''}
         </div></td>
       </tr>
     `).join('');
@@ -261,8 +261,9 @@
         <td>${esc(t.due_date ? fmtDate(t.due_date) : '—')}</td>
         <td><span class="status-badge ${esc(t.status)}">${esc(STATUS_LABELS[t.status] || t.status)}</span></td>
         <td class="row-actions"><div class="row-actions-inner">
-          <button class="icon-btn" data-edit="${t.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
-          <button class="icon-btn danger" data-del="${t.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
+          ${canChangeRecord(t, window.sgpWho) ? `<button class="icon-btn" data-edit="${t.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
+          <button class="icon-btn danger" data-del="${t.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>`
+            : `<span class="icon-btn" style="cursor:default;opacity:.6;" title="רק מי שפתח את המשימה או מנהל הפרויקט יכולים לשנות אותה">${uiIcon('lock')}</span>`}
         </div></td>
       </tr>
     `).join('');

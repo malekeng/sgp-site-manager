@@ -151,8 +151,8 @@ initCrudPage({
     ${rbStillOwed(row) ? `<a class="icon-btn" href="rebar-orders.html#receive=${row.rebar_order_id}" title="התקבל משלוח" aria-label="התקבל משלוח">${ico3d('incoming', 18)}</a>
     <a class="icon-btn" href="rebar-orders.html#receive-all=${row.rebar_order_id}" title="התקבלה כל ההזמנה" aria-label="התקבלה כל ההזמנה">${uiIcon('check')}</a>` : ''}
     <a class="icon-btn" href="${rbOrderHref(row.rebar_order_id)}" title="פתיחת ההזמנה" aria-label="פתיחת ההזמנה">${uiIcon('eye')}</a>
-    ${rebarTrackingEditable(row) ? `<a class="icon-btn" href="rebar-orders.html#edit=${row.rebar_order_id}" title="עריכת ההזמנה" aria-label="עריכת ההזמנה">${uiIcon('pencil')}</a>` : ''}
-    <button class="icon-btn danger" data-del-order="${row.rebar_order_id}" data-order-no="${esc(row.plan_ref || '')}" title="מחיקת ההזמנה" aria-label="מחיקת ההזמנה">${uiIcon('trash')}</button>` : null,
+    ${rebarTrackingEditable(row) && canChangeRecord(row, window.sgpWho) ? `<a class="icon-btn" href="rebar-orders.html#edit=${row.rebar_order_id}" title="עריכת ההזמנה" aria-label="עריכת ההזמנה">${uiIcon('pencil')}</a>` : ''}
+    ${canChangeRecord(row, window.sgpWho) ? `<button class="icon-btn danger" data-del-order="${row.rebar_order_id}" data-order-no="${esc(row.plan_ref || '')}" title="מחיקת ההזמנה" aria-label="מחיקת ההזמנה">${uiIcon('trash')}</button>` : ''}` : null,
   // a row entered by hand (no order): "התקבלה במלואה" in one step
   rowExtraActions: row => rbStillOwed(row)
     ? `<button class="icon-btn" data-full-supply="${row.id}" title="התקבלה במלואה" aria-label="התקבלה במלואה">${uiIcon('check')}</button>` : '',

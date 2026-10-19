@@ -235,10 +235,10 @@
           <td>${docCell}</td>
           <td class="row-actions">
             <div class="row-actions-inner">
-              <button class="icon-btn" data-edit="${row.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
+              ${canChangeRecord(row, window.sgpWho) ? `<button class="icon-btn" data-edit="${row.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>` : `<span class="icon-btn" style="cursor:default;opacity:.6;" title="רק מי שרשם את הרשומה או מנהל הפרויקט יכולים לשנות אותה">${uiIcon('lock')}</span>`}
               <button class="icon-btn" data-pdf="${row.id}" title="PDF" aria-label="PDF">${uiIcon('file-text')}</button>
               <button class="icon-btn" data-mail="${row.id}" title="פתיחת מייל" aria-label="פתיחת מייל">${uiIcon('mail')}</button>
-              <button class="icon-btn danger" data-del="${row.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>
+              ${canChangeRecord(row, window.sgpWho) ? `<button class="icon-btn danger" data-del="${row.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>` : ''}
             </div>
           </td>
         </tr>

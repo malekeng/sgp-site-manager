@@ -751,6 +751,8 @@ async function requireAuth(activePage) {
 
   profile.legacy_role = profile.role;
   profile.role = org.role;
+  // who is looking, for canChangeRecord (record ownership, 2026-10-19)
+  window.sgpWho = { id: session.user.id, role: profile.role, jobTitle: profile.job_title || null };
 
   const site = await resolveActiveSite(profile, org);
   if (!site) {

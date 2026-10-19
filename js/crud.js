@@ -229,6 +229,10 @@ async function initCrudPage(config) {
       const ownActions = config.rowActions ? config.rowActions(row) : null;
       // …or one more button in front of the usual ones
       const extraActions = config.rowExtraActions ? config.rowExtraActions(row) || '' : '';
+      // someone else's row (record ownership, 2026-10-19): a lock that opens it read-only
+      const mine = canChangeRecord(row, window.sgpWho);
+      const author = state.profileNames[row.created_by] || 'משתמש אחר';
+      const lockBtn = `<button class="icon-btn" data-view="${row.id}" title="נרשם ע״י ${esc(author)} — רק הוא או מנהל הפרויקט יכולים לשנות" aria-label="צפייה ברשומה של ${esc(author)}">${uiIcon('lock')}</button>`;
       return `
         <tr>
           ${cells}
@@ -236,7 +240,7 @@ async function initCrudPage(config) {
           ${auditCell}
           <td class="row-actions">
             <div class="row-actions-inner">
-              ${ownActions !== null && ownActions !== undefined ? ownActions : `${extraActions}${toggleBtn}
+              ${ownActions !== null && ownActions !== undefined ? ownActions : !mine ? `${extraActions}${lockBtn}` : `${extraActions}${toggleBtn}
               <button class="icon-btn" data-edit="${row.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
               <button class="icon-btn danger" data-del="${row.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>`}
             </div>
@@ -247,6 +251,8 @@ async function initCrudPage(config) {
 
     tbody.querySelectorAll('[data-edit]').forEach(btn =>
       btn.addEventListener('click', () => openModal(btn.dataset.edit)));
+    tbody.querySelectorAll('[data-view]').forEach(btn =>
+      btn.addEventListener('click', () => openModal(btn.dataset.view)));
     tbody.querySelectorAll('[data-del]').forEach(btn =>
       btn.addEventListener('click', () => deleteRow(btn.dataset.del)));
     tbody.querySelectorAll('[data-toggle]').forEach(btn =>
@@ -409,7 +415,8 @@ async function initCrudPage(config) {
     el.hidden = !el.innerHTML;
     const btn = el.querySelector('[data-read-docs]');
     if (!btn) return;
-    if (typeof sgpExtractFile !== 'function') { btn.remove(); return; }
+    // reading fills the record: only for whoever may change it (record ownership, 2026-10-19)
+    if (typeof sgpExtractFile !== 'function' || !canChangeRecord(row, window.sgpWho)) { btn.remove(); return; }
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       const n = await sgpReadPendingDocs(ins.pending, t => { btn.textContent = t; });
@@ -481,6 +488,20 @@ async function initCrudPage(config) {
     renderInsights(id);
     if (config.formExtension && config.formExtension.fill) {
       config.formExtension.fill(id ? state.rows.find(r => r.id === id) : null, api);
+    }
+    // someone else's row opens read-only (only the controls disabled here are enabled again)
+    const row = id ? state.rows.find(r => r.id === id) : null;
+    const readOnly = !!row && !canChangeRecord(row, window.sgpWho);
+    formEl.querySelectorAll('input, select, textarea, button:not([type=button])').forEach(el => {
+      if (readOnly && !el.disabled) { el.disabled = true; el.dataset.ro = '1'; }
+      else if (!readOnly && el.dataset.ro) { el.disabled = false; delete el.dataset.ro; }
+    });
+    const submit = formEl.querySelector('[type=submit]');
+    if (submit) submit.hidden = readOnly;
+    if (readOnly) {
+      modalTitle.textContent = 'צפייה ברשומה';
+      auditEl.textContent = `${auditLine(row)} · רק מי שרשם את הרשומה או מנהל הפרויקט יכולים לערוך אותה`;
+      auditEl.hidden = false;
     }
     modalBackdrop.classList.add('open');
   }
