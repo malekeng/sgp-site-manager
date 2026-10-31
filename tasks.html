@@ -206,7 +206,7 @@
   }
 
   async function loadTasks() {
-    const { data, error } = await sb.from('tasks').select('*').eq('site_id', site.id).order('sort_order', { ascending: true });
+    const { data, error } = await sb.from('tasks').select('*').eq('site_id', site.id).or(TASKS_ON_BOARD).order('sort_order', { ascending: true });
     if (error) { toast('שגיאה בטעינת משימות: ' + error.message, 'error'); return; }
     tasks = data || [];
 

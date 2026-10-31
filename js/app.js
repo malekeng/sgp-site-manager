@@ -370,7 +370,7 @@ async function renderHeader(activePage, profile, site, org) {
   };
   // open tasks on this site, like the red counts on BiltOn's tiles
   if (site?.id) {
-    sb.from('tasks').select('id', { count: 'exact', head: true }).eq('site_id', site.id).neq('status', 'done')
+    sb.from('tasks').select('id', { count: 'exact', head: true }).eq('site_id', site.id).neq('status', 'done').or(TASKS_ON_BOARD)
       .then(({ count }) => {
         const b = tabBar.querySelector('[data-tab-badge="tasks"]');
         if (b && count) { b.textContent = count > 99 ? '99+' : count; b.hidden = false; b.setAttribute('aria-label', `${count} פתוחות`); }

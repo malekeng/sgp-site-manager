@@ -27,3 +27,7 @@ function canChangeRecord(row, who, author = 'created_by') {
 function canSetTaskStatus(task, who) {
   return canChangeRecord(task, who) || (!!who && !!task && !!task.assignee_id && task.assignee_id === who.id);
 }
+
+// For .or(): a weekly-plan line (has plan_group) is not a task until someone is assigned to it, so
+// thirty lines a week stay off the board, the open counts and the meeting's late list.
+const TASKS_ON_BOARD = 'plan_group.is.null,assignee_id.not.is.null';

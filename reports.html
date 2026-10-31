@@ -560,7 +560,7 @@
 
       // Tasks (with assignee names resolved)
       {
-        const { data: taskRows } = await sb.from('tasks').select('*').in('site_id', filterState.siteIds).order('sort_order', { ascending: true });
+        const { data: taskRows } = await sb.from('tasks').select('*').in('site_id', filterState.siteIds).or(TASKS_ON_BOARD).order('sort_order', { ascending: true });
         const assigneeIds = [...new Set((taskRows || []).map(t => t.assignee_id).filter(Boolean))];
         let names = {};
         if (assigneeIds.length) {

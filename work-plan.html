@@ -26,7 +26,25 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/pdf-report.js"></script>
 <script src="js/excel-report.js"></script>
+<script src="js/work-plan-core.js"></script>
+<script src="js/work-plan-pdf.js"></script>
 <style>
+.wp-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 12px; }
+.wp-legend:empty { display: none; }
+.wp-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.wp-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+tr.wp-day td { background: var(--bg); padding-top: 8px; padding-bottom: 8px; }
+.wp-day-inner { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 800; }
+/* phone: a line reads whole, stacked, instead of scrolling sideways */
+@media (max-width: 640px) {
+  #planTasksCard table { min-width: 0; }
+  #planTasksCard thead { display: none; }
+  #planTasksBody tr.wp-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  #planTasksBody tr.wp-line td { display: block; padding: 0; border: 0; }
+  #planTasksBody tr.wp-line td.wp-c-line { grid-column: 1 / -1; grid-row: 2; }
+  #planTasksBody tr.wp-line td.wp-c-none { display: none; }
+  #planTasksBody tr.wp-day td { display: block; }
+}
 .priority-badge { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
 .priority-badge.high { background: rgba(255,71,87,0.14); color: var(--danger); }
 .priority-badge.medium { background: rgba(255,157,66,0.16); color: #b5651d; }
@@ -51,7 +69,7 @@
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>שבוע</th><th>הערות</th><th>מס' משימות</th><th></th></tr></thead>
+        <thead><tr><th>שבוע</th><th>הערות</th><th>מס' שורות</th><th></th></tr></thead>
         <tbody id="plansBody"><tr class="empty-row"><td colspan="4"><div class="loading-overlay"><div class="spinner"></div></div></td></tr></tbody>
       </table>
     </div>
@@ -59,17 +77,18 @@
 
   <div class="card" id="planTasksCard" style="display:none;">
     <div class="card-header">
-      <h2 id="planTasksTitle">משימות התכנית</h2>
+      <h2 id="planTasksTitle">שורות התכנית</h2>
       <div class="header-actions">
-        <button class="btn btn-primary" id="addPlanTaskBtn">+ משימה</button>
+        <button class="btn btn-primary" id="addPlanTaskBtn">+ שורה</button>
         <button class="btn btn-outline" id="exportPlanPdfBtn"><img class="ico3d" src="icons/nav/pdf.webp" alt="" aria-hidden="true" width="20" height="20">PDF</button>
         <button class="btn btn-outline" id="exportPlanXlsxBtn"><img class="ico3d" src="icons/nav/excel.webp" alt="" aria-hidden="true" width="20" height="20">Excel</button>
         <button class="btn btn-outline" id="backToPlansBtn">חזרה לתכניות</button>
       </div>
     </div>
+    <div class="wp-legend" id="planLegend"></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>כותרת</th><th>מיקום</th><th>אחראי</th><th>עדיפות</th><th>תאריך יעד</th><th>סטטוס</th><th></th></tr></thead>
+        <thead><tr><th>קבוצה</th><th>עבודה</th><th>אחראי</th><th>סטטוס</th><th></th></tr></thead>
         <tbody id="planTasksBody"></tbody>
       </table>
     </div>
@@ -98,16 +117,23 @@
 <!-- Task-within-plan modal -->
 <div class="modal-backdrop" id="taskModalBackdrop">
   <div class="modal">
-    <h3 id="taskModalTitle">משימה חדשה</h3>
+    <h3 id="taskModalTitle">שורה חדשה</h3>
     <div id="taskFormMsg" class="msg"></div>
     <form id="taskForm">
       <div class="form-grid">
-        <div class="field full"><label>כותרת *</label><input type="text" name="title" required></div>
+        <div class="field"><label>יום</label><select name="due_date"></select></div>
+        <div class="field">
+          <label>קבוצה</label>
+          <input type="text" name="plan_group" list="planGroupList" placeholder="לדוגמה: גרעין 4" autocomplete="off">
+          <datalist id="planGroupList"></datalist>
+        </div>
+        <div class="field full"><label>עבודה *</label><input type="text" name="title" required placeholder="לדוגמה: יציקת קירות גבוהים"></div>
         <div class="field full"><label>מיקום / אלמנט</label><input type="text" name="location" placeholder="לדוגמה: הכנת צנרת ומעברי אינסטלציה - גרעין 4, קומת מרתף -1"></div>
         <div class="field full"><label>תיאור</label><textarea name="description" rows="2"></textarea></div>
         <div class="field">
           <label>אחראי</label>
           <select name="assignee_id"><option value="">ללא</option></select>
+          <div class="field-hint">שורה עם אחראי מופיעה גם בלוח המשימות</div>
         </div>
         <div class="field">
           <label>עדיפות</label>
@@ -118,10 +144,10 @@
             <option value="high">גבוהה</option>
           </select>
         </div>
-        <div class="field"><label>תאריך יעד</label><input type="date" name="due_date"></div>
       </div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary" id="taskSubmitBtn">הוספה</button>
+        <button type="submit" class="btn btn-outline" id="taskAddMoreBtn">הוספה ושורה נוספת</button>
         <button type="button" class="btn btn-outline" id="cancelTaskBtn">ביטול</button>
       </div>
     </form>
@@ -195,7 +221,10 @@
   }
 
   async function deletePlan(id) {
-    if (!confirm('למחוק את התכנית? המשימות שנוצרו ממנה יישארו אך יתנתקו ממנה.')) return;
+    if (!confirm('למחוק את התכנית ואת השורות שלה? משימות עם אחראי יישארו אך יתנתקו ממנה.')) return;
+    // a line nobody took on has no life outside its plan
+    const { error: linesErr } = await sb.from('tasks').delete().eq('work_plan_id', id).not('plan_group', 'is', null).is('assignee_id', null);
+    if (linesErr) { toast('שגיאה: ' + linesErr.message, 'error'); return; }
     const { error } = await sb.from('weekly_work_plans').delete().eq('id', id);
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
     toast('התכנית נמחקה', 'success');
@@ -224,7 +253,7 @@
     };
     const { data, error } = await sb.from('weekly_work_plans').insert(payload).select().single();
     if (error) { showMsg(msgEl, 'שגיאה: ' + error.message, 'error'); return; }
-    toast('התכנית נוצרה — הוסיפו לה משימות', 'success');
+    toast('התכנית נוצרה — הוסיפו לה שורות', 'success');
     document.getElementById('planModalBackdrop').classList.remove('open');
     await loadPlans();
     openPlan(data);
@@ -236,7 +265,7 @@
     document.getElementById('plansCard').style.display = 'none';
     document.getElementById('planTasksCard').style.display = 'block';
     document.getElementById('planTasksTitle').textContent =
-      `משימות — שבוע ${fmtDate(plan.week_start)}${plan.week_end ? ' עד ' + fmtDate(plan.week_end) : ''}`;
+      `שבוע ${fmtDate(plan.week_start)}${plan.week_end ? ' עד ' + fmtDate(plan.week_end) : ''}`;
     loadPlanTasks();
   }
 
@@ -250,51 +279,78 @@
     const { data, error } = await sb.from('tasks').select('*').eq('work_plan_id', currentPlan.id).order('sort_order', { ascending: true });
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
     planTasks = data || [];
+    await loadGroupList();
     const body = document.getElementById('planTasksBody');
-    if (!planTasks.length) { body.innerHTML = `<tr class="empty-row"><td colspan="7">אין משימות בתכנית זו עדיין</td></tr>`; return; }
-    body.innerHTML = planTasks.map(t => `
-      <tr>
-        <td>${esc(t.title)}</td>
-        <td>${esc(t.location || '—')}</td>
-        <td>${esc(memberName(t.assignee_id))}</td>
-        <td>${t.priority ? `<span class="priority-badge ${esc(t.priority)}">${esc(PRIORITY_LABELS[t.priority] || t.priority)}</span>` : '—'}</td>
-        <td>${esc(t.due_date ? fmtDate(t.due_date) : '—')}</td>
-        <td><span class="status-badge ${esc(t.status)}">${esc(STATUS_LABELS[t.status] || t.status)}</span></td>
+    const chip = g => `<span class="wp-chip"><span class="wp-dot" style="background:${g.color};"></span>${esc(g.name)}</span>`;
+    document.getElementById('planLegend').innerHTML = wpGroups(planTasks).map(chip).join('');
+    if (!planTasks.length) { body.innerHTML = `<tr class="empty-row"><td colspan="5">אין שורות בתכנית זו עדיין</td></tr>`; return; }
+    const lineRow = (t, g) => `
+      <tr class="wp-line">
+        <td>${chip(g)}</td>
+        <td class="wp-c-line">${wpLineHtml(t)}${t.priority ? ` <span class="priority-badge ${esc(t.priority)}">${esc(PRIORITY_LABELS[t.priority] || t.priority)}</span>` : ''}</td>
+        <td${t.assignee_id ? '' : ' class="wp-c-none"'}>${esc(memberName(t.assignee_id))}</td>
+        <td${wpIsBoardTask(t) ? '' : ' class="wp-c-none"'}>${wpIsBoardTask(t) ? `<span class="status-badge ${esc(t.status)}">${esc(STATUS_LABELS[t.status] || t.status)}</span>` : '—'}</td>
         <td class="row-actions"><div class="row-actions-inner">
           ${canChangeRecord(t, window.sgpWho) ? `<button class="icon-btn" data-edit="${t.id}" title="עריכה" aria-label="עריכה">${uiIcon('pencil')}</button>
           <button class="icon-btn danger" data-del="${t.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>`
             : `<span class="icon-btn" style="cursor:default;opacity:.6;" title="רק מי שפתח את המשימה או מנהל הפרויקט יכולים לשנות אותה">${uiIcon('lock')}</span>`}
         </div></td>
-      </tr>
+      </tr>`;
+    body.innerHTML = wpSheet(planTasks).map(d => `
+      <tr class="wp-day"><td colspan="5"><div class="wp-day-inner">
+        <span>${esc(d.label)}</span>
+        ${d.date ? `<button class="btn btn-sm btn-outline" data-add-day="${esc(d.date)}">+ שורה</button>` : ''}
+      </div></td></tr>
+      ${d.groups.map(g => g.lines.map(t => lineRow(t, g)).join('')).join('')}
     `).join('');
+    body.querySelectorAll('[data-add-day]').forEach(b => b.addEventListener('click', () => openTaskModal(null, b.dataset.addDay)));
     body.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openTaskModal(planTasks.find(t => t.id === b.dataset.edit))));
     body.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => deletePlanTask(b.dataset.del)));
   }
 
+  // The groups already used on this site, as suggestions while typing.
+  async function loadGroupList() {
+    const { data } = await sb.from('tasks').select('plan_group').eq('site_id', site.id).not('plan_group', 'is', null);
+    const names = [...new Set([...(data || []).map(r => r.plan_group), WP_GENERAL])];
+    document.getElementById('planGroupList').innerHTML = names.map(n => `<option value="${esc(n)}"></option>`).join('');
+  }
+
   async function deletePlanTask(id) {
-    if (!confirm('למחוק את המשימה?')) return;
+    if (!confirm('למחוק את השורה?')) return;
     const { error } = await sb.from('tasks').delete().eq('id', id);
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
-    toast('המשימה נמחקה', 'success');
+    toast('השורה נמחקה', 'success');
     await loadPlanTasks();
   }
 
-  function openTaskModal(t) {
+  // The plan's days, plus the row's own date when it lies outside them.
+  function fillDays(selected) {
+    const days = wpWeekDays(currentPlan);
+    if (selected && !days.includes(selected)) days.push(selected);
+    const select = document.querySelector('#taskForm select[name=due_date]');
+    select.innerHTML = days.map(d => `<option value="${esc(d)}">${esc(wpDayLabel(d))}</option>`).join('') + `<option value="">${esc(WP_NO_DAY)}</option>`;
+    select.value = selected || '';
+  }
+
+  function openTaskModal(t, day) {
     editingTaskId = t ? t.id : null;
     const form = document.getElementById('taskForm');
     form.reset();
     hideMsg(document.getElementById('taskFormMsg'));
-    document.getElementById('taskModalTitle').textContent = t ? 'עריכת משימה' : 'משימה חדשה';
+    document.getElementById('taskModalTitle').textContent = t ? 'עריכת שורה' : 'שורה חדשה';
     document.getElementById('taskSubmitBtn').textContent = t ? 'שמירה' : 'הוספה';
+    document.getElementById('taskAddMoreBtn').hidden = !!t;
+    fillDays(t ? t.due_date : (day || wpWeekDays(currentPlan)[0]));
     if (t) {
       form.title.value = t.title || '';
+      form.plan_group.value = t.plan_group || '';
       form.location.value = t.location || '';
       form.description.value = t.description || '';
       form.assignee_id.value = t.assignee_id || '';
       form.priority.value = t.priority || '';
-      form.due_date.value = t.due_date || '';
     }
     document.getElementById('taskModalBackdrop').classList.add('open');
+    form.title.focus();
   }
 
   document.getElementById('addPlanTaskBtn').addEventListener('click', () => openTaskModal(null));
@@ -306,6 +362,7 @@
     const msgEl = document.getElementById('taskFormMsg');
     hideMsg(msgEl);
     const fd = new FormData(e.target);
+    const addMore = e.submitter && e.submitter.id === 'taskAddMoreBtn';
     const payload = {
       title: fd.get('title'),
       location: fd.get('location') || null,
@@ -313,10 +370,11 @@
       assignee_id: fd.get('assignee_id') || null,
       priority: fd.get('priority') || null,
       due_date: fd.get('due_date') || null,
+      plan_group: wpGroupToSave(fd.get('plan_group'), planTasks.find(t => t.id === editingTaskId)),
     };
 
-    const submitBtn = e.target.querySelector('[type=submit]');
-    submitBtn.disabled = true;
+    const buttons = e.target.querySelectorAll('[type=submit]');
+    buttons.forEach(b => { b.disabled = true; });
     try {
       if (editingTaskId) {
         payload.updated_by = user.id;
@@ -332,30 +390,39 @@
         const { error } = await sb.from('tasks').insert(payload);
         if (error) throw error;
       }
-      toast(editingTaskId ? 'המשימה עודכנה' : 'המשימה נוספה לתכנית', 'success');
-      document.getElementById('taskModalBackdrop').classList.remove('open');
+      toast(editingTaskId ? 'השורה עודכנה' : 'השורה נוספה לתכנית', 'success');
+      if (addMore) {
+        // the next line usually belongs to the same day and group
+        ['title', 'location', 'description', 'assignee_id', 'priority'].forEach(n => { e.target[n].value = ''; });
+        e.target.title.focus();
+      } else {
+        document.getElementById('taskModalBackdrop').classList.remove('open');
+      }
       await loadPlanTasks();
     } catch (err) {
       showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
     } finally {
-      submitBtn.disabled = false;
+      buttons.forEach(b => { b.disabled = false; });
     }
   });
 
   async function exportPlan(format) {
-    if (!planTasks.length) { toast('אין משימות לייצוא', 'error'); return; }
-    const rows = planTasks.map(t => ({ ...t, assignee_name: memberName(t.assignee_id), status_label: STATUS_LABELS[t.status] || t.status }));
+    if (!planTasks.length) { toast('אין שורות לייצוא', 'error'); return; }
+    if (format === 'pdf') { await exportWorkPlanPdf({ site, plan: currentPlan, tasks: planTasks }); return; }
+    const rows = wpSheet(planTasks).flatMap(d => d.groups.flatMap(g => g.lines.map(t => ({
+      ...t, day_label: d.label, group_name: g.name, assignee_name: memberName(t.assignee_id), status_label: STATUS_LABELS[t.status] || t.status,
+    }))));
     const columns = [
-      { key: 'title', label: 'כותרת', type: 'text' },
+      { key: 'day_label', label: 'יום', type: 'text' },
+      { key: 'group_name', label: 'קבוצה', type: 'text' },
+      { key: 'title', label: 'עבודה', type: 'text' },
       { key: 'location', label: 'מיקום', type: 'text' },
       { key: 'assignee_name', label: 'אחראי', type: 'text' },
-      { key: 'due_date', label: 'תאריך יעד', type: 'date' },
       { key: 'status_label', label: 'סטטוס', type: 'text' },
       { key: 'description', label: 'תיאור', type: 'text' },
     ];
-    await (format === 'xlsx' ? sgpExportExcel : sgpExportPdf)({
+    await sgpExportExcel({
       title: `תכנית עבודה שבועית — ${fmtDate(currentPlan.week_start)}`,
-      ico: 'work-plan',
       columns,
       rows,
       siteNames: [site.name],

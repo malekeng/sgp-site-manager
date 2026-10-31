@@ -399,7 +399,7 @@ function greetingByHour() {
   async function loadTileCounts() {
     const [ex, tk] = await Promise.all([
       sb.from('exceptions').select('id', { count: 'exact', head: true }).eq('site_id', site.id).in('status', ['הוגש', 'בבדיקה']),
-      sb.from('tasks').select('id', { count: 'exact', head: true }).eq('site_id', site.id).neq('status', 'done'),
+      sb.from('tasks').select('id', { count: 'exact', head: true }).eq('site_id', site.id).neq('status', 'done').or(TASKS_ON_BOARD),
     ]);
     if (ex.count) tileState.attention['exceptions.html'] = (tileState.attention['exceptions.html'] || 0) + ex.count;
     if (tk.count) tileState.attention['tasks.html'] = (tileState.attention['tasks.html'] || 0) + tk.count;

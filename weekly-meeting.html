@@ -137,7 +137,7 @@
         .eq('result', 'לא תקין').is('closed_date', null).order('control_date', { ascending: true }),
       sb.from('exceptions').select('id, description, direction, party_name, claimed_amount, submitted_date').eq('site_id', site.id)
         .in('status', ['הוגש', 'בבדיקה']).order('submitted_date', { ascending: true }),
-      sb.from('tasks').select('id, title, due_date, status').eq('site_id', site.id).neq('status', 'done').lt('due_date', today)
+      sb.from('tasks').select('id, title, due_date, status').eq('site_id', site.id).neq('status', 'done').lt('due_date', today).or(TASKS_ON_BOARD)
         .order('due_date', { ascending: true }),
     ]);
     const lines = [
