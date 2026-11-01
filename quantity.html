@@ -513,6 +513,8 @@
   // ===== Items =====
   async function openSheet(sheet) {
     currentSheet = sheet;
+    // adding a line follows the same rule as editing one, and the database refuses anyone else
+    document.getElementById('addItemBtn').style.display = canChangeRecord(sheet, window.sgpWho) ? '' : 'none';
     document.getElementById('sheetsCard').style.display = 'none';
     document.getElementById('itemsCard').style.display = 'block';
     document.getElementById('itemsTitle').textContent = 'שורות כמויות — ' + (sheet.plan_name || sheet.plan_number || '');
