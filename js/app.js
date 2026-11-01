@@ -33,6 +33,7 @@ const NAV_ITEMS = [
   { href: 'weekly-meeting.html', label: 'סיכומי ישיבות', icon: '📝', ico: 'meetings' },
   { href: 'correspondence.html', label: 'יועצים ומתכננים', icon: '✉️', ico: 'correspondence' },
   { href: 'quantity.html',  label: 'כתבי כמויות', icon: '📐', ico: 'quantity' },
+  { href: 'purchase-orders.html', label: 'הזמנות רכש', icon: '🧾', ico: 'outgoing' },
   { href: 'prices.html',    label: 'השוואת מחירים', icon: '💰', ico: 'prices' },
   { href: 'reports.html',   label: 'דוחות', icon: '📊', ico: 'reports' },
 ];

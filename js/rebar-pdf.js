@@ -34,7 +34,7 @@ const RP_SECTIONS = {
   element: { title: 'אלמנטים', heads: ['#', 'שרטוט', 'כינוי', 'סוג', 'פירוט', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
 };
 
-function rebarPdfBanner(orgName, logoHtml, genStr) {
+function rebarPdfBanner(orgName, logoHtml, genStr, title = 'הזמנת ברזל') {
   return `
     <div style="position:relative;overflow:hidden;background:linear-gradient(120deg,#0E1A20 0%,#16262E 100%);padding:24px 40px;display:flex;align-items:center;justify-content:space-between;">
       <div style="position:absolute;left:-70px;top:-90px;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(34,216,107,0.26) 0%,rgba(34,216,107,0) 70%);"></div>
@@ -42,7 +42,7 @@ function rebarPdfBanner(orgName, logoHtml, genStr) {
         ${logoHtml ? `${logoHtml}<div style="width:1px;height:36px;background:rgba(255,255,255,0.18);"></div>` : ''}
         <div>
           <div style="color:#fff;font-size:16px;font-weight:800;">${rebarPdfEsc(orgName)}</div>
-          <div style="color:rgba(255,255,255,0.6);font-size:11.5px;margin-top:3px;">הזמנת ברזל</div>
+          <div style="color:rgba(255,255,255,0.6);font-size:11.5px;margin-top:3px;">${title}</div>
         </div>
       </div>
       <div style="position:relative;text-align:left;">
@@ -103,19 +103,19 @@ function rebarPdfFirstHead({ orgName, logoHtml, site, order, summary, genStr, co
     </div>`;
 }
 
-function rebarPdfNextHead(orgName, order) {
+function rebarPdfNextHead(orgName, order, title = 'הזמנת ברזל') {
   return `
     <div style="background:#0E1A20;padding:13px 40px;display:flex;align-items:center;justify-content:space-between;">
-      <div style="color:#fff;font-size:13px;font-weight:800;">הזמנת ברזל ${rebarPdfEsc(order.order_no)} <span style="color:rgba(255,255,255,0.55);font-weight:600;">· המשך</span></div>
+      <div style="color:#fff;font-size:13px;font-weight:800;">${title} ${rebarPdfEsc(order.order_no)} <span style="color:rgba(255,255,255,0.55);font-weight:600;">· המשך</span></div>
       <div style="color:rgba(255,255,255,0.7);font-size:11px;font-weight:600;">${rebarPdfEsc(orgName)}</div>
     </div>
     <div style="height:3px;background:linear-gradient(90deg,#16B650,#22D86B);"></div>`;
 }
 
-function rebarPdfFoot(orgName, order, page, pages) {
+function rebarPdfFoot(orgName, order, page, pages, title = 'הזמנת ברזל') {
   return `
     <div style="margin-top:auto;padding:14px 40px 16px;border-top:1px solid #E3E9E6;display:flex;justify-content:space-between;align-items:center;gap:12px;">
-      <div style="color:#9FAAB0;font-size:10.5px;font-weight:600;">${rebarPdfEsc(orgName)} · הזמנת ברזל ${rebarPdfEsc(order.order_no)}</div>
+      <div style="color:#9FAAB0;font-size:10.5px;font-weight:600;">${rebarPdfEsc(orgName)} · ${title} ${rebarPdfEsc(order.order_no)}</div>
       <div style="color:#637178;font-size:10.5px;font-weight:800;">עמוד ${page} / ${pages}</div>
     </div>`;
 }

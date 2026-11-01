@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>הזמנות רכש | TADOK</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="application-name" content="TADOK">
+<meta name="apple-mobile-web-app-title" content="TADOK">
+<meta name="theme-color" content="#0E1A20">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TADOK">
+<meta property="og:title" content="TADOK — תיעוד, בקרת איכות ושליטה באתר הבנייה">
+<meta property="og:description" content="פלטפורמה לניהול אתר בנייה: יציקות, ברזל, מסמכים, בקרת איכות ודוחות.">
+<meta property="og:image" content="https://tadok.vercel.app/brand/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="he_IL">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="js/pdf-report.js"></script>
+<style>
+/* the hidden "פעולות" header (.sr-only) is position:absolute; without a positioned table it escapes
+   the scrolling .table-wrap and widens the whole page on a phone */
+.po-table { position: relative; }
+.po-table tbody tr[data-open] { cursor: pointer; }
+.po-table tr.is-overdue td:first-child { box-shadow: inset -3px 0 0 var(--danger); }
+.po-table a { color: inherit; font-weight: 700; text-decoration: none; }
+.order-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.order-head h2 { margin: 0; }
+.unit-totals { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.unit-pill {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 12px; font-size: 12.5px; font-weight: 700; color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+.supplied { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.supplied-bar { width: 46px; height: 6px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+.supplied-bar > i { display: block; height: 100%; background: var(--green); }
+/* the lines: a row is typed like a line of the Excel form */
+.po-lines { min-width: 860px; }
+.po-lines th { white-space: nowrap; }
+.po-lines td { vertical-align: middle; }
+.po-lines input, .po-lines select {
+  width: 100%; min-width: 0; padding: 8px 9px; border: 2px solid var(--border); border-radius: var(--radius-sm);
+  font: inherit; font-size: 13.5px; background: var(--sheet); color: var(--navy);
+}
+.po-lines input:focus, .po-lines select:focus { outline: none; border-color: var(--green); }
+.po-lines input[inputmode] { font-variant-numeric: tabular-nums; }
+.po-c-no { width: 44px; text-align: center; color: var(--steel); font-weight: 700; }
+.po-c-sku { width: 104px; }
+.po-c-unit { width: 108px; }
+.po-c-qty, .po-c-disc { width: 84px; }
+.po-c-price { width: 112px; }
+.po-c-total { width: 112px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.po-c-del { width: 44px; }
+.po-add { margin-top: 10px; }
+.po-foot { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; margin-top: 16px; align-items: start; }
+.po-foot textarea { width: 100%; }
+.po-totals { border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.po-tot { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 13.5px; font-weight: 600; color: var(--navy); }
+.po-tot b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.po-tot input { width: 58px; padding: 4px 6px; border: 2px solid var(--border); border-radius: 8px; font: inherit; text-align: center; }
+.po-tot input:disabled { border-color: transparent; background: none; color: inherit; padding: 4px 0; }
+.po-tot-sum { border-bottom: 0; background: var(--green-soft); }
+.po-tot-sum b { font-size: 17px; font-weight: 800; color: var(--green-deep); }
+/* the sender and the delivery, as in the rebar order */
+.contact-row { display: grid; grid-template-columns: 1fr 1fr 1fr 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
+.contact-row input { padding: 8px 10px; border: 2px solid var(--border); border-radius: var(--radius-sm); font: inherit; min-width: 0; }
+@media (max-width: 560px) { .contact-row { grid-template-columns: 1fr 1fr 32px; } .contact-row input[data-k="role"] { grid-column: 1 / -2; } }
+.sender-card { border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; }
+.sender-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 2px; }
+.sender-title { font-size: 13.5px; font-weight: 800; color: var(--navy); }
+.sender-line { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px; color: var(--navy); }
+.sender-line:first-child { border-top: 0; }
+.sender-k { font-size: 12px; font-weight: 700; color: var(--steel); }
+.sender-v { min-width: 0; overflow-wrap: anywhere; }
+.sender-from { font-size: 11.5px; color: var(--steel-light); margin-inline-start: 6px; white-space: nowrap; }
+.sender-gap {
+  display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 0 0; margin-inline-start: 6px;
+  padding: 3px 10px; border-radius: 999px; background: rgba(255, 169, 64, 0.16); color: #8A5300; font-size: 12px; font-weight: 700;
+}
+.sender-gap a { color: inherit; text-decoration: underline; }
+.sender-edit { display: none; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+.sender-card.is-open .sender-edit { display: block; }
+/* receiving */
+.modal.modal-wide { max-width: 760px; }
+.ocr-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 18px; text-align: center; cursor: pointer; margin-bottom: 16px; }
+.ocr-zone:hover, .ocr-zone.dragover { border-color: var(--green); background: rgba(34, 216, 107, 0.06); }
+.rc-lines { min-width: 520px; }
+.rc-lines td { vertical-align: middle; }
+.rc-lines input[inputmode] { width: 90px; padding: 7px 8px; border: 2px solid var(--border); border-radius: var(--radius-sm); font: inherit; }
+.rc-lines input[type=checkbox] { width: 20px; height: 20px; }
+@media (max-width: 640px) {
+  .po-foot { grid-template-columns: minmax(0, 1fr); }
+  /* a line becomes a small card: the numbers stay readable without sideways scrolling */
+  .po-lines { min-width: 0; display: block; }
+  .po-lines thead { display: none; }
+  .po-lines tbody { display: block; }
+  .po-lines tbody tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .po-lines td { display: block; width: auto; padding: 0; border: 0; min-width: 0; }
+  .po-lines td[data-l]::before { content: attr(data-l); display: block; font-size: 11.5px; font-weight: 700; color: var(--steel); margin-bottom: 3px; }
+  .po-lines td.po-c-no { display: none; }
+  .po-lines td.po-c-desc { grid-column: 1 / -1; order: -1; }
+  .po-lines td.po-c-del { grid-column: 3; justify-self: end; align-self: end; }
+}
+</style>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title" id="pageTitle">הזמנות רכש</h1>
+  <div class="stats-row" id="statsRow"></div>
+
+  <!-- the site's orders -->
+  <div id="listWrap" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>הזמנות האתר</h2>
+        <div class="header-actions"><button class="btn btn-primary" id="newBtn">+ הזמנה חדשה</button></div>
+      </div>
+      <div class="table-wrap">
+        <table class="po-table">
+          <thead><tr><th>מס' הזמנה</th><th>ספק</th><th>תאריך הזמנה</th><th>מועד אספקה</th><th>סה"כ לתשלום (₪)</th><th>סופק</th><th>סטטוס</th></tr></thead>
+          <tbody id="listBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- one order -->
+  <div id="editorWrap" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <div class="order-head"><h2 id="edTitle">הזמנה חדשה</h2><span id="edStatus"></span></div>
+        <div class="header-actions" id="edActions"></div>
+      </div>
+      <div id="edMsg" class="msg"></div>
+      <form class="form-grid" id="headerForm" autocomplete="off">
+        <div class="field"><label for="f-order_no">מס' הזמנה *</label><input id="f-order_no" maxlength="40"></div>
+        <div class="field"><label for="f-order_date">תאריך הזמנה *</label><input id="f-order_date" type="date"></div>
+        <div class="field"><label for="f-required_date">מועד אספקה נדרש</label><input id="f-required_date" type="date"></div>
+        <!-- filled from the account, the company and the site's last order; folded to a summary -->
+        <div class="field full sender-card" id="senderCard">
+          <div class="sender-head"><span class="sender-title">המזמין והאספקה</span>
+            <button type="button" class="btn btn-outline btn-sm" id="senderToggle">עריכה</button></div>
+          <div id="senderSummary"></div>
+          <div class="sender-edit" id="senderEdit">
+            <div class="form-grid">
+              <div class="field full"><label for="f-delivery_address">כתובת לאספקה</label><input id="f-delivery_address" maxlength="200"></div>
+              <div class="field full">
+                <label>אנשי קשר באתר</label>
+                <div id="contactsList"></div>
+                <div><button type="button" class="btn btn-outline btn-sm" id="addContactBtn">+ איש קשר</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="with-ico" id="supplierTitle">פרטי הספק</h2></div>
+      <form class="form-grid" id="supplierForm" autocomplete="off">
+        <div class="field"><label for="f-supplier">לכבוד (ספק)</label><input id="f-supplier" list="supplierList" maxlength="120"><datalist id="supplierList"></datalist>
+          <div class="field-hint" id="supplierHint"></div></div>
+        <div class="field"><label for="f-supplier_tax_id">ח.פ / ע.מ</label><input id="f-supplier_tax_id" inputmode="numeric" maxlength="20"></div>
+        <div class="field"><label for="f-supplier_contact">איש קשר</label><input id="f-supplier_contact" maxlength="120"></div>
+        <div class="field"><label for="f-supplier_phone">טלפון</label><input id="f-supplier_phone" type="tel" inputmode="tel" maxlength="30"></div>
+        <div class="field"><label for="f-supplier_email">דוא"ל</label><input id="f-supplier_email" type="email" maxlength="120"></div>
+        <div class="field"><label for="f-payment_terms">תנאי תשלום</label><input id="f-payment_terms" list="termsList" maxlength="60"><datalist id="termsList">
+          <option value="שוטף + 30"><option value="שוטף + 45"><option value="שוטף + 60"><option value="שוטף + 90"><option value="מזומן"></datalist></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="with-ico" id="linesTitle">פריטים</h2></div>
+      <div class="table-wrap" id="linesHost"></div>
+      <div class="po-add" id="addLineWrap"><button type="button" class="btn btn-outline btn-sm" id="addLineBtn">+ הוספת שורה</button></div>
+      <div class="po-foot">
+        <div class="field full" id="notesField"><label for="f-notes">הערות</label><textarea id="f-notes" rows="3" maxlength="1000"></textarea></div>
+        <div class="po-totals">
+          <div class="po-tot"><span>סה"כ לפני מע"מ</span><b id="totNet"></b></div>
+          <div class="po-tot"><span>מע"מ <input id="f-vat_pct" inputmode="decimal" aria-label="שיעור מע&quot;מ באחוזים"> %</span><b id="totVat"></b></div>
+          <div class="po-tot po-tot-sum"><span>סה"כ לתשלום</span><b id="totSum"></b></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="receiptsHost"></div>
+  </div>
+</main>
+
+<!-- close an order -->
+<div class="modal-backdrop" id="closeBackdrop">
+  <div class="modal">
+    <button class="icon-btn modal-close" id="closeX" aria-label="סגירה"><svg class="ui-ico ui-ico-x" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    <h3>סגירת הזמנה</h3>
+    <div id="closeMsg" class="msg"></div>
+    <div class="field full">
+      <label for="closeReason">סיבת סגירה *</label>
+      <textarea id="closeReason" rows="3" maxlength="500" placeholder="לדוגמה: הספק לא יספק את היתרה"></textarea>
+      <div class="field-hint">הזמנה סגורה לא מחכה עוד לאספקה, גם אם נשארו שורות שלא סופקו.</div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="closeConfirm">סגור הזמנה</button>
+      <button type="button" class="btn btn-outline" id="closeCancel">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- receive a delivery -->
+<div class="modal-backdrop" id="receiptBackdrop">
+  <div class="modal modal-wide" id="receiptModal"></div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/policies.js"></script>
+<script src="js/app.js"></script>
+<script src="js/rebar-orders-core.js"></script>
+<script src="js/purchase-core.js"></script>
+<script src="js/rebar-pdf.js"></script>
+<script src="js/purchase-pdf.js"></script>
+<script src="js/purchase-orders.js"></script>
+</body>
+</html>
