@@ -44,22 +44,23 @@
 .supplied-bar { width: 46px; height: 6px; border-radius: 999px; background: var(--bg); overflow: hidden; }
 .supplied-bar > i { display: block; height: 100%; background: var(--green); }
 /* the lines: a row is typed like a line of the Excel form */
-.po-lines { min-width: 860px; }
-.po-lines th { white-space: nowrap; }
-.po-lines td { vertical-align: middle; }
+#linesHost { container-type: inline-size; }
+.po-lines th { white-space: nowrap; padding-inline: 5px; }
+.po-lines td { vertical-align: middle; padding-inline: 4px; }
 .po-lines input, .po-lines select {
   width: 100%; min-width: 0; padding: 8px 9px; border: 2px solid var(--border); border-radius: var(--radius-sm);
   font: inherit; font-size: 13.5px; background: var(--sheet); color: var(--navy);
 }
 .po-lines input:focus, .po-lines select:focus { outline: none; border-color: var(--green); }
 .po-lines input[inputmode] { font-variant-numeric: tabular-nums; }
-.po-c-no { width: 44px; text-align: center; color: var(--steel); font-weight: 700; }
-.po-c-sku { width: 104px; }
-.po-c-unit { width: 108px; }
-.po-c-qty, .po-c-disc { width: 84px; }
-.po-c-price { width: 112px; }
-.po-c-total { width: 112px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.po-c-del { width: 44px; }
+.po-c-no { width: 36px; text-align: center; color: var(--steel); font-weight: 700; }
+.po-c-sku { width: 88px; }
+.po-c-unit { width: 94px; }
+.po-c-qty { width: 76px; }
+.po-c-disc { width: 66px; }
+.po-c-price { width: 98px; }
+.po-c-total { width: 104px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.po-c-del { width: 40px; }
 .po-add { margin-top: 10px; }
 .po-foot { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; margin-top: 16px; align-items: start; }
 .po-foot textarea { width: 100%; }
@@ -97,10 +98,11 @@
 .rc-lines td { vertical-align: middle; }
 .rc-lines input[inputmode] { width: 90px; padding: 7px 8px; border: 2px solid var(--border); border-radius: var(--radius-sm); font: inherit; }
 .rc-lines input[type=checkbox] { width: 20px; height: 20px; }
-@media (max-width: 640px) {
-  .po-foot { grid-template-columns: minmax(0, 1fr); }
-  /* a line becomes a small card: the numbers stay readable without sideways scrolling */
-  .po-lines { min-width: 0; display: block; }
+@media (max-width: 640px) { .po-foot { grid-template-columns: minmax(0, 1fr); } }
+/* by the table's own width, not the screen's: an open sidebar narrows it too. A line becomes a small
+   card, so the description keeps its room and nothing scrolls sideways */
+@container (max-width: 860px) {
+  .po-lines { display: block; }
   .po-lines thead { display: none; }
   .po-lines tbody { display: block; }
   .po-lines tbody tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
@@ -109,6 +111,10 @@
   .po-lines td.po-c-no { display: none; }
   .po-lines td.po-c-desc { grid-column: 1 / -1; order: -1; }
   .po-lines td.po-c-del { grid-column: 3; justify-self: end; align-self: end; }
+}
+@container (min-width: 560px) and (max-width: 860px) {
+  .po-lines tbody tr { grid-template-columns: repeat(6, minmax(0, 1fr)) 34px; }
+  .po-lines td.po-c-del { grid-column: auto; }
 }
 </style>
 </head>
