@@ -136,8 +136,8 @@
         <input id="verifyEmail" type="email" name="email" required autocomplete="email">
       </div>
       <div class="field" id="verifyCodeField">
-        <label for="verifyCode">קוד אימות</label>
-        <input id="verifyCode" type="text" name="code" class="otp-input" inputmode="numeric" pattern="[0-9]{4,10}" maxlength="10" required autocomplete="one-time-code">
+        <label for="verifyCode">קוד אימות או סיסמה זמנית</label>
+        <input id="verifyCode" type="text" name="code" class="otp-input" maxlength="20" required autocomplete="one-time-code" autocapitalize="off" spellcheck="false">
       </div>
       <div class="field">
         <label for="newPassword">סיסמה חדשה</label>
@@ -432,7 +432,15 @@ verifyCodeForm.addEventListener('submit', async e => {
 
   // If the link from the email already established a session (linkVerified),
   // skip re-verifying a code -- there may not even be one to type.
-  if (!linkVerified) {
+  if (!linkVerified && !/^\d{4,10}$/.test(code)) {
+    // not an emailed code: a temporary password from the company (users.html), typed here
+    const { error } = await sb.auth.signInWithPassword({ email, password: code });
+    if (error) {
+      showErr('הקוד או הסיסמה הזמנית שגויים.');
+      setBusy(btn, btnText, false, '', 'אישור וכניסה');
+      return;
+    }
+  } else if (!linkVerified) {
     let verifyError = null;
     for (const type of ['recovery', 'invite']) {
       const { error } = await sb.auth.verifyOtp({ email, token: code, type });
