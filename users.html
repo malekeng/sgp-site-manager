@@ -104,6 +104,11 @@
           <label>אתרים (ניתן לבחור כמה)</label>
           <div class="site-check-list" id="siteCheckList"></div>
         </div>
+        <!-- when the invite email cannot be sent (2026-11-02): the account is made now, with a temporary password -->
+        <div class="field full">
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="temp_password" id="inviteTempPass" style="width:18px;height:18px;"> בלי אימייל — יצירה עם סיסמה זמנית</label>
+          <div class="field-hint">החשבון נוצר מיד. הסיסמה תוצג לכם פעם אחת, ובכניסה הראשונה המשתמש יקבע סיסמה משלו. למנהל או למשתמש אתר בלבד.</div>
+        </div>
       </div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary" id="inviteSubmitBtn">שליחת הזמנה</button>
@@ -313,8 +318,15 @@
     document.getElementById('siteField').style.display = e.target.value === 'owner' ? 'none' : 'flex';
   });
 
+  // the button says what will happen: an email goes out, or the account is made now
+  function inviteSubmitLabel() {
+    document.getElementById('inviteSubmitBtn').textContent = document.getElementById('inviteTempPass').checked ? 'יצירת משתמש' : 'שליחת הזמנה';
+  }
+  document.getElementById('inviteTempPass').addEventListener('change', inviteSubmitLabel);
+
   function openInviteModal(prefill) {
     document.getElementById('inviteForm').reset();
+    inviteSubmitLabel();
     hideMsg(document.getElementById('inviteMsg'));
     renderSiteChecks('siteCheckList', []);
     document.getElementById('siteField').style.display = 'flex';
@@ -397,8 +409,14 @@
     const fd = new FormData(e.target);
     const role = fd.get('role');
     const siteIds = fd.getAll('site_ids');
+    const withTemp = fd.get('temp_password') === 'on';
     if (role === 'site_user' && !siteIds.length) {
       showMsg(msgEl, 'יש לבחור לפחות אתר אחד עבור משתמש אתר', 'error');
+      btn.disabled = false;
+      return;
+    }
+    if (withTemp && !tempPasswordAllowed(profile.role, role, false)) {
+      showMsg(msgEl, 'סיסמה זמנית אפשרית למנהל או למשתמש אתר בלבד', 'error');
       btn.disabled = false;
       return;
     }
@@ -409,6 +427,7 @@
       full_name: fd.get('full_name'),
       role,
       site_ids: siteIds,
+      temp_password: withTemp,
     };
 
     const { data: { session } } = await sb.auth.getSession();
@@ -423,9 +442,20 @@
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'שגיאה לא ידועה');
+      if (withTemp && !result.password) throw new Error('המשתמש נוצר אך הסיסמה לא התקבלה — קבעו לו סיסמה זמנית מכפתור המנעול');
 
-      toast('ההזמנה נשלחה בהצלחה', 'success');
       document.getElementById('inviteModalBackdrop').classList.remove('open');
+      if (withTemp) {
+        // shown once, as the lock button does: the account exists now, nothing was emailed
+        const who = payload.full_name || payload.username;
+        toast('המשתמש נוצר', 'success');
+        document.getElementById('tempPassFor').textContent = `עבור ${who} · ${payload.email}`;
+        document.getElementById('tempPassValue').textContent = result.password;
+        document.getElementById('tempPassNote').textContent = 'מסרו למשתמש את האימייל ואת הסיסמה בעל־פה או בהודעה אישית. בכניסה הראשונה הוא יתבקש לקבוע סיסמה משלו. הסיסמה מוצגת פעם אחת בלבד.';
+        document.getElementById('tempPassBackdrop').classList.add('open');
+      } else {
+        toast('ההזמנה נשלחה בהצלחה', 'success');
+      }
 
       if (approvingRequestId) {
         await sb.from('signup_requests')
@@ -437,7 +467,9 @@
 
       loadUsers();
     } catch (err) {
-      showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
+      // the invite email could not go out (e.g. the mail service's quota): point at the way that needs none
+      const mailFailed = !withTemp && /sending|email/i.test(err.message);
+      showMsg(msgEl, 'שגיאה: ' + err.message + (mailFailed ? ' — שליחת האימייל נכשלה. אפשר לסמן "בלי אימייל — יצירה עם סיסמה זמנית" וליצור את המשתמש עכשיו.' : ''), 'error');
     } finally {
       btn.disabled = false;
     }
