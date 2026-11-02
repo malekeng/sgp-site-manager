@@ -87,11 +87,38 @@
       </div>
     </form>
   </div>
+
+  <div class="card" style="max-width:680px;">
+    <div class="card-header"><h2>שינוי סיסמה</h2></div>
+    <div id="passwordMsg" class="msg"></div>
+    <form id="passwordForm" autocomplete="on">
+      <!-- the account's email, for the browser's password manager -->
+      <input type="email" id="passwordEmail" autocomplete="username" hidden>
+      <div class="form-grid">
+        <div class="field full">
+          <label for="currentPassword">סיסמה נוכחית</label>
+          <input type="password" id="currentPassword" autocomplete="current-password" required>
+        </div>
+        <div class="field">
+          <label for="nextPassword">סיסמה חדשה</label>
+          <input type="password" id="nextPassword" autocomplete="new-password" minlength="6" required>
+        </div>
+        <div class="field">
+          <label for="confirmNextPassword">אימות סיסמה חדשה</label>
+          <input type="password" id="confirmNextPassword" autocomplete="new-password" minlength="6" required>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:18px;">
+        <button type="submit" class="btn btn-primary" id="passwordBtn">שינוי סיסמה</button>
+      </div>
+    </form>
+  </div>
 </main>
 
 <script src="js/supabase-client.js"></script>
 <script src="js/policies.js"></script>
 <script src="js/app.js"></script>
+<script src="js/password-change.js"></script>
 <script>
 (async function () {
   const auth = await requireAuth('profile.html');
@@ -233,6 +260,40 @@
     profile.phone = payload.phone;
     avatarInitials.textContent = initials(profile);
     toast('הפרופיל נשמר', 'success');
+  });
+
+  // ===== שינוי סיסמה: the current password is checked first, so an open, unattended session
+  // cannot be used to take the account =====
+  const passwordMsg = document.getElementById('passwordMsg');
+  document.getElementById('passwordEmail').value = user.email || '';
+  document.getElementById('passwordForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    hideMsg(passwordMsg);
+    const current = document.getElementById('currentPassword').value;
+    const next = document.getElementById('nextPassword').value;
+    const confirmNext = document.getElementById('confirmNextPassword').value;
+    const problem = passwordChangeProblem(current, next, confirmNext);
+    if (problem) { showMsg(passwordMsg, problem, 'error'); return; }
+
+    const btn = document.getElementById('passwordBtn');
+    btn.disabled = true;
+    try {
+      const { error: signErr } = await sb.auth.signInWithPassword({ email: user.email, password: current });
+      if (signErr) {
+        showMsg(passwordMsg, signErr.code === 'over_request_rate_limit' ? passwordErrorText(signErr) : 'הסיסמה הנוכחית שגויה', 'error');
+        return;
+      }
+      // a temporary password's flag goes with it, as on the login page
+      const { data: { session } } = await sb.auth.getSession();
+      const { error } = await sb.auth.updateUser(mustChangePassword(session && session.user)
+        ? { password: next, data: { must_change_password: false } } : { password: next });
+      if (error) { showMsg(passwordMsg, passwordErrorText(error), 'error'); return; }
+      document.getElementById('passwordForm').reset();
+      document.getElementById('passwordEmail').value = user.email || '';
+      toast('הסיסמה שונתה', 'success');
+    } finally {
+      btn.disabled = false;
+    }
   });
 })();
 </script>
