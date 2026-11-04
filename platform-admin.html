@@ -182,6 +182,11 @@
         <div class="field full"><label>אימייל הבעלים *</label><input type="email" name="owner_email" required></div>
         <div class="field"><label>שם הבעלים</label><input type="text" name="owner_full_name"></div>
         <div class="field"><label>שם משתמש</label><input type="text" name="owner_username"></div>
+        <!-- when the invite email cannot be sent (2026-11-04): the owner's account is made now, with a temporary password -->
+        <div class="field full">
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="temp_password" id="companyTempPass" style="width:18px;height:18px;"> בלי אימייל — יצירה עם סיסמה זמנית</label>
+          <div class="field-hint">החברה וחשבון הבעלים נוצרים מיד. הסיסמה תוצג לכם פעם אחת, ובכניסה הראשונה הבעלים יקבע סיסמה משלו. לאימייל חדש בלבד.</div>
+        </div>
         <div class="field"><label>ח.פ / ע.מ</label><input type="text" name="tax_id" inputmode="numeric" maxlength="20"></div>
         <div class="field"><label>טלפון החברה</label><input type="tel" name="phone" maxlength="30"></div>
         <div class="field full"><label>כתובת החברה</label><input type="text" name="address" maxlength="200"></div>
@@ -192,6 +197,21 @@
         <button type="button" class="btn btn-outline" id="cancelCompanyBtn">ביטול</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="tempPassBackdrop">
+  <div class="modal">
+    <h3>סיסמה זמנית</h3>
+    <p id="tempPassFor" style="font-size:13px;color:var(--steel);"></p>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin:12px 0;">
+      <bdi id="tempPassValue" dir="ltr" style="font-family:ui-monospace,Consolas,monospace;font-size:20px;font-weight:700;letter-spacing:1px;user-select:all;"></bdi>
+      <button type="button" class="btn btn-outline btn-sm" id="tempPassCopy">העתקה</button>
+    </div>
+    <p id="tempPassNote" style="font-size:12.5px;line-height:1.6;"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="tempPassClose">סגירה</button>
+    </div>
   </div>
 </div>
 
@@ -539,8 +559,25 @@
       form.email.value = request.email || '';
     }
     document.getElementById('companyModalTitle').textContent = request ? 'אישור בקשה — פתיחת חברה' : 'חברה חדשה';
+    companySubmitLabel();
     document.getElementById('companyModalBackdrop').classList.add('open');
   }
+
+  // the button says what will happen: an invite email goes out, or the owner's account is made now
+  function companySubmitLabel() {
+    document.getElementById('companySubmitBtn').textContent = document.getElementById('companyTempPass').checked ? 'יצירת החברה' : 'יצירה ושליחת הזמנה';
+  }
+  document.getElementById('companyTempPass').addEventListener('change', companySubmitLabel);
+  document.getElementById('tempPassCopy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById('tempPassValue').textContent);
+      toast('הסיסמה הועתקה', 'success');
+    } catch { toast('לא ניתן להעתיק — סמנו את הסיסמה והעתיקו ידנית', 'error'); }
+  });
+  document.getElementById('tempPassClose').addEventListener('click', () => {
+    document.getElementById('tempPassValue').textContent = '';   // not left on the page
+    document.getElementById('tempPassBackdrop').classList.remove('open');
+  });
 
   document.getElementById('newCompanyBtn').addEventListener('click', () => openCompanyModal(null));
   document.getElementById('cancelCompanyBtn').addEventListener('click', () =>
@@ -577,7 +614,9 @@
       owner_full_name: fd.get('owner_full_name'),
       owner_username: fd.get('owner_username'),
       request_id: fd.get('request_id') || null,
+      temp_password: fd.get('temp_password') === 'on',
     };
+    const withTemp = payload.temp_password;
 
     const { data: { session } } = await sb.auth.getSession();
     try {
@@ -587,7 +626,12 @@
         body: JSON.stringify(payload),
       });
       const out = await res.json();
-      if (!res.ok) { showMsg(msgEl, 'שגיאה: ' + (out.error || res.status), 'error'); btn.disabled = false; return; }
+      if (!res.ok) {
+        // the invite email could not go out (e.g. the mail service's quota): point at the way that needs none
+        const mailFailed = !withTemp && /sending|email/i.test(out.error || '');
+        showMsg(msgEl, 'שגיאה: ' + (out.error || res.status) + (mailFailed ? ' — שליחת האימייל נכשלה. אפשר לסמן "בלי אימייל — יצירה עם סיסמה זמנית" וליצור את החברה עכשיו.' : ''), 'error');
+        btn.disabled = false; return;
+      }
       // the company's details (the approval trigger already copied the request's; these are the reviewed values)
       // (a blank field is left alone, so it never erases what the request brought)
       const filled = Object.fromEntries(Object.entries(details).filter(([, v]) => v !== null));
@@ -595,8 +639,19 @@
         const { data: upd, error: updErr } = await sb.from('organizations').update(filled).eq('id', out.organization_id).select('id');
         if (updErr || !upd || !upd.length) toast('החברה נוצרה, אך פרטיה לא נשמרו — הבעלים ישלים אותם בהגדרות החברה', 'error');
       }
-      toast('החברה נוצרה והזמנה נשלחה לבעלים', 'success');
       document.getElementById('companyModalBackdrop').classList.remove('open');
+      if (withTemp && out.password) {
+        // shown once: the owner's account exists now, nothing was emailed
+        toast('החברה נוצרה', 'success');
+        document.getElementById('tempPassFor').textContent = `עבור ${payload.owner_full_name || payload.owner_username || payload.owner_email} · ${payload.owner_email}`;
+        document.getElementById('tempPassValue').textContent = out.password;
+        document.getElementById('tempPassNote').textContent = 'מסרו לבעלים את האימייל ואת הסיסמה בעל־פה או בהודעה אישית. בכניסה הראשונה הוא יתבקש לקבוע סיסמה משלו. הסיסמה מוצגת פעם אחת בלבד.';
+        document.getElementById('tempPassBackdrop').classList.add('open');
+      } else if (withTemp) {
+        toast('החברה נוצרה, אך הסיסמה לא התקבלה', 'error');
+      } else {
+        toast('החברה נוצרה והזמנה נשלחה לבעלים', 'success');
+      }
       loadOrgs(); loadRequests();
     } catch (err) {
       showMsg(msgEl, 'שגיאה: ' + err.message, 'error');
