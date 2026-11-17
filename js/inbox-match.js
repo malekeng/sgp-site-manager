@@ -23,6 +23,10 @@ function sgpInboxLabel(table, row) {
   if (table === 'concrete_pours') {
     return [sgpInboxDdMm(row.pour_date), row.element, row.location, row.concrete_grade].filter(Boolean).join(' · ');
   }
+  if (table === 'prestressed_slabs') {
+    const no = String(row.order_number ?? '').trim();
+    return [sgpInboxDdMm(row.delivery_date || row.order_date), no ? `הזמנה ${no}` : null, row.location].filter(Boolean).join(' · ') || 'רשומה';
+  }
   return [sgpInboxDdMm(row.delivery_date), row.plan_ref].filter(Boolean).join(' · ') || 'רשומה';
 }
 
@@ -77,10 +81,34 @@ function sgpInboxSuggestRebarNote(ex, rows) {
   return { create: true, table: 'rebar_deliveries', reason: 'אין רשומה עם ההזמנה או התעודה' };
 }
 
-// extracted: what the reader stored; candidates: { concrete_pours: [...], rebar_deliveries: [...] }
-function sgpInboxSuggest(extracted, candidates) {
+// Slab orders and slab delivery notes (2026-11-17). A slab record is one delivery, and its order
+// number is per site ("1", "2" repeat on other sites), so the caller passes the file's site.
+function sgpInboxSuggestSlabOrder(ex, rows) {
+  const nos = (ex.orders || []).map(o => String(o.order_no ?? '').trim()).filter(Boolean);
+  if (!nos.length) return null;
+  const hits = rows.filter(r => nos.includes(String(r.order_number ?? '').trim()))
+    .sort((a, b) => String(a.delivery_date || '').localeCompare(String(b.delivery_date || '')));
+  if (hits.length === 1) return sgpInboxStrong('prestressed_slabs', hits[0], 'strong', `הזמנה ${nos[0]}`);
+  if (hits.length > 1) return sgpInboxOptions('prestressed_slabs', hits, `${hits.length} רשומות (משלוחים) עם הזמנה ${nos.join(', ')}`);
+  return { create: true, table: 'prestressed_slabs', reason: `אין רשומה עם הזמנה ${nos.join(', ')} באתר הזה` };
+}
+
+function sgpInboxSuggestSlabNote(ex, rows) {
+  const notes = (ex.notes || []).flatMap(sgpInboxNoteList);
+  const hits = notes.length ? rows.filter(r => sgpInboxNoteList(r.delivery_note_number).some(n => notes.includes(n))) : [];
+  if (hits.length === 1) return sgpInboxStrong('prestressed_slabs', hits[0], 'strong', 'מספר התעודה רשום ברשומה הזאת');
+  if (hits.length > 1) return sgpInboxOptions('prestressed_slabs', hits, 'מספר התעודה רשום בכמה רשומות');
+  return { create: true, table: 'prestressed_slabs', reason: 'אין רשומה עם התעודה הזאת באתר הזה' };
+}
+
+// extracted: what the reader stored; candidates: { concrete_pours: [...], rebar_deliveries: [...],
+// prestressed_slabs: [...] }; opts.siteId: the file's site, when known (slabs need it)
+function sgpInboxSuggest(extracted, candidates, opts = {}) {
   if (!extracted) return null;
   const c = candidates || {};
+  const slabs = (c.prestressed_slabs || []).filter(r => !opts.siteId || r.site_id === opts.siteId);
+  if (extracted.kind === 'slab_order') return sgpInboxSuggestSlabOrder(extracted, slabs);
+  if (extracted.kind === 'slab_note') return sgpInboxSuggestSlabNote(extracted, slabs);
   if (extracted.kind === 'concrete_lab') {
     const ref = extracted.pour_date || extracted.report_date;
     return sgpInboxSuggestLab(extracted, (c.concrete_pours || []).filter(p => sgpInboxNear(p.pour_date, ref)));

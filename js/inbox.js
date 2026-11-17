@@ -17,7 +17,7 @@ async function inboxReadOne(row, candidates) {
   } catch (_) {
     extracted = { v: SGP_EXTRACT_VERSION, kind: 'unreadable' };
   }
-  return { extracted, suggestion: sgpInboxSuggest(extracted, candidates) };
+  return { extracted, suggestion: sgpInboxSuggest(extracted, candidates, { siteId: row.site_id }) };
 }
 
 // the same value whatever the key order (jsonb gives keys back in its own order)
@@ -28,7 +28,7 @@ function inboxStable(v) {
 // A file read earlier gets a fresh suggestion (the pour may have been added since); it is saved
 // only when it changed. Returns whether it changed.
 async function inboxRefreshSuggestion(row, candidates) {
-  const s = sgpInboxSuggest(row.extracted, candidates);
+  const s = sgpInboxSuggest(row.extracted, candidates, { siteId: row.site_id });
   if (inboxStable(s) === inboxStable(row.suggestion)) return false;
   const { error } = await sb.rpc('inbox_save_reading', {
     p_file: row.id, p_extracted: row.extracted, p_suggestion: s, p_site: s && s.siteId ? s.siteId : null,
@@ -127,7 +127,7 @@ async function inboxPageInit() {
     const [pours, rebar, slabs, sites, labDocs] = await Promise.all([
       sb.from('concrete_pours').select('id, site_id, pour_date, concrete_grade, delivery_note_number, element, location').gte('pour_date', since),
       sb.from('rebar_deliveries').select('id, site_id, plan_ref, delivery_note_number, delivery_date').gte('created_at', since),
-      sb.from('prestressed_slabs').select('id, site_id, delivery_date, plan_ref, location').gte('created_at', since),
+      sb.from('prestressed_slabs').select('id, site_id, delivery_date, order_date, order_number, delivery_note_number, plan_ref, location').gte('created_at', since),
       sb.from('sites').select('id, name'),
       // lab reports already on a record (by email or uploaded there), to flag a copy
       sb.from('documents').select('id, linked_table, linked_record_id, extracted').eq('doc_type', 'lab_test').not('extracted', 'is', null).gte('created_at', since),

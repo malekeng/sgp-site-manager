@@ -74,9 +74,9 @@
     <h3 id="modalTitle">הוספת רשומה</h3>
 
     <div class="ocr-zone" id="ocrZone">
-      <img class="zone-ico" src="icons/nav/scan.webp" alt="" aria-hidden="true" width="44" height="44"><div>גררו כאן קובץ הזמנה / תעודת משלוח (תמונה או PDF) למילוי אוטומטי</div>
+      <img class="zone-ico" src="icons/nav/scan.webp" alt="" aria-hidden="true" width="44" height="44"><div>גררו כאן קובץ הזמנה / תעודת משלוח (תמונה, PDF או קובץ הזמנה ב-Excel) למילוי אוטומטי</div>
       <div style="font-size:11px;color:var(--steel);margin-top:4px;">זיהוי טקסט אוטומטי — בדקו את התוצאה ותקנו ידנית לפני שמירה</div>
-      <input type="file" id="ocrInput" accept="image/*,.pdf" style="display:none;">
+      <input type="file" id="ocrInput" accept="image/*,.pdf,.xlsx" style="display:none;">
     </div>
     <div class="ocr-progress" id="ocrProgress"><div class="spinner"></div><span id="ocrProgressText">מעבד...</span></div>
     <details id="ocrRawWrap" style="display:none;margin-bottom:16px;">
@@ -174,6 +174,21 @@ async function handleOcrFile(file) {
   ocrProgress.classList.add('show');
   ocrProgressText.textContent = 'טוען קובץ...';
   try {
+    // the supplier's Excel order (2026-11-17): what the order says, never a delivery's date or note
+    if (/\.xlsx$/i.test(file.name)) {
+      lastOcrExtracted = await sgpExtractFile(file);
+      const fill = sgpSlabOrderFill(lastOcrExtracted);
+      const form = document.getElementById('recordForm');
+      for (const [k, v] of Object.entries(fill)) {
+        const el = form.querySelector(`[name=${k}]`);
+        if (el) el.value = v;
+      }
+      const o = (lastOcrExtracted.orders || [])[0];
+      toast(o ? `הזמנה ${o.order_no ?? ''}: ${o.units} לוח"דים, כ-${fmtNum(o.total_m2, 1)} מ"ר — בדקו ותקנו לפני שמירה`
+        : 'הקובץ לא זוהה כהזמנת לוח"דים — מלאו ידנית', o ? 'success' : 'error');
+      document.getElementById('ocrAttachChoice').style.display = 'block';
+      return;
+    }
     const doc = await sgpReadDocument(file, { onProgress: t => { ocrProgressText.textContent = t; } });
     lastOcrExtracted = sgpExtract(doc, file.name);
     document.getElementById('ocrRawText').textContent = sgpDocumentRawText(doc);

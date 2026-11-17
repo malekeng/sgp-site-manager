@@ -840,6 +840,29 @@ function sgpExtractSlabWorkbook(sheets) {
   return { orders, tracking };
 }
 
+// What a slab ORDER (the Excel above) says for a new slab record (2026-11-17): the order's number,
+// date and area, the plan its lines name most, and the floor and supplier the team's tracking
+// sheet gives that order. Never a delivery date or delivery note number: an order is not a delivery.
+function sgpSlabOrderFill(ex) {
+  if (!ex || ex.kind !== 'slab_order' || !(ex.orders || []).length) return {};
+  const o = ex.orders[0];
+  const out = {};
+  const no = String(o.order_no ?? '').trim();
+  if (no) out.order_number = no;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(o.date || ''))) out.order_date = o.date;
+  if (typeof o.total_m2 === 'number' && o.total_m2 > 0) out.quantity_m2 = o.total_m2;
+  const plans = (o.lines || []).map(l => String(l.plan || '').trim()).filter(Boolean);
+  if (plans.length) {
+    const count = {};
+    plans.forEach(p => { count[p] = (count[p] || 0) + 1; });
+    out.plan_ref = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+  }
+  const t = (ex.tracking || []).find(r => no && String(r.order_no ?? '').trim() === no);
+  if (t && t.floor) out.location = String(t.floor).trim();
+  if (t && t.supplier) out.supplier = String(t.supplier).trim();
+  return out;
+}
+
 // Reads a file and returns what goes into documents.extracted.
 async function sgpExtractFile(file, { onProgress } = {}) {
   const name = file.name || '';
