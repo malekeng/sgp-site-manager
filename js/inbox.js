@@ -41,7 +41,15 @@ async function inboxRefreshSuggestion(row, candidates) {
 
 // Upload → fill the empty fields → mark the file attached. If only the last step fails, the
 // document already exists: a second call ("נסה שוב") marks it and uploads nothing again.
-async function inboxAttach(row, { table, recordId, siteId }, user) {
+// A click while one is running gets that one's result (a double click once uploaded twice).
+function inboxAttach(row, target, user) {
+  if (!row._attaching) {
+    row._attaching = inboxAttachOnce(row, target, user).finally(() => { row._attaching = null; });
+  }
+  return row._attaching;
+}
+
+async function inboxAttachOnce(row, { table, recordId, siteId }, user) {
   if (!row._documentId) {
     const file = row._file || await inboxFetchFile(row);
     const ex = row.extracted && row.extracted.kind !== 'unreadable' ? row.extracted : null;
@@ -86,21 +94,24 @@ async function inboxPageInit() {
   const state = { rows: [], cands: { concrete_pours: [], rebar_deliveries: [] }, sites: {}, search: '' };
   const progress = document.getElementById('inboxProgress');
 
-  // the addresses this person may hand out
-  sb.rpc('inbox_my_addresses', { p_org: org.id }).then(({ data }) => {
-    const host = document.getElementById('inboxAddresses');
-    if (!data || !data.length) {
-      host.innerHTML = isAdmin ? '<p style="font-size:13px;color:var(--steel);">עוד אין כתובת. פתחו את "הגדרות קליטה" ולחצו "הפעלה".</p>' : '';
-      return;
-    }
-    host.innerHTML = data.map(a => `
-      <div class="attach-item" style="flex-wrap:wrap;gap:8px;">
-        <span style="min-width:110px;font-weight:600;">${a.kind === 'company' ? 'כתובת החברה' : esc(a.site_name || '')}</span>
-        <span style="${INBOX_MONO}">${esc(a.address)}</span>
-        <button class="btn btn-sm btn-outline" data-copy="${esc(a.address)}">העתקה</button>
-      </div>`).join('');
-    host.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => inboxCopy(b.dataset.copy)));
-  });
+  // the addresses this person may hand out (again after a change in "הגדרות קליטה")
+  function loadAddresses() {
+    return sb.rpc('inbox_my_addresses', { p_org: org.id }).then(({ data }) => {
+      const host = document.getElementById('inboxAddresses');
+      if (!data || !data.length) {
+        host.innerHTML = isAdmin ? '<p style="font-size:13px;color:var(--steel);">עוד אין כתובת. פתחו את "הגדרות קליטה" ולחצו "הפעלה".</p>' : '';
+        return;
+      }
+      host.innerHTML = data.map(a => `
+        <div class="attach-item" style="flex-wrap:wrap;gap:8px;">
+          <span style="min-width:110px;font-weight:600;">${a.kind === 'company' ? 'כתובת החברה' : esc(a.site_name || '')}</span>
+          <span style="${INBOX_MONO}">${esc(a.address)}</span>
+          <button class="btn btn-sm btn-outline" data-copy="${esc(a.address)}">העתקה</button>
+        </div>`).join('');
+      host.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => inboxCopy(b.dataset.copy)));
+    });
+  }
+  loadAddresses();
 
   if (isAdmin) {
     const det = document.getElementById('inboxSettingsWrap');
@@ -109,7 +120,7 @@ async function inboxPageInit() {
       if (!det.open || det.dataset.mounted) return;
       det.dataset.mounted = '1';
       const { data: sites } = await sb.from('sites').select('id, name').eq('organization_id', org.id).order('name');
-      await inboxSettingsMount(document.getElementById('inboxSettingsHost'), { org, sites: sites || [] });
+      await inboxSettingsMount(document.getElementById('inboxSettingsHost'), { org, sites: sites || [], onChange: loadAddresses });
     });
   }
 

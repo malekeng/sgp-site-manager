@@ -37,8 +37,14 @@ async function inboxCopy(text) {
 
 const INBOX_MONO = "font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;word-break:break-all;direction:ltr;unicode-bidi:plaintext;";
 
-// host: an empty element; org: { id, slug }; sites: [{ id, name }]
-async function inboxSettingsMount(host, { org, sites }) {
+// host: an empty element; org: { id, slug }; sites: [{ id, name }]; onChange: called after the
+// addresses changed (enable, new address, a site code), so a page showing them can refresh
+async function inboxSettingsMount(host, { org, sites, onChange }) {
+  async function changed() {
+    await load();
+    if (onChange) onChange();
+  }
+
   async function load() {
     const [st, codes, senders] = await Promise.all([
       sb.from('inbox_settings').select('token').eq('org_id', org.id).maybeSingle(),
@@ -57,11 +63,12 @@ async function inboxSettingsMount(host, { org, sites }) {
           כתובת מייל של החברה: מה שמעבדות וספקים שולחים אליה מופיע ב"דואר נכנס", כבר נקרא ומוכן לצירוף.
         </p>
         <button class="btn btn-primary" data-inbox-enable>הפעלה</button>`;
-      host.querySelector('[data-inbox-enable]').addEventListener('click', async e => {
-        e.currentTarget.disabled = true;
+      const enable = host.querySelector('[data-inbox-enable]');
+      enable.addEventListener('click', async () => {
+        enable.disabled = true;
         const { error } = await sb.rpc('inbox_enable', { p_org: org.id });
-        if (error) { toast(inboxErrorText(error), 'error'); e.currentTarget.disabled = false; return; }
-        await load();
+        if (error) { toast(inboxErrorText(error), 'error'); enable.disabled = false; return; }
+        await changed();
       });
       return;
     }
@@ -105,13 +112,13 @@ async function inboxSettingsMount(host, { org, sites }) {
       const { error } = await sb.rpc('inbox_rotate', { p_org: org.id });
       if (error) { toast(inboxErrorText(error), 'error'); return; }
       toast('נוצרה כתובת חדשה', 'success');
-      await load();
+      await changed();
     });
     host.querySelectorAll('[data-inbox-code]').forEach(inp => inp.addEventListener('change', async () => {
       const r = await inboxSaveSiteCode(inp.dataset.inboxCode, inp.value);
       if (r.error) { toast(r.error, 'error'); inp.value = codeOf[inp.dataset.inboxCode] || ''; return; }
       toast(r.code ? 'הקוד נשמר' : 'כתובת האתר הוסרה', 'success');
-      await load();
+      await changed();
     }));
     host.querySelectorAll('[data-inbox-remove]').forEach(b => b.addEventListener('click', async () => {
       const { error } = await sb.rpc('inbox_remove_sender', { p_id: b.dataset.inboxRemove });
