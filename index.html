@@ -555,9 +555,21 @@ async function handleAuthLinkIfPresent() {
   return true;
 }
 
+// The invite and reset emails (Supabase templates, full-backup/auth-email-templates) link here
+// with ?step=code: straight to "enter the code", even for someone signed in already.
+function openCodeStepIfAsked() {
+  if (new URLSearchParams(window.location.search).get('step') !== 'code') return false;
+  window.history.replaceState({}, document.title, window.location.pathname);
+  showScreen(verifyCodeForm);
+  verifyCodeForm.email.focus();
+  return true;
+}
+
 (async function init() {
   const handledLink = await handleAuthLinkIfPresent();
-  if (!handledLink) await goToDashboardIfSignedIn();
+  if (handledLink) return;
+  if (openCodeStepIfAsked()) return;
+  await goToDashboardIfSignedIn();
 })();
 </script>
 </body>
