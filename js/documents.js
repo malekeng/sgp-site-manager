@@ -171,33 +171,8 @@ function createAttachWidget(container, options = {}) {
         const pctStart = (i / total) * 100;
         setProgress(pctStart, `מעלה: ${file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name} (${i + 1}/${total})`);
 
-        const ext = file.name.split('.').pop();
-        const path = `${siteId}/${table}/${recordId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-        const { error: upErr } = await sb.storage.from('documents').upload(path, file);
-        if (upErr) throw upErr;
-
-        const { data: inserted, error: dbErr } = await sb.from('documents').insert({
-          site_id: siteId,
-          doc_type: docType || fixedDocType || 'other',
-          document_date: documentDate || null,
-          title: file.name,
-          file_path: path,
-          file_name: file.name,
-          file_size: file.size,
-          linked_table: table,
-          linked_record_id: recordId,
-          uploaded_by: userId,
-          ...(extracted ? { extracted, extracted_at: new Date().toISOString() } : {}),
-        }).select('id').single();
-        if (dbErr) {
-          // Storage upload already succeeded but the DB row failed — remove the
-          // orphaned file so it doesn't sit in storage with no record pointing to it.
-          // remove() resolves with { error } rather than rejecting, so check it:
-          // a silent cleanup failure would leave an invisible stray file behind.
-          const { error: rmErr } = await sb.storage.from('documents').remove([path]);
-          if (rmErr) console.warn('ניקוי קובץ יתום נכשל:', path, rmErr.message);
-          throw dbErr;
-        }
+        const inserted = await sgpUploadDocument({ file, siteId, table, recordId,
+          docType: docType || fixedDocType || 'other', documentDate, extracted, userId });
 
         // Drop the finished file from the pending list straight away. Leaving it in
         // meant that if a LATER file threw, pressing Save again re-uploaded the ones
@@ -232,4 +207,37 @@ async function getDocumentUrl(filePath) {
   const { data, error } = await sb.storage.from('documents').createSignedUrl(filePath, 3600);
   if (error) { console.error(error); return null; }
   return data.signedUrl;
+}
+
+// One file into a record's documents: the file to storage, then its row. The attach widget and
+// "דואר נכנס" (js/inbox.js) both use it. Throws on any error; returns { id }.
+async function sgpUploadDocument({ file, siteId, table, recordId, docType, documentDate, extracted, userId }) {
+  const ext = file.name.split('.').pop();
+  const path = `${siteId}/${table}/${recordId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error: upErr } = await sb.storage.from('documents').upload(path, file);
+  if (upErr) throw upErr;
+
+  const { data: inserted, error: dbErr } = await sb.from('documents').insert({
+    site_id: siteId,
+    doc_type: docType || 'other',
+    document_date: documentDate || null,
+    title: file.name,
+    file_path: path,
+    file_name: file.name,
+    file_size: file.size,
+    linked_table: table,
+    linked_record_id: recordId,
+    uploaded_by: userId,
+    ...(extracted ? { extracted, extracted_at: new Date().toISOString() } : {}),
+  }).select('id').single();
+  if (dbErr) {
+    // Storage upload already succeeded but the DB row failed — remove the
+    // orphaned file so it doesn't sit in storage with no record pointing to it.
+    // remove() resolves with { error } rather than rejecting, so check it:
+    // a silent cleanup failure would leave an invisible stray file behind.
+    const { error: rmErr } = await sb.storage.from('documents').remove([path]);
+    if (rmErr) console.warn('ניקוי קובץ יתום נכשל:', path, rmErr.message);
+    throw dbErr;
+  }
+  return inserted;
 }

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>דואר נכנס | TADOK</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="application-name" content="TADOK">
+<meta name="apple-mobile-web-app-title" content="TADOK">
+<meta name="theme-color" content="#0E1A20">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+</head>
+<body>
+<header class="app-header" id="app-header"></header>
+
+<main class="page" id="inboxMain">
+  <h1 class="page-title">דואר נכנס</h1>
+
+  <section class="card" style="max-width:880px;">
+    <div class="card-header"><h2>לאן שולחים</h2></div>
+    <p style="font-size:13px;color:var(--steel);margin-bottom:10px;">
+      מסמכים שנשלחים לכתובות האלה (דוחות מעבדה, תעודות משלוח, הזמנות) מופיעים כאן, כבר נקראים ועם הצעה לאיזו רשומה הם שייכים.
+    </p>
+    <div id="inboxAddresses"><div class="loading-overlay"><div class="spinner"></div></div></div>
+    <details id="inboxSettingsWrap" hidden style="margin-top:12px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--navy);">הגדרות קליטה</summary>
+      <div id="inboxSettingsHost" style="margin-top:10px;"></div>
+    </details>
+  </section>
+
+  <div id="inboxProgress" role="status" style="font-size:12.5px;color:var(--steel);margin:6px 0;"></div>
+
+  <section style="max-width:880px;">
+    <h2 style="font-size:17px;margin:14px 0 8px;">חדשים</h2>
+    <div id="inboxNew"><div class="loading-overlay"><div class="spinner"></div></div></div>
+  </section>
+
+  <section id="inboxHeldWrap" hidden style="max-width:880px;">
+    <h2 style="font-size:17px;margin:18px 0 4px;">ממתין לאישור שולח</h2>
+    <p style="font-size:12.5px;color:var(--steel);margin-bottom:8px;">מיילים משולחים שעוד לא אושרו. הקבצים לא נקראו ולא יוצגו לאחרים עד שתאשרו.</p>
+    <div id="inboxHeld"></div>
+  </section>
+
+  <section style="max-width:880px;">
+    <h2 style="font-size:17px;margin:18px 0 8px;">טופלו</h2>
+    <input type="search" id="inboxSearch" placeholder="חיפוש לפי שם קובץ, נושא או שולח" style="width:100%;max-width:420px;margin-bottom:10px;">
+    <div id="inboxDone"></div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="inboxPickBackdrop">
+  <div class="modal">
+    <button class="icon-btn modal-close" id="inboxPickClose" aria-label="סגירה"><svg class="ui-ico ui-ico-x" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    <h3>רשומה אחרת</h3>
+    <select id="inboxPickTable" aria-label="סוג הרשומה" style="width:100%;margin-bottom:8px;">
+      <option value="concrete_pours">יציקת בטון</option>
+      <option value="rebar_deliveries">משלוח ברזל</option>
+      <option value="prestressed_slabs">לוח״דים</option>
+    </select>
+    <input type="search" id="inboxPickFilter" placeholder="סינון לפי תאריך, אלמנט או אתר" style="width:100%;margin-bottom:10px;">
+    <div id="inboxPickList" style="max-height:55vh;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/policies.js"></script>
+<script src="js/app.js"></script>
+<script src="js/ocr.js"></script>
+<script src="js/documents.js"></script>
+<script src="js/doc-insights.js"></script>
+<script src="js/inbox-core.js"></script>
+<script src="js/inbox-match.js"></script>
+<script src="js/inbox-handoff.js"></script>
+<script src="js/inbox-settings.js"></script>
+<script src="js/inbox.js"></script>
+<script>
+inboxPageInit();
+</script>
+</body>
+</html>

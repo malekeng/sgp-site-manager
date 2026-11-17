@@ -93,6 +93,11 @@
   </div>
 
   <div class="card" style="max-width:720px;">
+    <div class="card-header"><h2>קליטת מסמכים במייל</h2></div>
+    <div id="inboxSettingsHost"></div>
+  </div>
+
+  <div class="card" style="max-width:720px;">
     <div class="card-header"><h2>ייצוא כל המידע</h2></div>
     <p style="font-size:13px;color:var(--steel);margin-bottom:10px;">
       קובץ ZIP אחד עם כל הרשומות של כל האתרים (Excel) וכל המסמכים והתמונות שצורפו. ההכנה נעשית בדפדפן ועשויה לקחת כמה דקות — השאירו את העמוד פתוח.
@@ -116,6 +121,8 @@
 <script src="js/company-details.js"></script>
 <script src="js/excel-report.js"></script>
 <script src="js/company-export.js"></script>
+<script src="js/inbox-core.js"></script>
+<script src="js/inbox-settings.js"></script>
 <script>
 (async function () {
   const auth = await requireAuth('org-settings.html');
@@ -134,6 +141,10 @@
       document.getElementById('supportLog').innerHTML = error
         ? `<p style="color:var(--danger);">שגיאה בטעינת היומן: ${esc(error.message)}</p>` : tadokSupportLogHtml(data || []);
     });
+
+  // "קליטת מסמכים במייל": the company's and the sites' inbox addresses (js/inbox-settings.js)
+  sb.from('sites').select('id, name').eq('organization_id', org.id).order('name')
+    .then(({ data }) => inboxSettingsMount(document.getElementById('inboxSettingsHost'), { org, sites: data || [] }));
 
   document.getElementById('exportAllBtn').addEventListener('click', async e => {
     const btn = e.currentTarget, progress = document.getElementById('exportProgress');

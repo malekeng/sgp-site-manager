@@ -131,6 +131,8 @@
 <script src="js/policies.js"></script>
 <script src="js/app.js"></script>
 <script src="js/documents.js"></script>
+<script src="js/inbox-core.js"></script>
+<script src="js/inbox-handoff.js"></script>
 <script src="js/doc-insights.js"></script>
 <script src="js/crud.js"></script>
 <script src="js/rebar-orders-core.js"></script>
@@ -142,6 +144,7 @@ const rbOrderHref = id => `rebar-orders.html#o=${id}`;
 const rbStillOwed = row => row.supply_status !== 'כן' && !row.order_closed;
 
 initCrudPage({
+  afterSave: r => inboxHandoffSaved(r),   // "רשומה חדשה" from "דואר נכנס"
   table: 'rebar_deliveries', docInsights: true, icon: '🔩',
   activePage: 'rebar.html',
   title: 'משלוחי ברזל',
@@ -340,6 +343,9 @@ document.getElementById('draftsBody').addEventListener('click', e => {
   history.replaceState(null, '', location.pathname);
   setTimeout(() => toast(`ההזמנה ${deleted} נמחקה`, 'success'), 400);
 })();
+
+// "רשומה חדשה" from "דואר נכנס" (2026-11-04): #inbox=<file> opens "הוספה" with the file read in
+inboxHandoff({ onFile: async (file, row) => { await handleOcrFile(file); attachOcrFileAs(inboxTarget(row.extracted && row.extracted.kind, false).docType); } });
 </script>
 </body>
 </html>

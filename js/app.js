@@ -37,6 +37,8 @@ const NAV_ITEMS = [
   { href: 'prices.html',    label: 'השוואת מחירים', icon: '💰', ico: 'prices' },
   { href: 'reports.html',   label: 'דוחות', icon: '📊', ico: 'reports' },
 ];
+// "דואר נכנס" (2026-11-04): documents that came by email, second in the menu for everyone but contractors
+const INBOX_NAV_ITEM = { href: 'inbox.html', label: 'דואר נכנס', icon: '📨', ico: 'incoming', count: true };
 const ADMIN_NAV_ITEM = { href: 'users.html', label: 'משתמשים', icon: '👥', ico: 'users' };
 const ORG_SETTINGS_NAV_ITEM = { href: 'org-settings.html', label: 'הגדרות החברה', icon: '🏢', ico: 'org-settings' };
 const PLATFORM_NAV_ITEM = { href: 'platform-admin.html', label: 'ניהול הפלטפורמה', icon: '🛠️', ico: 'platform', count: true };
@@ -46,7 +48,7 @@ const SUPPORT_NAV_ITEM = { href: 'support.html', label: 'תמיכה', icon: '�
 // The icon a page has in the sidebar, so the page itself can reuse it (e.g. on its stat cards).
 function pageIco(href) {
   const all = [...NAV_ITEMS.flatMap(i => i.items ? [i, ...i.items] : [i]),
-    ADMIN_NAV_ITEM, ORG_SETTINGS_NAV_ITEM, PLATFORM_NAV_ITEM, PROFILE_NAV_ITEM, SUPPORT_NAV_ITEM];
+    INBOX_NAV_ITEM, ADMIN_NAV_ITEM, ORG_SETTINGS_NAV_ITEM, PLATFORM_NAV_ITEM, PROFILE_NAV_ITEM, SUPPORT_NAV_ITEM];
   return all.find(i => i.href === href)?.ico || null;
 }
 
@@ -196,6 +198,7 @@ async function renderHeader(activePage, profile, site, org) {
   if (!host) return;
 
   const items = [...NAV_ITEMS];
+  if (profile && profile.role !== 'contractor') items.splice(1, 0, INBOX_NAV_ITEM);
   if (profile && (profile.role === 'owner' || profile.role === 'admin')) {
     items.push(ADMIN_NAV_ITEM);
   }
@@ -378,6 +381,7 @@ async function renderHeader(activePage, profile, site, org) {
       }, () => {});
   }
   refreshSupportCounts(profile?.id);
+  refreshInboxCount(org);
   if (typeof tadokShowAnnouncements === 'function') tadokShowAnnouncements();
   if (org?.__support) showSupportBar(org.__support);
   else if (sessionStorage.getItem('tadok_support_ended')) {
@@ -430,6 +434,20 @@ async function renderHeader(activePage, profile, site, org) {
     await sb.auth.signOut();
     window.location.href = 'index.html';
   });
+}
+
+// "דואר נכנס": files still waiting for someone (new or read, not attached or ignored) that this
+// person can see in the active company. Row-level security decides which ones count.
+async function refreshInboxCount(org) {
+  if (!org?.id || !document.querySelector('[data-nav-count="inbox.html"]')) return;
+  try {
+    const { count, error } = await sb.from('inbox_files').select('id', { count: 'exact', head: true })
+      .eq('org_id', org.id).in('status', ['new', 'read']);
+    if (error) return;
+    document.querySelectorAll('[data-nav-count="inbox.html"]').forEach(b => {
+      b.textContent = count > 99 ? '99+' : String(count || 0); b.hidden = !count;
+    });
+  } catch (_) { /* a convenience; never break the page */ }
 }
 
 // Red counts: replies waiting for this user, and — for the operator — requests waiting for an answer.
