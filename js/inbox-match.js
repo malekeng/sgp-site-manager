@@ -94,3 +94,25 @@ function sgpInboxSuggest(extracted, candidates) {
   }
   return null;
 }
+
+// A lab report that is already attached somewhere: the same LA number AND the same edition.
+// Isotop sends the same number again when later results come in, and that update should be
+// attached, so the issue date decides; without one on either side, the results do.
+// reports: [{ ex, table, recordId }] → { table, recordId } of the first copy, or null.
+function sgpInboxSameReport(ex, reports) {
+  const key = e => (e && e.kind === 'concrete_lab' && String(e.lab_no || '').trim().toUpperCase()) || '';
+  const k = key(ex);
+  if (!k) return null;
+  const sameEdition = o => (ex.report_date && o.report_date)
+    ? ex.report_date === o.report_date
+    : sgpInboxStableJson(ex.avg_by_age) === sgpInboxStableJson(o.avg_by_age);
+  const hit = (reports || []).find(r => key(r.ex) === k && sameEdition(r.ex));
+  return hit ? { table: hit.table, recordId: hit.recordId } : null;
+}
+
+// the same value whatever the key order (jsonb gives keys back in its own order)
+function sgpInboxStableJson(v) {
+  if (Array.isArray(v)) return '[' + v.map(sgpInboxStableJson).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + sgpInboxStableJson(v[k])).join(',') + '}';
+  return JSON.stringify(v ?? null);
+}

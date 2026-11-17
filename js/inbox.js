@@ -22,9 +22,7 @@ async function inboxReadOne(row, candidates) {
 
 // the same value whatever the key order (jsonb gives keys back in its own order)
 function inboxStable(v) {
-  if (Array.isArray(v)) return '[' + v.map(inboxStable).join(',') + ']';
-  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + inboxStable(v[k])).join(',') + '}';
-  return JSON.stringify(v ?? null);
+  return sgpInboxStableJson(v);
 }
 
 // A file read earlier gets a fresh suggestion (the pour may have been added since); it is saved
@@ -91,7 +89,7 @@ async function inboxPageInit() {
   const isAdmin = profile.role === 'owner' || profile.role === 'admin';
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
-  const state = { rows: [], cands: { concrete_pours: [], rebar_deliveries: [] }, sites: {}, search: '' };
+  const state = { rows: [], cands: { concrete_pours: [], rebar_deliveries: [] }, sites: {}, search: '', labDocs: [] };
   const progress = document.getElementById('inboxProgress');
 
   // the addresses this person may hand out (again after a change in "הגדרות קליטה")
@@ -126,14 +124,31 @@ async function inboxPageInit() {
 
   async function loadCandidates() {
     const since = new Date(Date.now() - INBOX_DAYS_BACK * 86400000).toISOString().slice(0, 10);
-    const [pours, rebar, slabs, sites] = await Promise.all([
+    const [pours, rebar, slabs, sites, labDocs] = await Promise.all([
       sb.from('concrete_pours').select('id, site_id, pour_date, concrete_grade, delivery_note_number, element, location').gte('pour_date', since),
       sb.from('rebar_deliveries').select('id, site_id, plan_ref, delivery_note_number, delivery_date').gte('created_at', since),
       sb.from('prestressed_slabs').select('id, site_id, delivery_date, plan_ref, location').gte('created_at', since),
       sb.from('sites').select('id, name'),
+      // lab reports already on a record (by email or uploaded there), to flag a copy
+      sb.from('documents').select('id, linked_table, linked_record_id, extracted').eq('doc_type', 'lab_test').not('extracted', 'is', null).gte('created_at', since),
     ]);
     state.cands = { concrete_pours: pours.data || [], rebar_deliveries: rebar.data || [], prestressed_slabs: slabs.data || [] };
     state.sites = Object.fromEntries((sites.data || []).map(s => [s.id, s.name]));
+    state.labDocs = labDocs.data || [];
+  }
+
+  // where this lab report is attached already (the same number and edition), or null
+  function sameReport(row) {
+    const reports = state.labDocs.filter(d => d.id !== row._documentId)
+      .map(d => ({ ex: d.extracted, table: d.linked_table, recordId: d.linked_record_id }))
+      .concat(state.rows.filter(r => r !== row && r.status === 'attached')
+        .map(r => ({ ex: r.extracted, table: r.linked_table, recordId: r.linked_record_id })));
+    return sgpInboxSameReport(row.extracted, reports);
+  }
+
+  function sameReportText(dup) {
+    const c = candidate(dup.table, dup.recordId);
+    return 'הדוח הזה כבר מצורף' + (c ? ` ל: ${state.sites[c.site_id] || ''} · ${sgpInboxLabel(dup.table, c)}` : '');
   }
 
   async function loadRows() {
@@ -181,6 +196,7 @@ async function inboxPageInit() {
     const target = inboxTarget(ex && ex.kind, /^image\//.test(row.mime_type || ''));
     const s = row.suggestion;
     const open = row.status === 'new' || row.status === 'read';
+    const dup = open ? sameReport(row) : null;
     const isPdf = /pdf/i.test(row.mime_type || '') || /\.pdf$/i.test(row.file_name || '');
     let actions = '';
     if (open) {
@@ -222,6 +238,7 @@ async function inboxPageInit() {
         <div style="font-weight:600;margin-bottom:4px;">${esc(inboxWhat(ex))}</div>
         ${row._error ? `<div style="color:var(--danger);font-size:13px;">${esc(row._error)}</div>` : ''}
         ${open ? suggestionHtml(row) : ''}
+        ${open && dup ? `<div class="inbox-sug" style="color:var(--danger);font-weight:600;">⚠ ${esc(sameReportText(dup))}</div>` : ''}
         ${state_}
         ${open ? insightsHtml(row) : ''}
         ${actions ? `<div class="header-actions" style="margin-top:10px;">${actions}</div>` : ''}
@@ -246,9 +263,12 @@ async function inboxPageInit() {
   }
 
   async function attachTo(row, target) {
+    const dup = sameReport(row);
+    if (!row._documentId && dup && !confirm(sameReportText(dup) + '. לצרף שוב?')) return;
     try {
       const filled = await inboxAttach(row, target, user);
       row.status = 'attached'; row.linked_table = target.table; row.site_id = row.site_id || target.siteId;
+      row.linked_record_id = target.recordId;
       toast('צורף' + (filled.length ? ' · מולאו: ' + filled.join(', ') : ''), 'success');
     } catch (err) {
       toast((row._documentId ? 'המסמך צורף, אך הסימון ב"דואר נכנס" לא נשמר — לחצו "נסה שוב". ' : 'הצירוף נכשל: ') + (err.message || ''), 'error');

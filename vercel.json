@@ -2,8 +2,14 @@
   "redirects": [
     {
       "source": "/(.*)",
+      "has": [{ "type": "host", "value": "tadok.vercel.app" }],
+      "destination": "https://tadok.app/$1",
+      "permanent": false
+    },
+    {
+      "source": "/(.*)",
       "has": [{ "type": "host", "value": "sgp-site-manager.vercel.app" }],
-      "destination": "https://tadok.vercel.app/$1",
+      "destination": "https://tadok.app/$1",
       "permanent": false
     }
   ]
