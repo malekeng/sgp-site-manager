@@ -6,7 +6,8 @@
 const INBOX_ERRORS = {
   inbox_forbidden: 'אין הרשאה לפעולה הזאת',
   inbox_bad_code: 'קוד לא תקין: אותיות אנגליות קטנות, ספרות ומקף, 2–20 תווים',
-  inbox_code_taken: 'הקוד כבר בשימוש באתר אחר',
+  inbox_code_taken: 'הכתובת הזאת כבר בשימוש. בחרו קוד אחר',
+  inbox_address_taken: 'כתובת החברה כבר בשימוש של חברה אחרת. פנו לתמיכה',
   inbox_bad_pattern: 'כתובת או דומיין לא תקינים, לדוגמה lab@isotop.co.il או @isotop.co.il',
   inbox_bad_state: 'אי אפשר לבצע את הפעולה במצב הנוכחי',
 };
@@ -38,7 +39,8 @@ async function inboxCopy(text) {
 const INBOX_MONO = "font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;word-break:break-all;direction:ltr;unicode-bidi:plaintext;";
 
 // host: an empty element; org: { id, slug }; sites: [{ id, name }]; onChange: called after the
-// addresses changed (enable, new address, a site code), so a page showing them can refresh
+// addresses changed (enable, a site code), so a page showing them can refresh. The card hands
+// out the short addresses (2026-11-17); the long ones with the token keep working unseen.
 async function inboxSettingsMount(host, { org, sites, onChange }) {
   async function changed() {
     await load();
@@ -78,9 +80,8 @@ async function inboxSettingsMount(host, { org, sites, onChange }) {
         מה שנשלח לכתובת הזאת מופיע ב"דואר נכנס". אפשר לבקש מהמעבדה להוסיף אותה לנמענים, או להעביר אליה מייל (Forward).
       </p>
       <div class="attach-item">
-        <span style="${INBOX_MONO}">${esc(inboxAddress(org.slug, token))}</span>
-        <button class="btn btn-sm btn-outline" data-inbox-copy="${esc(inboxAddress(org.slug, token))}">העתקה</button>
-        <button class="btn btn-sm btn-ghost" data-inbox-rotate>כתובת חדשה</button>
+        <span style="${INBOX_MONO}">${esc(inboxShortAddress(org.slug))}</span>
+        <button class="btn btn-sm btn-outline" data-inbox-copy="${esc(inboxShortAddress(org.slug))}">העתקה</button>
       </div>
 
       <h3 style="font-size:14px;margin:18px 0 6px;">כתובת לכל אתר</h3>
@@ -90,12 +91,12 @@ async function inboxSettingsMount(host, { org, sites, onChange }) {
           <span style="min-width:110px;font-weight:600;">${esc(s.name)}</span>
           <input type="text" dir="ltr" maxlength="20" placeholder="atech" aria-label="קוד לאתר ${esc(s.name)}"
                  value="${esc(codeOf[s.id] || '')}" data-inbox-code="${esc(s.id)}" style="width:110px;">
-          ${codeOf[s.id] ? `<span style="${INBOX_MONO}">${esc(inboxAddress(org.slug, token, codeOf[s.id]))}</span>
-            <button class="btn btn-sm btn-outline" data-inbox-copy="${esc(inboxAddress(org.slug, token, codeOf[s.id]))}">העתקה</button>` : ''}
+          ${codeOf[s.id] ? `<span style="${INBOX_MONO}">${esc(inboxShortAddress(org.slug, codeOf[s.id]))}</span>
+            <button class="btn btn-sm btn-outline" data-inbox-copy="${esc(inboxShortAddress(org.slug, codeOf[s.id]))}">העתקה</button>` : ''}
         </div>`).join('') : '<p class="empty-state">אין אתרים</p>'}
 
       <h3 style="font-size:14px;margin:18px 0 6px;">שולחים מאושרים</h3>
-      <p style="font-size:12.5px;color:var(--steel);margin-bottom:8px;">כתובות של אנשי החברה מאושרות תמיד. מייל משולח אחר ממתין לאישור.</p>
+      <p style="font-size:12.5px;color:var(--steel);margin-bottom:8px;">כתובות של אנשי החברה מאושרות תמיד. מייל משולח אחר, או מייל שלא הוכח שנשלח באמת מהדומיין של השולח, ממתין לאישור.</p>
       ${senders.map(s => `
         <div class="attach-item">
           <span style="${INBOX_MONO}">${esc(s.pattern)}</span>
@@ -107,13 +108,6 @@ async function inboxSettingsMount(host, { org, sites, onChange }) {
       </form>`;
 
     host.querySelectorAll('[data-inbox-copy]').forEach(b => b.addEventListener('click', () => inboxCopy(b.dataset.inboxCopy)));
-    host.querySelector('[data-inbox-rotate]').addEventListener('click', async () => {
-      if (!confirm('הכתובת הנוכחית תפסיק לעבוד מיד, וגם כתובות האתרים. להמשיך?')) return;
-      const { error } = await sb.rpc('inbox_rotate', { p_org: org.id });
-      if (error) { toast(inboxErrorText(error), 'error'); return; }
-      toast('נוצרה כתובת חדשה', 'success');
-      await changed();
-    });
     host.querySelectorAll('[data-inbox-code]').forEach(inp => inp.addEventListener('change', async () => {
       const r = await inboxSaveSiteCode(inp.dataset.inboxCode, inp.value);
       if (r.error) { toast(r.error, 'error'); inp.value = codeOf[inp.dataset.inboxCode] || ''; return; }

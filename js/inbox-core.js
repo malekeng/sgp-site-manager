@@ -54,6 +54,29 @@ function inboxParseAddress(raw) {
   return { slug, token, siteCode: code === undefined ? null : code };
 }
 
+// Short addresses (2026-11-17), no token: "sgp@in.tadok.app" (company), "sgp-atech@…" (site).
+// Without the token the sender must be proven (DKIM/DMARC), so only verified mail counts as
+// from the company or an approved sender; the long addresses above keep working as before.
+function inboxShortAddress(slug, siteCode) {
+  return `${slug}${siteCode ? '-' + siteCode : ''}@${INBOX_DOMAIN}`;
+}
+
+// Every way to read a short address: the company with that whole slug first, then each split
+// into a company slug and a site code (both may hold dashes). [] when it is not one.
+function inboxShortCandidates(raw) {
+  const email = inboxBareEmail(raw);
+  const at = email.lastIndexOf('@');
+  if (at < 1 || email.slice(at + 1) !== INBOX_DOMAIN) return [];
+  const local = email.slice(0, at);
+  const out = [];
+  if (INBOX_SLUG_RE.test(local)) out.push({ slug: local, siteCode: null });
+  for (let i = local.indexOf('-'); i > 0; i = local.indexOf('-', i + 1)) {
+    const slug = local.slice(0, i), code = local.slice(i + 1);
+    if (INBOX_SLUG_RE.test(slug) && inboxValidSiteCode(code)) out.push({ slug, siteCode: code });
+  }
+  return out;
+}
+
 // a whole address ("reports@lab.co.il") or a whole domain ("@isotop.co.il")
 function inboxValidSenderPattern(p) {
   return typeof p === 'string' && /^([^\s@<>"]+)?@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(p.trim());
@@ -71,6 +94,38 @@ function inboxSenderKind(from, memberEmails, patterns) {
     return q.startsWith('@') ? q.slice(1) === domain : q === email;
   });
   return ok ? 'approved' : 'unknown';
+}
+
+// Is the From line proven? auth: { envelope_from, headers: [[position, name, value], …] } as the
+// Worker passes it. Only the topmost check result counts, and only if Cloudflare's receiving
+// server wrote it (a sender can forge one into its own mail, but below Cloudflare's). Proven =
+// DMARC passed for the From domain, or DKIM passed for that domain or a subdomain of it, or SPF
+// passed and the envelope sender (Cloudflare's runtime value, not text in the result) is in it.
+// Quoted strings and comments are dropped first and only the first dkim= / dmarc= result counts:
+// they can carry text the sender chose (an envelope address made to look like "dmarc=pass").
+function inboxSenderVerified(auth, from) {
+  const email = inboxBareEmail(from);
+  const domain = email.slice(email.lastIndexOf('@') + 1);
+  if (!domain || !auth || !Array.isArray(auth.headers)) return false;
+  const top = auth.headers
+    .filter(h => Array.isArray(h) && (h[1] === 'arc-authentication-results' || h[1] === 'authentication-results'))
+    .sort((a, b) => a[0] - b[0])[0];
+  if (!top) return false;
+  const clean = String(top[2] || '').toLowerCase().replace(/"[^"]*"/g, '""').replace(/\([^()]*\)/g, ' ');
+  const parts = clean.split(';').map(s => s.trim());
+  if (!parts.slice(0, 2).includes('mx.cloudflare.net')) return false;
+  const ours = d => !!d && (d === domain || d.endsWith('.' + domain));
+  const value = (p, prop) => {
+    const v = (p.match(new RegExp(`(?:^|\\s)${prop.replace('.', '\\.')}=([^\\s;]+)`)) || [])[1];
+    return v && v.includes('@') ? v.slice(v.lastIndexOf('@') + 1) : v;
+  };
+  const dmarc = parts.find(p => p.startsWith('dmarc='));
+  if (dmarc && /^dmarc=pass\b/.test(dmarc) && value(dmarc, 'header.from') === domain) return true;
+  const dkim = parts.find(p => p.startsWith('dkim='));
+  if (dkim && /^dkim=pass\b/.test(dkim) && ours(value(dkim, 'header.d'))) return true;
+  const envelope = inboxBareEmail(auth.envelope_from);
+  const envDomain = envelope.includes('@') ? envelope.slice(envelope.lastIndexOf('@') + 1) : '';
+  return ours(envDomain) && parts.some(p => /^spf=pass\b/.test(p) && ours(value(p, 'smtp.mailfrom')));
 }
 
 function inboxAccepted(part) {
