@@ -81,7 +81,7 @@ async function tadokEnsureAccepted(userId, organizationId, signOutTo = 'index.ht
     wrap.className = 'modal-backdrop open';
     wrap.id = 'policyGate';
     wrap.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="policyGateTitle">
+      <div class="modal policy-gate" role="dialog" aria-modal="true" aria-labelledby="policyGateTitle">
         <h3 id="policyGateTitle">לפני שממשיכים</h3>
         <p style="font-size:13.5px;line-height:1.7;margin-bottom:12px;">
           השימוש ב-TADOK כפוף ל<a href="terms.html" target="_blank" rel="noopener">תנאי השימוש</a>,
@@ -91,7 +91,7 @@ async function tadokEnsureAccepted(userId, organizationId, signOutTo = 'index.ht
         </p>
         <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:14px;cursor:pointer;">
           <input type="checkbox" id="policyGateCheck" style="margin-top:3px;flex-shrink:0;">
-          <span>קראתי ואני מסכים/ה לתנאי השימוש ולמדיניות הפרטיות.</span>
+          <span>קראתי ואני מסכים/ה ל<a href="terms.html" target="_blank" rel="noopener">תנאי השימוש</a> ול<a href="privacy.html" target="_blank" rel="noopener">מדיניות הפרטיות</a>.</span>
         </label>
         <div class="msg" id="policyGateMsg"></div>
         <div class="modal-actions">

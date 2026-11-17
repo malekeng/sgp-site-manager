@@ -396,6 +396,8 @@ input, select, textarea {
 .mt-meta { color: var(--steel); font-size: 12px; white-space: nowrap; }
 .mt-open { margin: 4px 0 0; padding-inline-start: 18px; display: grid; gap: 4px; font-size: 13px; }
 .mt-open a { color: var(--navy); text-decoration: underline; text-underline-offset: 2px; }
+/* the terms gate: its documents must read as links (the site-wide `a` rule removes the look) */
+.policy-gate a { color: var(--navy); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .mt-badge { display: inline-block; margin-inline-start: 8px; font-size: 11.5px; font-weight: 700; color: var(--green-deep); background: var(--green-soft); border-radius: 999px; padding: 1px 8px; }
 @media (max-width: 600px) { .mt-row { grid-template-columns: 1fr 1fr; } .mt-row input[data-k="title"] { grid-column: 1 / -1; } }
 
