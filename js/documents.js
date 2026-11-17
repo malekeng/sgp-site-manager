@@ -23,6 +23,27 @@ function isImageFileName(name) {
   return /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name || '');
 }
 
+// Word and Excel (2026-11-17): "תצוגה" shows them inside the app with js/office-preview.js,
+// which loads on first use (the Excel/Word libraries are big, and most visits never need them).
+const SGP_OFFICE_RE = /\.(xlsx|xlsm|xls|csv|docx|doc)$/i;
+function sgpOfficeName(name) {
+  return SGP_OFFICE_RE.test(name || '');
+}
+let sgpOfficeLoading = null;
+async function sgpOpenOffice(blob, name) {
+  if (typeof sgpOfficePreview !== 'function') {
+    sgpOfficeLoading = sgpOfficeLoading || new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'js/office-preview.js';
+      s.onload = resolve;
+      s.onerror = () => { sgpOfficeLoading = null; reject(new Error('טעינת התצוגה נכשלה')); };
+      document.head.appendChild(s);
+    });
+    await sgpOfficeLoading;
+  }
+  return sgpOfficePreview(blob, name);
+}
+
 function createAttachWidget(container, options = {}) {
   const label = options.label || 'מסמכים / תמונות (אופציונלי)';
   const fixedDocType = options.docType || null;
@@ -34,9 +55,9 @@ function createAttachWidget(container, options = {}) {
       <div class="attach-zone" tabindex="0">
         <img class="zone-ico" src="icons/nav/upload.webp" alt="" aria-hidden="true" width="40" height="40">
         <div id="attachZoneLabel">גררו קבצים לכאן או לחצו לבחירה — ניתן לבחור כמה קבצים ביחד</div>
-        <div style="font-size:11px;margin-top:4px;">תמונות, PDF, Word — עד 10MB לקובץ</div>
+        <div style="font-size:11px;margin-top:4px;">תמונות, PDF, Word, Excel — עד 10MB לקובץ</div>
       </div>
-      <input type="file" multiple accept="image/*,.pdf,.doc,.docx" style="display:none;">
+      <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.xlsm,.csv" style="display:none;">
       <div class="attach-list"></div>
       <div class="upload-progress" id="uploadProgress" hidden>
         <div class="upload-progress-track">

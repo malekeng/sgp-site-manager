@@ -10,9 +10,12 @@ const INBOX_MAX_FILE_BYTES = 10 * 1024 * 1024;
 const INBOX_MAX_FILES = 20;
 // pictures in a signature (logos, icons) are inline and small
 const INBOX_INLINE_SKIP_BYTES = 30 * 1024;
+// Word, CSV and macro-enabled Excel since 2026-11-17 (shown in the app; macros never run there)
 const INBOX_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
-const INBOX_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'heic', 'xlsx', 'xls'];
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel',
+  'application/vnd.ms-excel.sheet.macroenabled.12', 'text/csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'];
+const INBOX_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'heic', 'xlsx', 'xls', 'xlsm', 'csv', 'docx', 'doc'];
 const INBOX_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 const INBOX_TOKEN_RE = /^[abcdefghjkmnpqrstuvwxyz23456789]{6}$/;
 

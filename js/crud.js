@@ -292,6 +292,11 @@ async function initCrudPage(config) {
           <span class="btn btn-sm btn-outline">הצגה</span>
         </div>`;
       }
+      if (sgpOfficeName(d.file_name)) {
+        return `<div class="attach-item"><span>${fileName}${dateLabel}</span><span style="display:flex;gap:6px;">
+          <button type="button" class="btn btn-sm btn-outline" data-office="${i}">תצוגה</button>
+          <a href="${esc(d.url)}" class="btn btn-sm btn-ghost">הורדה</a></span></div>`;
+      }
       return `<div class="attach-item"><span>${fileName}${dateLabel}</span><a href="${esc(d.url)}" class="btn btn-sm btn-outline">פתיחה / הורדה</a></div>`;
     });
     const backdrop = document.createElement('div');
@@ -302,6 +307,11 @@ async function initCrudPage(config) {
     backdrop.querySelectorAll('[data-lightbox]').forEach(el => {
       el.addEventListener('click', () => openLightbox(resolved[Number(el.dataset.lightbox)].url));
     });
+    // Word / Excel shown inside the app (js/office-preview.js)
+    backdrop.querySelectorAll('[data-office]').forEach(el => el.addEventListener('click', async () => {
+      try { await sgpOpenOffice(await (await fetch(resolved[Number(el.dataset.office)].url)).blob(), resolved[Number(el.dataset.office)].file_name); }
+      catch (err) { toast('לא ניתן להציג את הקובץ: ' + err.message, 'error'); }
+    }));
     backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
     backdrop.querySelector('#closeDocsPopup').addEventListener('click', () => backdrop.remove());
   }

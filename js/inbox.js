@@ -312,6 +312,12 @@ async function inboxPageInit() {
     const row = rowById(card.dataset.id);
     if (!row) return;
     if (btn.hasAttribute('data-view')) {
+      // Word / Excel inside the app (js/office-preview.js); anything else in a new tab
+      if (sgpOfficeName(row.file_name)) {
+        try { const f = row._file || (row._file = await inboxFetchFile(row)); await sgpOpenOffice(f, row.file_name); }
+        catch (err) { toast(err.message, 'error'); }
+        return;
+      }
       const w = window.open('', '_blank');
       try { const f = row._file || (row._file = await inboxFetchFile(row)); w.location = URL.createObjectURL(f); }
       catch (err) { if (w) w.close(); toast(err.message, 'error'); }
