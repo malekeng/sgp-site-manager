@@ -90,6 +90,30 @@ function sgpSafetyValidate(form, people) {
   return errs;
 }
 
+// ---- the site's details: from the site that issues the form, never asked of the contractor ----
+// (the database keeps what the company filled: safety_training_submit, migration safety_site_fields_kept)
+const SAFETY_SITE_FIELDS = ['site_name', 'client_name', 'site_manager_name'];
+const SAFETY_WORK_MANAGER = 'מנהל עבודה';
+
+// site { name, location }, members [{ full_name, username, job_title }] of that site, forms: its earlier
+// forms, newest first → { site_name, client_name, site_manager_name }.
+// Name + address and the work manager come from the site and its team; what the site does not hold
+// (the client, or an address/manager it lacks) is taken from the newest earlier form that has it.
+function sgpSafetySiteDefaults(site, members, forms) {
+  const s = site || {}, list = forms || [];
+  const last = k => {
+    const f = list.find(x => x && String(x[k] || '').trim());
+    return f ? String(f[k]).trim() : '';
+  };
+  const managers = (members || []).filter(m => m && m.job_title === SAFETY_WORK_MANAGER)
+    .map(m => String(m.full_name || m.username || '').trim()).filter(Boolean);
+  return {
+    site_name: s.location ? [s.name, s.location].filter(Boolean).join(', ') : (last('site_name') || String(s.name || '')),
+    client_name: last('client_name'),
+    site_manager_name: managers.length ? managers.join(', ') : last('site_manager_name'),
+  };
+}
+
 // ---- the link sent to the contractor ----
 function sgpSafetyTokenOk(t) {
   return typeof t === 'string' && /^[0-9a-f]{64}$/.test(t);

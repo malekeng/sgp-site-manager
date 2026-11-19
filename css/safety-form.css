@@ -106,6 +106,9 @@ body {
 }
 .sf-fields input:focus { outline: 2px solid rgba(34, 216, 107, .45); border-color: var(--green-deep); background: #fff; }
 .sf-req { color: var(--danger); }
+/* a site detail the company filled: shown, not asked */
+.sf-locked-label { display: block; font-size: 13.5px; font-weight: 600; color: var(--steel); margin-bottom: 4px; }
+.sf-locked { padding: 9px 11px; border-radius: 9px; background: var(--bg); border: 1px dashed var(--border); font-weight: 500; }
 
 .sf-fixed { margin: 12px 0 0; padding: 10px 12px; background: var(--bg); border-radius: 9px; font-size: 14.5px; }
 

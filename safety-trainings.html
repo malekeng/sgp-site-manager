@@ -85,7 +85,7 @@
         <div class="field"><label>שם מנהל העבודה באתר</label><input type="text" name="site_manager_name" maxlength="300"></div>
         <div class="field"><label>תאריך ההדרכה</label><input type="date" name="training_date"></div>
       </div>
-      <div class="field-hint">הקבלן יכול להשלים ולתקן את כל הפרטים לפני שהוא שולח.</div>
+      <div class="field-hint">פרטי האתר ממולאים אוטומטית: שם וכתובת מהאתר, מנהל העבודה לפי התפקיד בצוות האתר, והיזם מהטופס הקודם של האתר. אצל הקבלן הם מופיעים כקבועים; שדה שנשאר ריק — הקבלן ימלא.</div>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary" id="newSubmit">יצירת קישור</button>
         <button type="button" class="btn btn-outline" id="newCancel">ביטול</button>
@@ -125,6 +125,7 @@
 
   let forms = [];
   let contractors = [];
+  let members = [];   // the site's team: its work manager fills "שם מנהל העבודה באתר"
   const body = document.getElementById('formsBody');
   const newModal = document.getElementById('newModal');
   const shareModal = document.getElementById('shareModal');
@@ -139,9 +140,14 @@
       + contractors.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
 
+  async function loadMembers() {
+    const { data } = await sb.from('profile_sites').select('profiles(id, full_name, username, job_title)').eq('site_id', site.id);
+    members = (data || []).map(r => r.profiles).filter(Boolean);
+  }
+
   async function load() {
     const { data, error } = await sb.from('safety_trainings')
-      .select('id, token, status, contractor_id, contractor_name, training_date, submitted_at, created_at, created_by, safety_training_attendees(count)')
+      .select('id, token, status, contractor_id, contractor_name, site_name, client_name, site_manager_name, training_date, submitted_at, created_at, created_by, safety_training_attendees(count)')
       .eq('site_id', site.id)
       .order('created_at', { ascending: false });
     if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
@@ -197,7 +203,9 @@
   document.getElementById('newFormBtn').addEventListener('click', () => {
     newForm.reset();
     hideMsg(newMsg);
-    newForm.site_name.value = [site.name, site.location].filter(Boolean).join(', ');
+    // the site's details come from the site itself, its team and its earlier forms
+    const auto = sgpSafetySiteDefaults(site, members, forms);
+    for (const k of SAFETY_SITE_FIELDS) newForm[k].value = auto[k];
     newModal.classList.add('open');
     newForm.contractor_id.focus();
   });
@@ -252,7 +260,7 @@
     toast('הקישור הועתק', 'success');
   });
 
-  await loadContractors();
+  await Promise.all([loadContractors(), loadMembers()]);
   await load();
 })();
 </script>

@@ -105,8 +105,14 @@
       saveTimer = setTimeout(() => { try { localStorage.setItem(DRAFT, JSON.stringify(state)); } catch (e) { /* full or blocked: the form still works */ } }, 300);
     };
 
+    // the site's details, as the company filled them from its site, are fixed here (and kept by the database)
+    for (const k of SAFETY_SITE_FIELDS) if (d.form[k]) state.form[k] = String(d.form[k]);
+
     const REQUIRED = ['contractor_name', 'training_date', 'instructor_name'];
-    const input = f => `<div class="${f.key === 'site_name' || f.key === 'instructor_role' ? 'full' : ''}">
+    const input = f => SAFETY_SITE_FIELDS.includes(f.key) && d.form[f.key]
+      ? `<div class="${f.key === 'site_name' ? 'full' : ''}"><span class="sf-locked-label">${sfEsc(f.label)}</span>
+          <div class="sf-locked" title="מולא על ידי החברה מפרטי האתר">${sfEsc(d.form[f.key])}</div></div>`
+      : `<div class="${f.key === 'site_name' || f.key === 'instructor_role' ? 'full' : ''}">
       <label for="f_${f.key}">${sfEsc(f.label)}${REQUIRED.includes(f.key) ? ' <span class="sf-req">*</span>' : ''}</label>
       <input id="f_${f.key}" data-f="${f.key}" type="${f.type || 'text'}" maxlength="${SAFETY_MAX_TEXT}"></div>`;
 
