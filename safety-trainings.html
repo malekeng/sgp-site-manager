@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>הדרכות בטיחות | TADOK</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="application-name" content="TADOK">
+<meta name="apple-mobile-web-app-title" content="TADOK">
+<meta name="theme-color" content="#0E1A20">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TADOK">
+<meta property="og:title" content="TADOK — תיעוד, בקרת איכות ושליטה באתר הבנייה">
+<meta property="og:description" content="פלטפורמה לניהול אתר בנייה: יציקות, ברזל, מסמכים, בקרת איכות ודוחות.">
+<meta property="og:image" content="https://tadok.app/brand/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="he_IL">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/safety-core.js"></script>
+<style>
+.st-intro { margin: -6px 0 14px; color: var(--steel); font-size: 14px; max-width: 760px; }
+.st-badge { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.st-badge.open { background: rgba(255,157,66,0.16); color: #b5651d; }
+.st-badge.submitted { background: rgba(34, 216, 107,0.14); color: var(--green-deep); }
+.st-link { display: flex; gap: 8px; margin: 10px 0 12px; }
+.st-link input { flex: 1; min-width: 0; direction: ltr; text-align: left; font-size: 13px; }
+.st-share { display: flex; flex-wrap: wrap; gap: 8px; }
+.st-share .btn { text-decoration: none; }
+.st-sub { color: var(--steel); font-size: 12.5px; }
+@media (max-width: 640px) {
+  #formsCard thead { display: none; }
+  #formsBody tr.st-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  #formsBody tr.st-row td { display: block; padding: 0; border: 0; }
+  #formsBody tr.st-row td.st-c-hide { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="app-header" id="app-header"></header>
+
+<main class="page">
+  <h1 class="page-title">הדרכות בטיחות</h1>
+  <p class="st-intro">טופס תיעוד הדרכת בטיחות לכל קבלן שמספק עובדים לאתר. שולחים לקבלן קישור אישי (בלי חשבון) — הוא ממלא את פרטי החברה וההדרכה, המדריך והעובדים חותמים בטלפון, והטופס החתום נשמר כאן. אפשר גם להדפיס טופס ריק ולמלא ביד.</p>
+
+  <div class="card" id="formsCard">
+    <div class="card-header">
+      <h2>טפסים באתר</h2>
+      <div class="header-actions">
+        <button class="btn btn-primary" id="newFormBtn">+ טופס חדש לקבלן</button>
+        <a class="btn btn-outline" href="training.html?blank=1" target="_blank" rel="noopener">טופס ריק להדפסה</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>קבלן</th><th>תאריך ההדרכה</th><th>עובדים</th><th>סטטוס</th><th>נשלח לקבלן</th><th></th></tr></thead>
+        <tbody id="formsBody"><tr class="empty-row"><td colspan="6"><div class="loading-overlay"><div class="spinner"></div></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- new form -->
+<div class="modal-backdrop" id="newModal">
+  <div class="modal">
+    <h3>טופס הדרכת בטיחות לקבלן</h3>
+    <div id="newMsg" class="msg"></div>
+    <form id="newForm">
+      <div class="form-grid">
+        <div class="field full">
+          <label>קבלן</label>
+          <select name="contractor_id"><option value="">— קבלן שלא ברשימה —</option></select>
+          <div class="field-hint">הרשימה מגיעה מעמוד קבלנים של האתר</div>
+        </div>
+        <div class="field"><label>שם הקבלן / החברה *</label><input type="text" name="contractor_name" required maxlength="300"></div>
+        <div class="field"><label>ח.פ. / ע.מ.</label><input type="text" name="contractor_reg" maxlength="300"></div>
+        <div class="field full"><label>שם אתר הבנייה וכתובתו</label><input type="text" name="site_name" maxlength="300"></div>
+        <div class="field"><label>שם מזמין העבודה (היזם)</label><input type="text" name="client_name" maxlength="300"></div>
+        <div class="field"><label>שם מנהל העבודה באתר</label><input type="text" name="site_manager_name" maxlength="300"></div>
+        <div class="field"><label>תאריך ההדרכה</label><input type="date" name="training_date"></div>
+      </div>
+      <div class="field-hint">הקבלן יכול להשלים ולתקן את כל הפרטים לפני שהוא שולח.</div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="newSubmit">יצירת קישור</button>
+        <button type="button" class="btn btn-outline" id="newCancel">ביטול</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- send the link -->
+<div class="modal-backdrop" id="shareModal">
+  <div class="modal">
+    <h3 id="shareTitle">שליחת הטופס לקבלן</h3>
+    <p class="st-sub">הקישור אישי לטופס הזה. מי שמחזיק בו יכול למלא ולשלוח אותו פעם אחת.</p>
+    <div class="st-link">
+      <input type="text" id="shareLink" readonly aria-label="הקישור לטופס">
+      <button type="button" class="btn btn-outline" id="copyBtn">העתקה</button>
+    </div>
+    <div class="st-share">
+      <a class="btn btn-primary" id="waBtn" target="_blank" rel="noopener">WhatsApp</a>
+      <a class="btn btn-outline" id="mailBtn">אימייל</a>
+      <a class="btn btn-outline" id="openBtn" target="_blank" rel="noopener">פתיחת הטופס</a>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" id="shareClose">סגירה</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/policies.js"></script>
+<script src="js/app.js"></script>
+<script>
+(async function () {
+  const auth = await requireAuth('safety-trainings.html');
+  if (!auth) return;
+  const { site, org } = auth;
+
+  let forms = [];
+  let contractors = [];
+  const body = document.getElementById('formsBody');
+  const newModal = document.getElementById('newModal');
+  const shareModal = document.getElementById('shareModal');
+  const newForm = document.getElementById('newForm');
+  const newMsg = document.getElementById('newMsg');
+
+  async function loadContractors() {
+    const { data } = await sb.from('vendor_submissions').select('id, name, reg_number, email, phone').eq('site_id', site.id).eq('submission_type', 'contractor')
+      .order('name');
+    contractors = (data || []).filter(c => c.name);
+    newForm.contractor_id.innerHTML = '<option value="">— קבלן שלא ברשימה —</option>'
+      + contractors.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+
+  async function load() {
+    const { data, error } = await sb.from('safety_trainings')
+      .select('id, token, status, contractor_id, contractor_name, training_date, submitted_at, created_at, created_by, safety_training_attendees(count)')
+      .eq('site_id', site.id)
+      .order('created_at', { ascending: false });
+    if (error) { toast('שגיאה: ' + error.message, 'error'); return; }
+    forms = data || [];
+    render();
+  }
+
+  function canDelete(t) {
+    return t.status === 'submitted' ? ['owner', 'admin'].includes(window.sgpWho?.role) : canChangeRecord(t, window.sgpWho);
+  }
+
+  function render() {
+    if (!forms.length) {
+      body.innerHTML = '<tr class="empty-row"><td colspan="6">עדיין אין טפסים באתר. לחצו "+ טופס חדש לקבלן" כדי ליצור קישור ולשלוח אותו.</td></tr>';
+      return;
+    }
+    body.innerHTML = forms.map(t => {
+      const count = (t.safety_training_attendees && t.safety_training_attendees[0] && t.safety_training_attendees[0].count) || 0;
+      const signed = t.status === 'submitted';
+      return `<tr class="st-row">
+        <td><strong>${esc(t.contractor_name || '—')}</strong></td>
+        <td class="${t.training_date ? '' : 'st-c-hide'}">${t.training_date ? fmtDate(t.training_date) : '—'}</td>
+        <td class="${signed ? '' : 'st-c-hide'}">${signed ? count + ' עובדים' : '—'}</td>
+        <td><span class="st-badge ${signed ? 'submitted' : 'open'}">${signed ? 'נחתם' : 'ממתין למילוי'}</span>
+          ${signed && t.submitted_at ? `<div class="st-sub">${fmtDate(t.submitted_at)}</div>` : ''}</td>
+        <td class="st-c-hide">${fmtDate(t.created_at)}</td>
+        <td class="row-actions"><div class="row-actions-inner">
+          ${signed
+            ? `<a class="btn btn-sm btn-outline" href="training.html?t=${t.token}" target="_blank" rel="noopener">צפייה והדפסה</a>`
+            : `<button class="btn btn-sm btn-primary" data-share="${t.id}">שליחה לקבלן</button>`}
+          ${canDelete(t) ? `<button class="icon-btn danger" data-del="${t.id}" title="מחיקה" aria-label="מחיקה">${uiIcon('trash')}</button>` : ''}
+        </div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  body.addEventListener('click', async e => {
+    const sh = e.target.closest('[data-share]');
+    if (sh) { openShare(forms.find(x => x.id === sh.dataset.share)); return; }
+    const del = e.target.closest('[data-del]');
+    if (!del) return;
+    const t = forms.find(x => x.id === del.dataset.del);
+    if (!t) return;
+    const what = t.status === 'submitted' ? 'הטופס החתום, כולל כל החתימות,' : 'הטופס והקישור שנשלח לקבלן';
+    if (!confirm(`למחוק את ${what} של ${t.contractor_name || 'הקבלן'}? אי אפשר לשחזר.`)) return;
+    const { error } = await sb.from('safety_trainings').delete().eq('id', t.id);
+    if (error) { toast('המחיקה נכשלה: ' + error.message, 'error'); return; }
+    toast('הטופס נמחק', 'success');
+    load();
+  });
+
+  // ---- a new form ----
+  document.getElementById('newFormBtn').addEventListener('click', () => {
+    newForm.reset();
+    hideMsg(newMsg);
+    newForm.site_name.value = [site.name, site.location].filter(Boolean).join(', ');
+    newModal.classList.add('open');
+    newForm.contractor_id.focus();
+  });
+  document.getElementById('newCancel').addEventListener('click', () => newModal.classList.remove('open'));
+  newForm.contractor_id.addEventListener('change', () => {
+    const c = contractors.find(x => x.id === newForm.contractor_id.value);
+    if (!c) return;
+    newForm.contractor_name.value = c.name || '';
+    newForm.contractor_reg.value = c.reg_number || '';
+  });
+  newForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const v = k => newForm[k].value.trim() || null;
+    if (!v('contractor_name')) { showMsg(newMsg, 'נא למלא את שם הקבלן', 'error'); return; }
+    const btn = document.getElementById('newSubmit');
+    btn.disabled = true;
+    const { data, error } = await sb.from('safety_trainings').insert({
+      site_id: site.id,
+      contractor_id: newForm.contractor_id.value || null,
+      contractor_name: v('contractor_name'),
+      contractor_reg: v('contractor_reg'),
+      site_name: v('site_name'),
+      client_name: v('client_name'),
+      site_manager_name: v('site_manager_name'),
+      training_date: v('training_date'),
+    }).select('id, token, status, contractor_id, contractor_name, training_date, submitted_at, created_at, created_by').single();
+    btn.disabled = false;
+    if (error) { showMsg(newMsg, 'השמירה נכשלה: ' + error.message, 'error'); return; }
+    newModal.classList.remove('open');
+    await load();
+    openShare(data);
+  });
+
+  // ---- send the link ----
+  function openShare(t) {
+    if (!t) return;
+    const link = sgpSafetyLink(location.origin + location.pathname.replace(/\/[^/]*$/, ''), t.token);
+    const text = sgpSafetyMessage(link, { site: site.name, company: org && org.name, contractor: t.contractor_name });
+    const c = contractors.find(x => x.id === t.contractor_id);
+    document.getElementById('shareTitle').textContent = 'שליחת הטופס ל' + (t.contractor_name || 'קבלן');
+    document.getElementById('shareLink').value = link;
+    document.getElementById('waBtn').href = sgpSafetyWhatsApp(text);
+    document.getElementById('mailBtn').href = sgpSafetyMailto(c && c.email, text);
+    document.getElementById('openBtn').href = link;
+    shareModal.classList.add('open');
+  }
+  document.getElementById('shareClose').addEventListener('click', () => shareModal.classList.remove('open'));
+  document.getElementById('copyBtn').addEventListener('click', async () => {
+    const input = document.getElementById('shareLink');
+    try { await navigator.clipboard.writeText(input.value); }
+    catch (e) { input.select(); document.execCommand('copy'); }
+    toast('הקישור הועתק', 'success');
+  });
+
+  await loadContractors();
+  await load();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,244 @@
+/* הדרכות בטיחות (2026-11-19): training.html — the page a contractor opens from a personal link
+   (no account, so it carries its own small stylesheet like the legal pages), and the form as a
+   printed A4 sheet (.sf-doc), blank or signed. */
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap');
+
+:root {
+  --navy: #0E1A20;
+  --navy-deep: #081014;
+  --green: #22D86B;
+  --green-deep: #16B650;
+  --bg: #F3F6F4;
+  --sheet: #FFFFFF;
+  --border: #E3E9E6;
+  --ink: #0E1A20;
+  --steel: #637178;
+  --danger: #D93847;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Rubik', 'Segoe UI', Tahoma, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.sf-top {
+  background: linear-gradient(175deg, var(--navy) 0%, var(--navy-deep) 100%);
+  padding: 14px 16px;
+  display: flex;
+  justify-content: center;
+}
+.sf-top img { display: block; height: 44px; width: auto; }
+
+.sf-wrap { max-width: 820px; margin: 20px auto 64px; padding: 0 16px; }
+
+.sf-state { text-align: center; padding: 48px 16px; color: var(--steel); }
+.sf-state h1 { color: var(--navy); font-size: 22px; margin: 0 0 8px; }
+
+.sf-banner {
+  background: var(--sheet);
+  border: 1px solid var(--border);
+  border-inline-start: 5px solid var(--green);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.sf-banner h1 { margin: 0 0 4px; font-size: 22px; color: var(--navy); }
+.sf-banner p { margin: 4px 0 0; color: var(--steel); font-size: 14.5px; }
+.sf-banner.done { border-inline-start-color: var(--green-deep); }
+
+.sf-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+
+.sf-btn {
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 10px;
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  background: var(--sheet);
+  color: var(--navy);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+}
+.sf-btn:hover { border-color: var(--steel); }
+.sf-btn.primary { background: var(--green); border-color: var(--green); color: var(--navy-deep); }
+.sf-btn.primary:hover { background: var(--green-deep); border-color: var(--green-deep); }
+.sf-btn.small { padding: 6px 12px; min-height: 36px; font-size: 14px; }
+.sf-btn.danger { color: var(--danger); }
+.sf-btn:disabled { opacity: .6; cursor: wait; }
+
+/* ---- the form to fill ---- */
+.sf-card {
+  background: var(--sheet);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 14px;
+}
+.sf-card h2 { margin: 0 0 10px; font-size: 17px; color: var(--navy); }
+.sf-hint { margin: 0 0 12px; color: var(--steel); font-size: 14px; }
+.sf-toolbar .sf-hint { margin: 0; align-self: center; }
+
+.sf-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.sf-fields .full { grid-column: 1 / -1; }
+.sf-fields label { display: block; font-size: 13.5px; font-weight: 600; color: var(--steel); margin-bottom: 4px; }
+.sf-fields input {
+  width: 100%;
+  font: inherit;
+  font-size: 16px; /* no zoom-in on iPhone */
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #FBFCFB;
+  color: var(--ink);
+}
+.sf-fields input:focus { outline: 2px solid rgba(34, 216, 107, .45); border-color: var(--green-deep); background: #fff; }
+.sf-req { color: var(--danger); }
+
+.sf-fixed { margin: 12px 0 0; padding: 10px 12px; background: var(--bg); border-radius: 9px; font-size: 14.5px; }
+
+.sf-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sf-checks label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14.5px;
+}
+.sf-checks input { width: 20px; height: 20px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--green-deep); }
+.sf-checks label:has(input:checked) { border-color: var(--green-deep); background: rgba(34, 216, 107, .07); }
+
+.sf-decl { margin: 0 0 12px; padding: 12px 14px; background: var(--bg); border-radius: 10px; font-size: 14.5px; }
+
+.sf-signbox { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sf-signbox img { height: 54px; max-width: 180px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+
+.sf-person {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.sf-person-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-weight: 700; }
+.sf-person-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.sf-person-foot .sf-summary { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.sf-person-foot .sf-summary input { width: 20px; height: 20px; accent-color: var(--green-deep); }
+.sf-person.signed { border-color: rgba(22, 182, 80, .55); }
+
+.sf-errors {
+  background: rgba(217, 56, 71, .07);
+  border: 1px solid rgba(217, 56, 71, .35);
+  color: var(--danger);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 14.5px;
+}
+.sf-errors ul { margin: 4px 0 0; padding-inline-start: 20px; }
+
+.sf-send { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.sf-send .sf-btn.primary { flex: 1 1 220px; font-size: 17px; }
+
+/* ---- signing window ---- */
+.sf-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(8, 16, 20, .55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.sf-modal-box { background: var(--sheet); border-radius: 16px; padding: 16px; width: 100%; max-width: 560px; }
+.sf-modal-box h3 { margin: 0 0 4px; font-size: 17px; }
+.sf-modal-box p { margin: 0 0 10px; color: var(--steel); font-size: 14px; }
+.sf-pad {
+  display: block;
+  width: 100%;
+  height: 200px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  background: #fff;
+  cursor: crosshair;
+}
+.sf-modal-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.sf-modal-actions .primary { flex: 1 1 auto; }
+
+@media (max-width: 600px) {
+  .sf-fields { grid-template-columns: minmax(0, 1fr); }
+  .sf-card { padding: 14px; }
+  .sf-pad { height: 180px; }
+}
+
+/* ---- the sheet (blank or signed), on screen and on A4 ---- */
+.sf-doc {
+  background: #fff;
+  color: #000;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 24px 26px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.sf-head { text-align: center; margin-bottom: 12px; }
+.sf-company { font-weight: 700; font-size: 14px; }
+.sf-title { margin: 2px 0 0; font-size: 20px; }
+.sf-part { margin-top: 14px; break-inside: avoid; }
+.sf-part h2 { font-size: 14.5px; margin: 0 0 6px; padding: 4px 8px; background: #EEF2F0; border-radius: 4px; }
+.sf-people-part { break-inside: auto; }
+.sf-intro { margin: 0 0 6px; }
+.sf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; }
+.sf-field { display: flex; gap: 6px; align-items: flex-end; min-height: 26px; }
+.sf-field.sf-wide { margin-top: 6px; }
+.sf-field.sf-full { grid-column: 1 / -1; }
+.sf-label { white-space: nowrap; font-weight: 600; }
+.sf-value { flex: 1; border-bottom: 1px solid #555; min-height: 20px; padding: 0 4px; }
+.sf-field.sf-wide .sf-value { border-bottom: 0; }
+.sf-value.sf-sign { min-height: 44px; }
+.sf-topics { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.sf-topics li { display: flex; gap: 8px; align-items: flex-start; }
+.sf-box {
+  width: 15px; height: 15px; border: 1.5px solid #000; flex-shrink: 0; margin-top: 2px;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1;
+}
+.sf-declaration { margin: 6px 0 10px; padding: 8px 10px; border: 1px solid #999; border-radius: 4px; }
+.sf-sig { height: 40px; max-width: 150px; object-fit: contain; display: block; }
+.sf-people { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sf-people th, .sf-people td { border: 1px solid #555; padding: 3px 5px; text-align: right; vertical-align: middle; }
+.sf-people th { background: #EEF2F0; }
+.sf-people td:first-child { width: 26px; text-align: center; }
+.sf-people .sf-c { text-align: center; width: 70px; }
+.sf-people td.sf-sign { width: 130px; height: 34px; }
+.sf-people tr { break-inside: avoid; }
+.sf-foot { margin-top: 14px; color: #555; font-size: 11px; text-align: center; }
+
+@media (max-width: 600px) {
+  .sf-doc { padding: 14px 12px; font-size: 12px; }
+  .sf-grid { grid-template-columns: minmax(0, 1fr); }
+  .sf-doc-scroll { overflow-x: auto; }
+}
+
+@page { size: A4; margin: 12mm; }
+@media print {
+  body { background: #fff; }
+  .sf-top, .no-print { display: none !important; }
+  .sf-wrap { margin: 0; padding: 0; max-width: none; }
+  .sf-doc { border: 0; border-radius: 0; padding: 0; }
+  .sf-doc-scroll { overflow: visible; }
+}

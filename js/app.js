@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   ]},
   { group: 'הגשות לאישור', key: 'vendor-submissions', icon: '📥', ico: 'group-submissions', items: [
     { href: 'vendor-contractors.html', label: 'קבלנים', icon: '👷', ico: 'contractors' },
+    { href: 'safety-trainings.html', label: 'הדרכות בטיחות', icon: '🦺', ico: 'contractors' },
     { href: 'vendor-suppliers.html',   label: 'ספקים', icon: '🚚', ico: 'suppliers' },
     { href: 'vendor-equipment.html',   label: 'ציוד', icon: '🛠️', ico: 'equipment' },
     { href: 'vendor-materials.html',   label: 'חומר', icon: '🧰', ico: 'materials' },

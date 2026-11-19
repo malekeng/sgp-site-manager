@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>טופס תיעוד הדרכת בטיחות | TADOK</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="application-name" content="TADOK">
+<meta name="theme-color" content="#0E1A20">
+<link rel="stylesheet" href="css/safety-form.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="sf-top no-print"><img src="brand/tadok-logo-transparent.png" alt="TADOK"></header>
+
+<main class="sf-wrap" id="root">
+  <div class="sf-state"><p>טוען את הטופס…</p></div>
+</main>
+
+<!-- signing window: one for the instructor and every worker -->
+<div class="sf-modal no-print" id="signModal" hidden>
+  <div class="sf-modal-box" role="dialog" aria-modal="true" aria-labelledby="signTitle">
+    <h3 id="signTitle">חתימה</h3>
+    <p>חתמו בתוך המסגרת עם האצבע, עט או עכבר.</p>
+    <canvas class="sf-pad" id="signPad"></canvas>
+    <div class="sf-errors" id="signMsg" hidden>נא לחתום בתוך המסגרת</div>
+    <div class="sf-modal-actions">
+      <button type="button" class="sf-btn primary" id="signOk">אישור החתימה</button>
+      <button type="button" class="sf-btn" id="signClear">ניקוי</button>
+      <button type="button" class="sf-btn" id="signCancel">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/safety-core.js"></script>
+<script src="js/safety-print.js"></script>
+<script src="js/signature-pad.js"></script>
+<script>
+(async function () {
+  const root = document.getElementById('root');
+  const params = new URLSearchParams(location.search);
+  const token = params.get('t') || '';
+  const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+  const BAD_LINK = `<div class="sf-state"><h1>הקישור אינו תקין</h1>
+    <p>ייתכן שהקישור הועתק חלקית או שהטופס הוסר. פנו לחברה ששלחה לכם את הקישור.</p></div>`;
+  const printBar = extra => `<div class="sf-toolbar no-print">
+    <button type="button" class="sf-btn primary" id="printBtn">🖨️ הדפסה</button>${extra || ''}</div>`;
+  const wirePrint = () => document.getElementById('printBtn').addEventListener('click', () => window.print());
+
+  // ---- a blank form, to print and fill by hand ----
+  if (params.get('blank') === '1') {
+    document.title = 'טופס ריק — הדרכת בטיחות | TADOK';
+    root.innerHTML = printBar('<span class="sf-hint">טופס ריק למילוי ידני: 20 שורות לעובדים. אפשר להדפיס כמה עמודים לפי הצורך.</span>')
+      + `<div class="sf-doc-scroll">${sgpSafetyDocHtml({}, { blank: true })}</div>`;
+    wirePrint();
+    return;
+  }
+
+  if (!sgpSafetyTokenOk(token)) { root.innerHTML = BAD_LINK; return; }
+
+  async function open() {
+    const { data, error } = await sb.rpc('safety_training_open', { p_token: token });
+    if (error || !data || !data.form) return null;
+    return data;
+  }
+  const data = await open();
+  if (!data) { root.innerHTML = BAD_LINK; return; }
+  if (data.form.status === 'submitted') { showSigned(data, false); return; }
+  showForm(data);
+
+  // ---- the signed copy (read only) ----
+  function showSigned(d, justSent) {
+    root.innerHTML = `<div class="sf-banner done no-print">
+        <h1>${justSent ? 'הטופס נשלח ונחתם. תודה!' : 'הטופס כבר נשלח'}</h1>
+        <p>זה העותק החתום${d.company ? ' שנשמר אצל ' + sfEsc(d.company) : ''}. אפשר להדפיס אותו או לשמור כ-PDF.</p>
+      </div>` + printBar() + `<div class="sf-doc-scroll">${sgpSafetyDocHtml(d)}</div>`;
+    wirePrint();
+    window.scrollTo(0, 0);
+  }
+
+  // ---- the form to fill and sign ----
+  function showForm(d) {
+    const DRAFT = 'tadok-training-' + token;
+    const fieldKeys = SAFETY_FIELDS.map(f => f.key);
+    const blankPerson = () => ({ full_name: '', id_number: '', profession: '', language: '', summary_received: false, signature: '' });
+    let state = null;
+    try { state = JSON.parse(localStorage.getItem(DRAFT) || 'null'); } catch (e) { state = null; }
+    if (!state || !state.form || !Array.isArray(state.people)) {
+      const form = {};
+      for (const k of fieldKeys) form[k] = d.form[k] == null ? '' : String(d.form[k]);
+      form.topics = Array.isArray(d.form.topics) ? d.form.topics.slice() : [];
+      form.instructor_signature = '';
+      if (!form.training_date) form.training_date = today();
+      if (!form.instructor_signed_on) form.instructor_signed_on = today();
+      state = { form, people: [blankPerson()] };
+    }
+    let saveTimer = null;
+    const saveDraft = () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => { try { localStorage.setItem(DRAFT, JSON.stringify(state)); } catch (e) { /* full or blocked: the form still works */ } }, 300);
+    };
+
+    const REQUIRED = ['contractor_name', 'training_date', 'instructor_name'];
+    const input = f => `<div class="${f.key === 'site_name' || f.key === 'instructor_role' ? 'full' : ''}">
+      <label for="f_${f.key}">${sfEsc(f.label)}${REQUIRED.includes(f.key) ? ' <span class="sf-req">*</span>' : ''}</label>
+      <input id="f_${f.key}" data-f="${f.key}" type="${f.type || 'text'}" maxlength="${SAFETY_MAX_TEXT}"></div>`;
+
+    root.innerHTML = `
+      <div class="sf-banner">
+        <h1>${sfEsc(SAFETY_TITLE)}</h1>
+        <p>${d.company ? sfEsc(d.company) : ''}${d.site ? ' · אתר ' + sfEsc(d.site) : ''}</p>
+        <p>ממלאים את הפרטים, מסמנים את הנושאים שהועברו, המדריך וכל עובד שהשתתף חותמים — ושולחים. מה שמילאתם נשמר במכשיר עד השליחה.</p>
+      </div>
+      <div class="sf-toolbar no-print"><a class="sf-btn small" href="training.html?blank=1" target="_blank" rel="noopener">טופס ריק להדפסה ומילוי ידני</a></div>
+
+      <section class="sf-card">
+        <h2>${sfEsc(SAFETY_PART_A)}</h2>
+        <div class="sf-fields">${SAFETY_FIELDS.filter(f => f.part === 'A').map(input).join('')}</div>
+        <p class="sf-fixed">אופן ההדרכה: ☒ ${sfEsc(SAFETY_FACE_TO_FACE)}</p>
+      </section>
+
+      <section class="sf-card">
+        <h2>${sfEsc(SAFETY_PART_B)}</h2>
+        <p class="sf-hint">${sfEsc(SAFETY_PART_B_INTRO)}</p>
+        <ul class="sf-checks">${SAFETY_TOPICS.map(t => `<li><label><input type="checkbox" data-topic="${t.key}">
+          <span><strong>${sfEsc(t.title)}:</strong> ${sfEsc(t.text)}</span></label></li>`).join('')}</ul>
+      </section>
+
+      <section class="sf-card">
+        <h2>${sfEsc(SAFETY_PART_C)}</h2>
+        <p class="sf-hint">${sfEsc(SAFETY_PART_C_INTRO)}</p>
+        <p class="sf-decl">"${sfEsc(SAFETY_DECLARATION)}"</p>
+        <div class="sf-fields">${SAFETY_FIELDS.filter(f => f.part === 'C').map(input).join('')}</div>
+        <div class="sf-signbox" style="margin-top:12px">
+          <button type="button" class="sf-btn" id="instructorSignBtn">✍️ חתימת המדריך <span class="sf-req">*</span></button>
+          <img id="instructorSig" alt="חתימת המדריך" hidden>
+        </div>
+      </section>
+
+      <section class="sf-card">
+        <h2>${sfEsc(SAFETY_PART_D)}</h2>
+        <p class="sf-hint">כל עובד שהשתתף בהדרכה: שם, ת"ז או דרכון, וחתימה. עד ${SAFETY_MAX_PEOPLE} עובדים בטופס.</p>
+        <div id="people"></div>
+        <button type="button" class="sf-btn" id="addPerson">+ הוספת עובד</button>
+      </section>
+
+      <div class="sf-errors" id="errors" hidden></div>
+      <div class="sf-send no-print">
+        <button type="button" class="sf-btn primary" id="sendBtn">שליחת הטופס החתום</button>
+      </div>`;
+
+    // values are set as properties, never written into the markup
+    root.querySelectorAll('[data-f]').forEach(el => { el.value = state.form[el.dataset.f] || ''; });
+    root.querySelectorAll('[data-topic]').forEach(el => { el.checked = state.form.topics.includes(el.dataset.topic); });
+    const instructorImg = document.getElementById('instructorSig');
+    const showInstructorSig = () => {
+      const ok = SAFETY_SIGNATURE_RE.test(state.form.instructor_signature || '');
+      instructorImg.hidden = !ok;
+      if (ok) instructorImg.src = state.form.instructor_signature;
+    };
+    showInstructorSig();
+
+    const peopleBox = document.getElementById('people');
+    function renderPeople() {
+      peopleBox.innerHTML = state.people.map((p, i) => `<div class="sf-person${p.signature ? ' signed' : ''}">
+        <div class="sf-person-head"><span>עובד ${i + 1}</span>
+          <button type="button" class="sf-btn small danger" data-remove="${i}" aria-label="הסרת עובד ${i + 1}">הסרה</button></div>
+        <div class="sf-fields">${SAFETY_PEOPLE.map(c => `<div class="${c.key === 'full_name' ? 'full' : ''}">
+          <label for="p_${i}_${c.key}">${sfEsc(c.label)}${c.key === 'full_name' ? ' <span class="sf-req">*</span>' : ''}</label>
+          <input id="p_${i}_${c.key}" data-i="${i}" data-k="${c.key}" maxlength="${SAFETY_MAX_TEXT}"></div>`).join('')}</div>
+        <div class="sf-person-foot">
+          <label class="sf-summary"><input type="checkbox" data-i="${i}" data-k="summary_received">קיבל תמצית מידע בכתב</label>
+          <div class="sf-signbox">${SAFETY_SIGNATURE_RE.test(p.signature || '') ? `<img src="${p.signature}" alt="חתימה">` : ''}
+            <button type="button" class="sf-btn small" data-sign="${i}">${p.signature ? 'חתימה מחדש' : '✍️ חתימה'}</button></div>
+        </div></div>`).join('');
+      peopleBox.querySelectorAll('[data-i]').forEach(el => {
+        const p = state.people[+el.dataset.i];
+        if (el.type === 'checkbox') el.checked = !!p[el.dataset.k];
+        else el.value = p[el.dataset.k] || '';
+      });
+    }
+    renderPeople();
+
+    root.addEventListener('input', e => {
+      const el = e.target;
+      if (el.dataset.f) state.form[el.dataset.f] = el.type === 'time' ? el.value.slice(0, 5) : el.value;
+      else if (el.dataset.topic) {
+        const set = new Set(state.form.topics);
+        el.checked ? set.add(el.dataset.topic) : set.delete(el.dataset.topic);
+        state.form.topics = SAFETY_TOPICS.map(t => t.key).filter(k => set.has(k));
+      } else if (el.dataset.i != null && el.dataset.k) {
+        const p = state.people[+el.dataset.i];
+        p[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value;
+      } else return;
+      saveDraft();
+    });
+
+    document.getElementById('addPerson').addEventListener('click', () => {
+      if (state.people.length >= SAFETY_MAX_PEOPLE) return;
+      state.people.push(blankPerson());
+      renderPeople();
+      saveDraft();
+      document.getElementById(`p_${state.people.length - 1}_full_name`).focus();
+    });
+    peopleBox.addEventListener('click', e => {
+      const rm = e.target.closest('[data-remove]');
+      if (rm) {
+        const i = +rm.dataset.remove, p = state.people[i];
+        if ((p.full_name || p.signature) && !confirm(`להסיר את ${p.full_name || 'העובד'} מהרשימה?`)) return;
+        state.people.splice(i, 1);
+        if (!state.people.length) state.people.push(blankPerson());
+        renderPeople();
+        saveDraft();
+        return;
+      }
+      const sg = e.target.closest('[data-sign]');
+      if (sg) {
+        const i = +sg.dataset.sign, p = state.people[i];
+        askSignature(`חתימת ${p.full_name || 'עובד ' + (i + 1)}`, url => { p.signature = url; renderPeople(); saveDraft(); });
+      }
+    });
+    document.getElementById('instructorSignBtn').addEventListener('click', () => {
+      askSignature(`חתימת המדריך${state.form.instructor_name ? ' — ' + state.form.instructor_name : ''}`, url => {
+        state.form.instructor_signature = url; showInstructorSig(); saveDraft();
+      });
+    });
+
+    // ---- send ----
+    const errorsBox = document.getElementById('errors');
+    const sendBtn = document.getElementById('sendBtn');
+    const showErrors = (title, list) => {
+      errorsBox.innerHTML = `<strong>${sfEsc(title)}</strong>${list && list.length ? `<ul>${list.map(x => `<li>${sfEsc(x)}</li>`).join('')}</ul>` : ''}`;
+      errorsBox.hidden = false;
+      errorsBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    sendBtn.addEventListener('click', async () => {
+      errorsBox.hidden = true;
+      const form = { topics: state.form.topics.slice(), instructor_signature: state.form.instructor_signature || '' };
+      for (const k of fieldKeys) form[k] = String(state.form[k] || '').trim();
+      // a row left completely empty is not a participant
+      const people = state.people
+        .filter(p => p.signature || SAFETY_PEOPLE.some(c => String(p[c.key] || '').trim()))
+        .map(p => ({ full_name: String(p.full_name || '').trim(), id_number: String(p.id_number || '').trim(),
+          profession: String(p.profession || '').trim(), language: String(p.language || '').trim(),
+          summary_received: !!p.summary_received, signature: p.signature || '' }));
+      const errs = sgpSafetyValidate(form, people);
+      if (errs.length) { showErrors('חסרים פרטים לפני השליחה:', errs); return; }
+      if (!confirm(`לשלוח את הטופס עם ${people.length} עובדים? אחרי השליחה אי אפשר לשנות אותו.`)) return;
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'שולח…';
+      const { error } = await sb.rpc('safety_training_submit', { p_token: token, p_form: form, p_people: people });
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'שליחת הטופס החתום';
+      if (error) {
+        const m = String(error.message || '');
+        if (m.includes('safety_already_submitted')) {
+          try { localStorage.removeItem(DRAFT); } catch (e) { /* ignore */ }
+          const again = await open();
+          if (again) { showSigned(again, false); return; }
+          showErrors('הטופס כבר נשלח.');
+        } else if (m.includes('safety_not_found')) {
+          root.innerHTML = BAD_LINK;
+        } else if (m.includes('safety_invalid')) {
+          showErrors('חלק מהפרטים אינם תקינים. בדקו את הטופס ונסו שוב.', [m.replace(/^.*safety_invalid:\s*/, '')]);
+        } else {
+          showErrors('השליחה נכשלה — בדקו את החיבור לאינטרנט ונסו שוב. כל מה שמילאתם והחתימות נשמרו במכשיר.');
+        }
+        return;
+      }
+      try { localStorage.removeItem(DRAFT); } catch (e) { /* ignore */ }
+      const sent = await open();
+      if (sent) showSigned(sent, true);
+      else root.innerHTML = '<div class="sf-state"><h1>הטופס נשלח ונחתם. תודה!</h1></div>';
+    });
+  }
+
+  // ---- the signing window ----
+  let pad = null, onSigned = null;
+  const modal = document.getElementById('signModal');
+  const signMsg = document.getElementById('signMsg');
+  function askSignature(title, done) {
+    document.getElementById('signTitle').textContent = title;
+    signMsg.hidden = true;
+    modal.hidden = false;
+    onSigned = done;
+    if (!pad) pad = sgpSignaturePad(document.getElementById('signPad'), { onChange: () => { signMsg.hidden = true; } });
+    else pad.fit();
+  }
+  const closeSign = () => { modal.hidden = true; onSigned = null; };
+  document.getElementById('signCancel').addEventListener('click', closeSign);
+  document.getElementById('signClear').addEventListener('click', () => pad && pad.clear());
+  document.getElementById('signOk').addEventListener('click', () => {
+    if (!pad || pad.isEmpty()) { signMsg.hidden = false; return; }
+    const url = pad.toDataURL(), done = onSigned;
+    closeSign();
+    if (done) done(url);
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeSign(); });
+})();
+</script>
+</body>
+</html>
