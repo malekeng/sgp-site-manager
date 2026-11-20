@@ -512,21 +512,32 @@ async function orgLogo(org) {
   return { src: PLATFORM_LOGO, isCompany: false };
 }
 
-// The same, as markup for a PDF banner. A company logo is inlined as a data URL:
-// html2canvas cannot paint a cross-origin image it isn't allowed to read, and one
-// tainted image would abort the whole export.
+// Every file the site produces (2026-11-20): the company's logo where it uploaded one, and TADOK's
+// logo always, as the second logo (pdfTadokMarkHtml / sgpXlTadok / the safety form's sf-tadok).
+// TADOK_LOGO_DARK is the same logo with navy lettering, for white paper.
+const TADOK_LOGO_DARK = 'brand/tadok-logo-dark.png';
+
+// The company's logo as markup for a file's header, or '' when it has none (TADOK has its own
+// place). Inlined as a data URL: html2canvas cannot paint a cross-origin image it isn't
+// allowed to read, and one tainted image would abort the whole export.
 async function pdfLogoHtml(height = 38) {
   const logo = await orgLogo(activeOrg);
-  if (logo.isCompany) {
-    try {
-      const blob = await (await fetch(logo.src)).blob();
-      const dataUrl = await new Promise((resolve, reject) => {
-        const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob);
-      });
-      return `<div style="background:#fff;border-radius:8px;padding:5px 8px;display:flex;align-items:center;"><img src="${dataUrl}" style="height:${height - 10}px;display:block;"></div>`;
-    } catch (_) { /* fall back to the platform logo */ }
+  if (!logo.isCompany) return '';
+  try {
+    const blob = await (await fetch(logo.src)).blob();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob);
+    });
+    return `<div style="background:#fff;border-radius:8px;padding:5px 8px;display:flex;align-items:center;"><img src="${dataUrl}" style="height:${height - 10}px;display:block;"></div>`;
+  } catch (_) {
+    return '';   // the logo could not be read: the file still has the company's name and TADOK's logo
   }
-  return `<img src="${PLATFORM_LOGO}" style="height:${height}px;display:block;">`;
+}
+
+// TADOK's logo, the second logo of every file: light lettering on a dark band, navy on white paper.
+// Same-origin, so html2canvas paints it as is.
+function pdfTadokMarkHtml(height = 26, onDark = true) {
+  return `<img src="${onDark ? PLATFORM_LOGO : TADOK_LOGO_DARK}" alt="TADOK" style="height:${height}px;display:block;">`;
 }
 
 const SGP_ACTIVE_ORG_KEY = 'sgp_active_org_id';

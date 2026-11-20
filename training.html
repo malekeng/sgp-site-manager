@@ -53,19 +53,48 @@
   const wirePrint = () => document.getElementById('printBtn').addEventListener('click', () => window.print());
 
   // ---- a blank form, to print and fill by hand ----
+  // The company page links ?blank=1&o=<company>: a signed-in member gets the company's name and logo
+  // on it (row-level security decides); anyone else gets the form with TADOK's logo only.
+  async function blankCompany() {
+    const orgId = params.get('o') || '';
+    if (!/^[0-9a-f-]{36}$/.test(orgId)) return {};
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return {};
+      const { data: co } = await sb.from('organizations').select('name, logo_path').eq('id', orgId).maybeSingle();
+      if (!co) return {};
+      let logo = null;
+      if (co.logo_path) {
+        const { data: signed } = await sb.storage.from('documents').createSignedUrl(co.logo_path, 3600);
+        logo = (signed && signed.signedUrl) || null;
+      }
+      return { name: co.name, logo };
+    } catch (e) { return {}; }
+  }
   if (params.get('blank') === '1') {
     document.title = 'טופס ריק — הדרכת בטיחות | TADOK';
+    const co = await blankCompany();
     root.innerHTML = printBar('<span class="sf-hint">טופס ריק למילוי ידני: 20 שורות לעובדים. אפשר להדפיס כמה עמודים לפי הצורך.</span>')
-      + `<div class="sf-doc-scroll">${sgpSafetyDocHtml({}, { blank: true })}</div>`;
+      + `<div class="sf-doc-scroll">${sgpSafetyDocHtml({ company: co.name, logo: co.logo }, { blank: true })}</div>`;
     wirePrint();
     return;
   }
 
   if (!sgpSafetyTokenOk(token)) { root.innerHTML = BAD_LINK; return; }
 
+  // the company's logo for its form: the visitor has no account and cannot read the company's
+  // files, so the server function safety-logo checks the token and lends the logo for an hour
+  async function companyLogo() {
+    try {
+      const { data: r } = await sb.functions.invoke('safety-logo', { body: { t: token } });
+      return r && typeof r.logo === 'string' ? r.logo : null;
+    } catch (e) { return null; }
+  }
+  const logoAsked = companyLogo();
   async function open() {
     const { data, error } = await sb.rpc('safety_training_open', { p_token: token });
     if (error || !data || !data.form) return null;
+    data.logo = await logoAsked;
     return data;
   }
   const data = await open();

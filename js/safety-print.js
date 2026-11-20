@@ -4,6 +4,15 @@
 // Needs js/safety-core.js. Styles: css/safety-form.css (.sf-*).
 
 const SAFETY_BLANK_ROWS = 20;
+// TADOK's logo with navy lettering, for white paper
+const SAFETY_TADOK_LOGO = 'brand/tadok-logo-dark.png';
+
+// the company's logo goes into an attribute: only a picture inlined as data, or an https address
+// with nothing in it that could close the attribute
+function sfLogoOk(url) {
+  return typeof url === 'string'
+    && (/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(url) || /^https:\/\/[^\s"'<>`]+$/.test(url));
+}
 
 // values only ever go into text, never into an attribute, so & < > are all that need escaping
 // (and the form's own texts keep their quotes: 'חלק א'', '"בעל מקצוע מתאים"')
@@ -43,7 +52,10 @@ function sgpSafetyDocHtml(data, opts = {}) {
   const partC = SAFETY_FIELDS.filter(x => x.part === 'C');
   const byKey = k => SAFETY_FIELDS.find(x => x.key === k);
 
+  // the company's logo when it has one, TADOK's always (every file the site produces, 2026-11-20)
   const head = `<header class="sf-head">
+    <div class="sf-logos">${sfLogoOk(d.logo) ? `<img class="sf-logo" src="${d.logo}" alt="">` : '<span></span>'}
+      <img class="sf-tadok" src="${SAFETY_TADOK_LOGO}" alt="TADOK"></div>
     ${d.company ? `<div class="sf-company">${sfEsc(d.company)}</div>` : ''}
     <h1 class="sf-title">${sfEsc(SAFETY_TITLE)}</h1>
   </header>`;

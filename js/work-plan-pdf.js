@@ -14,14 +14,17 @@ function wpPdfDot(color) {
   return `<span style="display:block;width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;"></span>`;
 }
 
-function wpPdfHeader({ orgName, logoHtml, site, plan }) {
+// The company's logo (when it has one) and name, TADOK's logo opposite (every file carries it, 2026-11-20).
+function wpPdfHeader({ orgName, logoHtml, tadokHtml, site, plan }) {
   const where = [site.name, site.location].filter(Boolean).map(wpEsc).join(' · ');
   return `
     <div style="background:${WP_NAVY};color:#fff;padding:18px ${WP_PDF_PAD}px 14px;">
-      <div style="display:flex;align-items:center;gap:14px;">
-        ${logoHtml}
-        <div style="width:1px;height:26px;background:rgba(255,255,255,0.28);"></div>
-        <div style="font-size:14px;font-weight:700;">${wpEsc(orgName)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          ${logoHtml ? `${logoHtml}<div style="width:1px;height:26px;background:rgba(255,255,255,0.28);"></div>` : ''}
+          <div style="font-size:14px;font-weight:700;">${wpEsc(orgName)}</div>
+        </div>
+        ${tadokHtml || ''}
       </div>
       <div style="margin-top:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.72);">${where}</div>
       <div style="margin-top:2px;font-size:25px;font-weight:800;line-height:1.25;">תכנית עבודה שבועית</div>
@@ -73,8 +76,8 @@ function wpPdfFooter({ site, genDate }) {
 }
 
 // `heights` are the measured sizes: { head, cards: [...] }; without them everything is on one page.
-function workPlanPdfPages({ orgName, logoHtml, site, plan, tasks, genDate, heights }) {
-  const head = `<div data-wp-head>${wpPdfHeader({ orgName, logoHtml, site, plan })}${wpPdfLegend(wpGroups(tasks))}${wpPdfWarning()}${wpPdfNotes(plan.notes)}</div>`;
+function workPlanPdfPages({ orgName, logoHtml, tadokHtml, site, plan, tasks, genDate, heights }) {
+  const head = `<div data-wp-head>${wpPdfHeader({ orgName, logoHtml, tadokHtml, site, plan })}${wpPdfLegend(wpGroups(tasks))}${wpPdfWarning()}${wpPdfNotes(plan.notes)}</div>`;
   const cards = wpSheet(tasks).map(wpPdfDayCard);
   const foot = wpPdfFooter({ site, genDate });
   const room = WP_PDF_H - WP_PDF_FOOT - WP_PDF_PAD / 2;
@@ -104,7 +107,7 @@ async function wpPdfMeasure(args) {
 async function exportWorkPlanPdf({ site, plan, tasks }) {
   try {
     const now = new Date();
-    const args = { orgName: orgDisplayName(), logoHtml: await pdfLogoHtml(34), site, plan, tasks,
+    const args = { orgName: orgDisplayName(), logoHtml: await pdfLogoHtml(34), tadokHtml: pdfTadokMarkHtml(24), site, plan, tasks,
       genDate: `${now.getDate()}.${now.getMonth() + 1}.${now.getFullYear()}` };
     const pages = workPlanPdfPages({ ...args, heights: await wpPdfMeasure(args) });
     const pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });

@@ -200,6 +200,10 @@ body {
   line-height: 1.45;
 }
 .sf-head { text-align: center; margin-bottom: 12px; }
+/* the company's logo on the reading side, TADOK's opposite */
+.sf-logos { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.sf-logo { max-height: 56px; max-width: 220px; object-fit: contain; display: block; }
+.sf-tadok { height: 30px; width: auto; display: block; }
 .sf-company { font-weight: 700; font-size: 14px; }
 .sf-title { margin: 2px 0 0; font-size: 20px; }
 .sf-part { margin-top: 14px; break-inside: avoid; }

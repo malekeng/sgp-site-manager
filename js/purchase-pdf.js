@@ -12,13 +12,13 @@ const PO_PDF_COLS = [
 ];
 const PO_PDF_SIGNS = ['הוזמן ע"י (שם וחתימה)', 'אישור מנהל/ת פרויקט', 'אישור הספק (חתימה וחותמת)'];
 
-function poPdfFirstHead({ orgName, logoHtml, site, order, items, company, genStr }) {
+function poPdfFirstHead({ orgName, logoHtml, tadokHtml, site, order, items, company, genStr }) {
   const c = company || {}, who = order.orderer || {}, esc = rebarPdfEsc;
   const dot = parts => parts.filter(x => String(x || '').trim()).join(' · ');
   const contacts = (order.contacts || []).map(x => esc(dot([x.name, x.phone]))).join('<br>');
   const draft = order.status === 'draft'
     ? '<span style="display:inline-block;margin-inline-start:10px;padding:3px 12px;border-radius:999px;background:#FFF1DC;color:#8A5300;font-size:12px;font-weight:800;vertical-align:middle;">טיוטה</span>' : '';
-  return `<div data-po-head>${rebarPdfBanner(orgName, logoHtml, genStr, PO_PDF_TITLE)}
+  return `<div data-po-head>${rebarPdfBanner(orgName, logoHtml, genStr, PO_PDF_TITLE, tadokHtml)}
     <div style="padding:22px 40px 4px;">
       <div style="display:flex;align-items:center;gap:16px;">
         <div style="width:62px;height:62px;border-radius:18px;background:#F3F6F4;border:1px solid #E3E9E6;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
@@ -98,7 +98,7 @@ function poPdfTail({ order, items }) {
 }
 
 // `heights` are the measured sizes: { head, thead, next, foot, rows: [...], tail }; without them all is on one page.
-function purchasePdfPages({ orgName, logoHtml, site, order, items, company, genStr, heights }) {
+function purchasePdfPages({ orgName, logoHtml, tadokHtml, site, order, items, company, genStr, heights }) {
   const gen = genStr || new Date().toLocaleDateString('he-IL');
   const rows = (items || []).map(poPdfRow);
   const tail = poPdfTail({ order, items });
@@ -107,7 +107,7 @@ function purchasePdfPages({ orgName, logoHtml, site, order, items, company, genS
     ? poPaginate(h.rows, h.tail, PO_PDF_H - h.head - h.thead - h.foot - PO_PDF_TABLE_PAD, PO_PDF_H - h.next - h.thead - h.foot - PO_PDF_TABLE_PAD)
     : [{ rows: rows.map((_, i) => i), tail: true }];
   return sets.map((set, p) => {
-    const head = p === 0 ? poPdfFirstHead({ orgName, logoHtml, site, order, items, company, genStr: gen }) : rebarPdfNextHead(orgName, order, PO_PDF_TITLE);
+    const head = p === 0 ? poPdfFirstHead({ orgName, logoHtml, tadokHtml, site, order, items, company, genStr: gen }) : rebarPdfNextHead(orgName, order, PO_PDF_TITLE);
     const table = set.rows.length || p === 0 ? poPdfTable(set.rows.map(i => rows[i]).join('')) : '';
     return head + table + (set.tail ? tail : '') + `<div data-po-foot style="margin-top:auto;">${rebarPdfFoot(orgName, order, p + 1, sets.length, PO_PDF_TITLE)}</div>`;
   });
@@ -128,8 +128,8 @@ async function poPdfMeasure(args) {
 }
 
 async function poExportPdf({ order, items, site, company }) {
-  const logo = await orgLogo(activeOrg);
-  const args = { orgName: orgDisplayName(), logoHtml: logo.isCompany ? await pdfLogoHtml(40) : '', site, order, items, company, genStr: sgpGeneratedAt() };
+  const args = { orgName: orgDisplayName(), logoHtml: await pdfLogoHtml(40), tadokHtml: pdfTadokMarkHtml(28),
+    site, order, items, company, genStr: sgpGeneratedAt() };
   const pages = purchasePdfPages({ ...args, heights: await poPdfMeasure(args) });
   const pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   for (let p = 0; p < pages.length; p++) {

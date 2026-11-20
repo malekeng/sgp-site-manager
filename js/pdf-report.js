@@ -82,22 +82,25 @@ function sgpGeneratedAt() {
 }
 
 // ---- page parts -------------------------------------------------------------------
-// Dark band: the company's logo and name on the reading side, the print date opposite.
-function sgpBannerHtml(genStr, logoHtml) {
+// Dark band: the company's logo (when it has one) and name on the reading side, the print date and
+// TADOK's logo opposite — every file carries TADOK's logo (2026-11-20).
+function sgpBannerHtml(genStr, logoHtml, tadokHtml = '') {
   return `
     <div style="position:relative;overflow:hidden;background:linear-gradient(120deg,#0E1A20 0%,#16262E 100%);padding:26px 40px;display:flex;align-items:center;justify-content:space-between;">
       <div style="position:absolute;left:-70px;top:-90px;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(34,216,107,0.26) 0%,rgba(34,216,107,0) 70%);"></div>
       <div style="position:relative;display:flex;align-items:center;gap:16px;">
-        ${logoHtml}
-        <div style="width:1px;height:36px;background:rgba(255,255,255,0.18);"></div>
+        ${logoHtml ? `${logoHtml}<div style="width:1px;height:36px;background:rgba(255,255,255,0.18);"></div>` : ''}
         <div>
           <div style="color:#fff;font-size:16px;font-weight:800;letter-spacing:-0.2px;">${esc(orgDisplayName())}</div>
           <div style="color:rgba(255,255,255,0.6);font-size:11.5px;margin-top:3px;">דוח ממערכת ניהול האתר</div>
         </div>
       </div>
-      <div style="position:relative;text-align:left;">
-        <div style="color:rgba(255,255,255,0.55);font-size:10.5px;font-weight:600;">תאריך הפקה</div>
-        <div style="color:#fff;font-size:13px;font-weight:700;margin-top:3px;">${genStr}</div>
+      <div style="position:relative;display:flex;align-items:center;gap:16px;">
+        <div style="text-align:left;">
+          <div style="color:rgba(255,255,255,0.55);font-size:10.5px;font-weight:600;">תאריך הפקה</div>
+          <div style="color:#fff;font-size:13px;font-weight:700;margin-top:3px;">${genStr}</div>
+        </div>
+        ${tadokHtml ? `<div style="width:1px;height:30px;background:rgba(255,255,255,0.18);"></div>${tadokHtml}` : ''}
       </div>
     </div>
     <div style="height:4px;background:linear-gradient(90deg,#16B650 0%,#22D86B 50%,#16B650 100%);"></div>`;
@@ -218,6 +221,7 @@ function sgpLayoutOf(columns, layout) {
 async function sgpRenderSectionIntoPdf(pdf, { title, columns, rows, siteNames, periodText, periodLabel, subtitle, ico, layout, cardTitleKey }, { isFirstSectionOverall } = {}) {
   if (!rows || !rows.length) return 0;
   const bannerLogo = await pdfLogoHtml(40);
+  const bannerTadok = pdfTadokMarkHtml(28);
 
   const { useCardLayout, landscape } = sgpLayoutOf(columns, layout);
   const isLongField = c => c.type === 'multiline' || c.type === 'docs' || SGP_LONG_KEYS.includes(c.key);
@@ -283,7 +287,7 @@ async function sgpRenderSectionIntoPdf(pdf, { title, columns, rows, siteNames, p
   }
   const cardsWrap = cardsHtml => `<div style="padding:18px 40px 22px;">${cardsHtml}</div>`;
 
-  const headFirst = sgpBannerHtml(genStr, bannerLogo)
+  const headFirst = sgpBannerHtml(genStr, bannerLogo, bannerTadok)
     + sgpTitleBlockHtml({ title, subtitle, names, period, periodLabel, count: rows.length, ico });
   const headNext = sgpContinuationHeaderHtml(title);
   const foot = sgpFooterHtml(title);
@@ -360,15 +364,17 @@ async function sgpExportPdf(opts) {
 
 // Cover of the full-system export: company, scope, and a contents list with the page
 // each module starts on.
-function sgpCoverHtml({ fileTitle, names, period, genStr, logoHtml, toc }) {
+function sgpCoverHtml({ fileTitle, names, period, genStr, logoHtml, tadokHtml, toc }) {
   const total = toc.reduce((a, t) => a + t.count, 0);
   return `
     <div style="position:relative;overflow:hidden;background:linear-gradient(135deg,#0E1A20 0%,#16262E 70%,#0E1A20 100%);padding:54px 48px 46px;">
       <div style="position:absolute;left:-120px;top:-140px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(34,216,107,0.30) 0%,rgba(34,216,107,0) 70%);"></div>
-      <div style="position:relative;display:flex;align-items:center;gap:16px;">
-        ${logoHtml}
-        <div style="width:1px;height:40px;background:rgba(255,255,255,0.18);"></div>
-        <div style="color:#fff;font-size:18px;font-weight:800;">${esc(orgDisplayName())}</div>
+      <div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+        <div style="display:flex;align-items:center;gap:16px;">
+          ${logoHtml ? `${logoHtml}<div style="width:1px;height:40px;background:rgba(255,255,255,0.18);"></div>` : ''}
+          <div style="color:#fff;font-size:18px;font-weight:800;">${esc(orgDisplayName())}</div>
+        </div>
+        ${tadokHtml || ''}
       </div>
       <div style="position:relative;margin-top:44px;color:#22D86B;font-size:12px;font-weight:800;letter-spacing:1.5px;">דוח מרוכז</div>
       <div style="position:relative;color:#fff;font-size:38px;font-weight:900;margin-top:6px;letter-spacing:-0.6px;">${sgpEsc(fileTitle)}</div>
@@ -413,7 +419,7 @@ async function sgpExportFullSystem({ sections, siteNames, periodText, fileTitle 
     pdf.setPage(1);
     const cover = sgpCoverHtml({
       fileTitle: title, names: siteNames || [], period: periodText || 'כל התקופה',
-      genStr: sgpGeneratedAt(), logoHtml: await pdfLogoHtml(46), toc,
+      genStr: sgpGeneratedAt(), logoHtml: await pdfLogoHtml(46), tadokHtml: pdfTadokMarkHtml(32), toc,
     });
     const probe = sgpMakeRoot(920);
     probe.innerHTML = sgpFooterHtml(title);

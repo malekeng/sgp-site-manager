@@ -34,7 +34,9 @@ const RP_SECTIONS = {
   element: { title: 'אלמנטים', heads: ['#', 'שרטוט', 'כינוי', 'סוג', 'פירוט', 'כמות', 'יחידה ק״ג', 'סה״כ ק״ג'] },
 };
 
-function rebarPdfBanner(orgName, logoHtml, genStr, title = 'הזמנת ברזל') {
+// Dark band: the company's logo (when it has one) and name on the reading side; the print date and
+// TADOK's logo opposite — every file carries TADOK's logo (2026-11-20).
+function rebarPdfBanner(orgName, logoHtml, genStr, title = 'הזמנת ברזל', tadokHtml = '') {
   return `
     <div style="position:relative;overflow:hidden;background:linear-gradient(120deg,#0E1A20 0%,#16262E 100%);padding:24px 40px;display:flex;align-items:center;justify-content:space-between;">
       <div style="position:absolute;left:-70px;top:-90px;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(34,216,107,0.26) 0%,rgba(34,216,107,0) 70%);"></div>
@@ -45,9 +47,12 @@ function rebarPdfBanner(orgName, logoHtml, genStr, title = 'הזמנת ברזל'
           <div style="color:rgba(255,255,255,0.6);font-size:11.5px;margin-top:3px;">${title}</div>
         </div>
       </div>
-      <div style="position:relative;text-align:left;">
-        <div style="color:rgba(255,255,255,0.55);font-size:10.5px;font-weight:600;">תאריך הפקה</div>
-        <div style="color:#fff;font-size:13px;font-weight:700;margin-top:3px;">${rebarPdfEsc(genStr)}</div>
+      <div style="position:relative;display:flex;align-items:center;gap:16px;">
+        <div style="text-align:left;">
+          <div style="color:rgba(255,255,255,0.55);font-size:10.5px;font-weight:600;">תאריך הפקה</div>
+          <div style="color:#fff;font-size:13px;font-weight:700;margin-top:3px;">${rebarPdfEsc(genStr)}</div>
+        </div>
+        ${tadokHtml ? `<div style="width:1px;height:30px;background:rgba(255,255,255,0.18);"></div>${tadokHtml}` : ''}
       </div>
     </div>
     <div style="height:4px;background:linear-gradient(90deg,#16B650 0%,#22D86B 50%,#16B650 100%);"></div>`;
@@ -75,11 +80,11 @@ function rebarPdfInfoBox(title, rows) {
     </div>`;
 }
 
-function rebarPdfFirstHead({ orgName, logoHtml, site, order, summary, genStr, company }) {
+function rebarPdfFirstHead({ orgName, logoHtml, tadokHtml, site, order, summary, genStr, company }) {
   const who = order.orderer || {}, c = company || {};
   const dot = parts => parts.filter(x => String(x || '').trim()).join(' · ');
   const contacts = (order.contacts || []).map(c => rebarPdfEsc([c.name, c.phone, c.role].filter(Boolean).join(' · '))).join('<br>');
-  return rebarPdfBanner(orgName, logoHtml, genStr) + `
+  return rebarPdfBanner(orgName, logoHtml, genStr, undefined, tadokHtml) + `
     <div style="padding:22px 40px 4px;">
       <div style="display:flex;align-items:center;gap:16px;">
         <div style="width:62px;height:62px;border-radius:18px;background:#F3F6F4;border:1px solid #E3E9E6;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
@@ -254,7 +259,7 @@ function rebarPdfDrawingPages({ orgName, order, items, drawings, start, total })
 
 // One HTML string per A4 page. Lines flow bar → mesh → pile, REBAR_PDF_ROWS per page,
 // never split; the summary goes on the last page when it has room, else on a page of its own.
-function rebarPdfPages({ orgName, logoHtml, site, order, items, summary, drawings, genStr, company }) {
+function rebarPdfPages({ orgName, logoHtml, tadokHtml, site, order, items, summary, drawings, genStr, company }) {
   const rank = { bar: 0, mesh: 1, pile: 2, element: 3 };
   const lines = [...items].sort((a, b) => rank[a.kind] - rank[b.kind] || a.line_no - b.line_no);
   const chunks = [];
@@ -272,7 +277,7 @@ function rebarPdfPages({ orgName, logoHtml, site, order, items, summary, drawing
   const drawingPages = Math.ceil(rebarPdfDrawnElements(items, drawings).length / REBAR_PDF_DRAWINGS_PER_PAGE);
   const total = chunks.length + drawingPages;
   return chunks.map((chunk, p) => {
-    const head = p === 0 ? rebarPdfFirstHead({ orgName, logoHtml, site, order, summary, genStr: gen, company }) : rebarPdfNextHead(orgName, order);
+    const head = p === 0 ? rebarPdfFirstHead({ orgName, logoHtml, tadokHtml, site, order, summary, genStr: gen, company }) : rebarPdfNextHead(orgName, order);
     const body = Object.keys(RP_SECTIONS).map(kind => {
       const own = chunk.filter(it => it.kind === kind);
       if (!own.length) return '';
@@ -338,9 +343,8 @@ async function rebarExportPdf({ order, items, site, company }) {
     const mesh = it.kind === 'mesh' ? meshSvg(it.params, it.diameter_mm, { w: 210, h: 77, stroke: 2 }) : null;
     if (mesh) drawings['m' + it.line_no] = await rebarSvgToPng(mesh, 210, 77);
   }
-  const logo = await orgLogo(activeOrg);
-  const logoHtml = logo.isCompany ? await pdfLogoHtml(40) : '';
-  const pages = rebarPdfPages({ orgName: orgDisplayName(), logoHtml, site, order, items, summary, drawings, genStr: sgpGeneratedAt(), company });
+  const pages = rebarPdfPages({ orgName: orgDisplayName(), logoHtml: await pdfLogoHtml(40), tadokHtml: pdfTadokMarkHtml(28),
+    site, order, items, summary, drawings, genStr: sgpGeneratedAt(), company });
   const pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   for (let p = 0; p < pages.length; p++) {
     await sgpPaintPage(pdf, pages[p], { rootW: REBAR_PDF_W, landscape: false, footPx: 50, addPage: p > 0 });

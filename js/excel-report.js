@@ -78,24 +78,23 @@ function sgpXlSheetName(title, wb) {
   return name;
 }
 
-// The company's logo as a PNG the workbook can embed: its own logo on a white chip (it
-// may be dark), or the platform logo as is (white lettering, drawn on the dark band).
+// The company's logo as a PNG the workbook can embed, on a white chip (it may be dark); null when
+// the company has none — TADOK's logo has its own place on the band (sgpXlTadok, 2026-11-20).
 async function sgpXlLogo(wb) {
   try {
     const logo = await orgLogo(activeOrg);
+    if (!logo.isCompany) return null;
     const blob = await (await fetch(logo.src)).blob();
     const url = URL.createObjectURL(blob);
     try {
       const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
-      const H = 76, pad = logo.isCompany ? 12 : 0;       // drawn at 2x
+      const H = 76, pad = 12;       // drawn at 2x
       const w = Math.round(img.naturalWidth * (H - pad * 2) / img.naturalHeight) + pad * 2;
       const c = document.createElement('canvas');
       c.width = w; c.height = H;
       const g = c.getContext('2d');
-      if (logo.isCompany) {
-        g.fillStyle = '#ffffff';
-        if (g.roundRect) { g.beginPath(); g.roundRect(0, 0, w, H, 14); g.fill(); } else g.fillRect(0, 0, w, H);
-      }
+      g.fillStyle = '#ffffff';
+      if (g.roundRect) { g.beginPath(); g.roundRect(0, 0, w, H, 14); g.fill(); } else g.fillRect(0, 0, w, H);
       g.drawImage(img, pad, pad, w - pad * 2, H - pad * 2);
       return { id: wb.addImage({ base64: c.toDataURL('image/png'), extension: 'png' }), w: w / 2, h: H / 2 };
     } finally {
@@ -105,6 +104,41 @@ async function sgpXlLogo(wb) {
     console.warn('Excel export: logo skipped', err);
     return null;
   }
+}
+
+// TADOK's logo, the second logo of every file: white lettering, drawn on the dark band as is.
+async function sgpXlTadok(wb) {
+  try {
+    const blob = await (await fetch(PLATFORM_LOGO)).blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+      const H = 56, w = Math.round(img.naturalWidth * H / img.naturalHeight);   // drawn at 2x
+      const c = document.createElement('canvas');
+      c.width = w; c.height = H;
+      c.getContext('2d').drawImage(img, 0, 0, w, H);
+      return { id: wb.addImage({ base64: c.toDataURL('image/png'), extension: 'png' }), w: w / 2, h: H / 2 };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch (err) {
+    console.warn('Excel export: TADOK logo skipped', err);
+    return null;
+  }
+}
+
+// An exact anchor (in EMU, 9525 per pixel) for an image px wide that ends gap px before column n's
+// far edge, topPx below the sheet's top. The sheet reads right to left, so that edge is the band's
+// left end, opposite the company logo. (ExcelJS's own fractional columns assume a rough width.)
+function sgpXlAnchorFromEnd(ws, n, px, gap, topPx) {
+  const EMU = 9525;
+  let left = px + gap;
+  for (let c = n; c >= 1; c--) {
+    const w = Math.round((ws.getColumn(c).width || 9) * 7 + 5);
+    if (left <= w) return { nativeCol: c - 1, nativeColOff: Math.round((w - left) * EMU), nativeRow: 0, nativeRowOff: Math.round(topPx * EMU) };
+    left -= w;
+  }
+  return { nativeCol: 0, nativeColOff: 0, nativeRow: 0, nativeRowOff: Math.round(topPx * EMU) };
 }
 
 // One formatted worksheet: letterhead, title, a line of facts, then the table.
@@ -149,6 +183,8 @@ function sgpXlSheet(wb, ctx, { title, subtitle, facts, columns, rows }) {
   ] };
   who.alignment = { vertical: 'middle', indent: 1 };
   if (ctx.logo) ws.addImage(ctx.logo.id, { tl: { col: 0.12, row: 0.12 }, ext: { width: ctx.logo.w, height: ctx.logo.h }, editAs: 'oneCell' });
+  // row 1 is 44pt (~59px) tall: the 28px mark sits in its middle
+  if (ctx.tadok) ws.addImage(ctx.tadok.id, { tl: sgpXlAnchorFromEnd(ws, n, ctx.tadok.w, 10, (44 * 4 / 3 - ctx.tadok.h) / 2), ext: { width: ctx.tadok.w, height: ctx.tadok.h }, editAs: 'oneCell' });
   ws.getRow(4).height = 10;
 
   // rows 5–7: title, subtitle, facts
@@ -245,7 +281,7 @@ function sgpXlSheet(wb, ctx, { title, subtitle, facts, columns, rows }) {
 async function sgpXlContext(wb) {
   wb.creator = PLATFORM_NAME;
   wb.created = new Date();
-  return { org: orgDisplayName(), genStr: sgpGeneratedAt(), logo: await sgpXlLogo(wb) };
+  return { org: orgDisplayName(), genStr: sgpGeneratedAt(), logo: await sgpXlLogo(wb), tadok: await sgpXlTadok(wb) };
 }
 
 async function sgpXlSave(wb, title) {

@@ -54,7 +54,7 @@
       <h2>טפסים באתר</h2>
       <div class="header-actions">
         <button class="btn btn-primary" id="newFormBtn">+ טופס חדש לקבלן</button>
-        <a class="btn btn-outline" href="training.html?blank=1" target="_blank" rel="noopener">טופס ריק להדפסה</a>
+        <a class="btn btn-outline" id="blankFormLink" href="training.html?blank=1" target="_blank" rel="noopener">טופס ריק להדפסה</a>
       </div>
     </div>
     <div class="table-wrap">
@@ -131,6 +131,8 @@
   const shareModal = document.getElementById('shareModal');
   const newForm = document.getElementById('newForm');
   const newMsg = document.getElementById('newMsg');
+  // the blank form carries this company's name and logo (and TADOK's)
+  if (org && org.id) document.getElementById('blankFormLink').href = `training.html?blank=1&o=${org.id}`;
 
   async function loadContractors() {
     const { data } = await sb.from('vendor_submissions').select('id, name, reg_number, email, phone').eq('site_id', site.id).eq('submission_type', 'contractor')
