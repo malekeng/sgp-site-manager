@@ -319,7 +319,9 @@ async function rebarImageDataUrl(path) {
 function rebarPdfElementSvgs(it) {
   const draw = it.kind === 'pile' ? pileDrawing : elementDrawing;
   const small = draw(it, { w: 300, h: 110, stroke: 2.2, bare: true });
-  return small ? { small, large: draw(it, { w: 800, h: 460, stroke: 2.2 }) } : null;
+  // a shaped beam (2026-11-22) is drawn large in 2D: that view carries the plan's hoop list the factory reads
+  const shaped = it.kind === 'element' && it.params && it.params.type === 'beam' && it.params.section;
+  return small ? { small, large: draw(it, { w: 800, h: 460, stroke: 2.2, ...(shaped ? { view: '2d' } : {}) }) } : null;
 }
 
 async function rebarExportPdf({ order, items, site, company }) {

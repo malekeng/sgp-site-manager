@@ -226,7 +226,8 @@ function elementDefaultView(type) {
 function elementView(p) {
   const v = RB_ELEMENT_VIEWS[(p || {}).type];
   if (!v) return null;
-  return v.includes(p.view) ? p.view : v[0];
+  if (v.includes(p.view)) return p.view;
+  return p.type === 'beam' && p.section ? '2d' : v[0];   // a shaped beam opens on its hoop list (2026-11-22)
 }
 
 const RB_INK = '#0E1A20', RB_DIM = '#637178';
@@ -376,6 +377,230 @@ function rbCage2d(item, w, h, stroke) {
   out += rbText((x0 + x1) / 2, Math.min(h - 6 * u, dy + 22 * u), 'L=' + rbLabel(L), 'middle', 12 * u);
   out += rbText(x0, 10 * u, t.hoops, 'start', 12 * u);
   return out + '</svg>';
+}
+
+// ---- כלוב קורה with a shape: L · T · U · חופשי (spec 2026-11-22 §8) ----
+// The hoops are the plan's own sizes (a×b); the concrete around them is drawn RB_COVER cm away.
+const RB_COVER = 2.5;
+const rbRect = (z0, y0, w, h) => [[z0, y0], [z0 + w, y0], [z0 + w, y0 + h], [z0, y0 + h]];
+const rbSpread = (n, from, to) => (n < 1 ? [] : n === 1 ? [(from + to) / 2] : Array.from({ length: n }, (_, i) => from + (to - from) * i / (n - 1)));
+
+// The section of a shaped beam in cm — z across from the left, y up from the bottom: the concrete
+// outline, each hoop of the section (by its row's role: core, inner, ledge, wall_a/wall_b, the U
+// links) and each bar. A free beam, or one without a usable core, has none (null).
+function rbBeamGeom(p) {
+  if (!p || p.section === 'free') return null;
+  const c = RB_COVER, e = 2, hs = (p.hoops || []).map((h, i) => ({ ...h, i, a: Number(h.a), b: Number(h.b), n: Number(h.n) || 1 }));
+  const of = role => hs.filter(h => h.role === role && h.a > 0 && (h.shape === 'pin' || h.b > 0));
+  const bars = {};
+  for (const b of p.bars || []) bars[b.pos] = (bars[b.pos] || 0) + (Number(b.n) || 0);
+  const out = { W: 0, H: 0, outline: [], hoops: [], bars: [], breaks: [] };
+  if (p.section === 'U') {
+    const walls = [of('wall_a')[0], of('wall_b')[0]];
+    const closed = hs.filter(h => h.shape === 'closed' && h.a > 0 && h.b > 0);
+    if (!walls[0]) walls[0] = closed[0];
+    if (!walls[1]) walls[1] = closed.find(h => h !== walls[0]) || walls[0];
+    if (!walls[0]) return null;
+    const link = of('link')[0];
+    const [A, B] = walls, W1 = A.a + 2 * c, H1 = A.b + 2 * c, W2 = B.a + 2 * c, H2 = B.b + 2 * c;
+    // the slab between the walls is drawn broken (≈): wide enough to read, not to scale
+    const t = Math.min(link ? link.a + 2 * c : 20, H1, H2), G = Math.max(W1 + W2, Math.max(H1, H2) * 0.55), W = W1 + G + W2;
+    Object.assign(out, { W, H: Math.max(H1, H2) });
+    out.outline = [[0, 0], [W, 0], [W, H2], [W1 + G, H2], [W1 + G, t], [W1, t], [W1, H1], [0, H1]];
+    out.hoops.push({ role: 'wall_a', i: A.i, poly: rbRect(c, c, A.a, A.b) }, { role: 'wall_b', i: B.i, poly: rbRect(W1 + G + c, c, B.a, B.b) });
+    if (link) {
+      const lk = Math.min(link.b, G * 0.45), la = t - 2 * c, z0 = W1 - c, z1 = W1 + G + c;
+      out.hoops.push({ role: 'link', i: link.i, open: true, poly: [[z0 + lk, c + la], [z0, c + la], [z0, c], [z0 + lk, c]] });
+      out.hoops.push({ role: 'link', i: link.i, open: true, poly: [[z1 - lk, c + la], [z1, c + la], [z1, c], [z1 - lk, c]] });
+    }
+    out.breaks.push({ z: W1 + G / 2, y0: 0, y1: t });
+    // bars: along both faces of each wall, on the slab's top, at the walls' tops and the bottom
+    const wallBars = (bars.wall || 0) + (bars.side || 0);
+    [[A, 0], [B, W1 + G]].forEach(([wl, z0], k) => {
+      const m = Math.ceil(wallBars / 2) - (k ? wallBars % 2 : 0), per = Math.ceil(m / 2);
+      for (const [j, z] of [[0, z0 + c + e], [1, z0 + c + wl.a - e]]) {
+        for (const y of rbSpread(j ? m - per : per, c + e + 6, c + wl.b - e - 6)) out.bars.push([z, y]);
+      }
+    });
+    const top = bars.top || 0, tl = Math.ceil(top / 2);
+    for (const z of rbSpread(tl, c + e, c + A.a - e)) out.bars.push([z, c + A.b - e]);
+    for (const z of rbSpread(top - tl, W1 + G + c + e, W1 + G + c + B.a - e)) out.bars.push([z, c + B.b - e]);
+    for (const z of rbSpread(bars.bot || 0, c + e, W - c - e)) out.bars.push([z, c + e]);
+    for (const z of rbSpread((bars.slab || 0) + (bars.bot2 || 0), W1 + e, W1 + G - e)) out.bars.push([z, t - c - e]);
+    for (const z of rbSpread((bars.top2 || 0) + (bars.ledge || 0), c + e, W - c - e)) out.bars.push([z, t / 2]);
+    return out;
+  }
+  const core = of('core')[0] || hs.find(h => h.shape === 'closed' && h.a > 0 && h.b > 0);
+  if (!core) return null;
+  const ledges = of('ledge').filter(h => h.shape !== 'pin');
+  const Wc = core.a + 2 * c, Hc = core.b + 2 * c;
+  const Wf = ledges.length ? Math.max(Wc, Math.max(...ledges.map(h => h.a)) + 2 * c) : Wc;
+  const Hf = ledges.length ? Math.min(Hc, Math.max(...ledges.map(h => h.b)) + 2 * c) : 0;
+  const zw = p.section === 'L' ? (p.side === 'left' ? Wf - Wc : 0) : (Wf - Wc) / 2;
+  Object.assign(out, { W: Wf, H: Hc });
+  out.outline = Hf > 0 && Wf > Wc
+    ? [[0, 0], [Wf, 0], [Wf, Hf], [zw + Wc, Hf], [zw + Wc, Hc], [zw, Hc], [zw, Hf], [0, Hf]]
+    : rbRect(zw, 0, Wc, Hc);
+  const cz0 = zw + c, cz1 = zw + c + core.a;
+  out.hoops.push({ role: 'core', i: core.i, poly: rbRect(cz0, c, core.a, core.b) });
+  for (const h of of('inner')) {
+    const a = Math.min(h.a, core.a), b = Math.min(h.b, core.b);
+    const zs = h.n === 1 ? [cz0 + (core.a - a) / 2] : rbSpread(h.n, cz0, cz1 - a);
+    for (const z of zs) out.hoops.push({ role: 'inner', i: h.i, poly: rbRect(z, c, a, b) });
+  }
+  for (const h of ledges) {
+    const z = p.section === 'L' ? (p.side === 'left' ? Wf - c - h.a : c) : (Wf - h.a) / 2;
+    out.hoops.push({ role: 'ledge', i: h.i, poly: rbRect(z, c, h.a, h.b) });
+  }
+  // bars: ב.ע./ב.ת. (and their second rows) across the core, צד on both sides, בליטה at the ledges' ends
+  const yTop = c + core.b - e, yBot = c + e;
+  for (const z of rbSpread(bars.top || 0, cz0 + e, cz1 - e)) out.bars.push([z, yTop]);
+  for (const z of rbSpread(bars.top2 || 0, cz0 + e, cz1 - e)) out.bars.push([z, yTop - 6]);
+  for (const z of rbSpread(bars.bot || 0, cz0 + e, cz1 - e)) out.bars.push([z, yBot]);
+  for (const z of rbSpread((bars.bot2 || 0) + (bars.slab || 0), cz0 + e, cz1 - e)) out.bars.push([z, yBot + 6]);
+  const side = (bars.side || 0) + (bars.wall || 0), sl = Math.ceil(side / 2);
+  for (const y of rbSpread(sl, yBot + 8, yTop - 8)) out.bars.push([cz0 + e, y]);
+  for (const y of rbSpread(side - sl, yBot + 8, yTop - 8)) out.bars.push([cz1 - e, y]);
+  const nl = (bars.ledge || 0) + (bars.other || 0);
+  if (nl) {
+    const yl = Hf > 0 ? Hf - c - e : (yTop + yBot) / 2;
+    const ends = [];
+    if (Wf > Wc && p.section !== 'L') ends.push(c + e, Wf - c - e);
+    else if (Wf > Wc) ends.push(p.side === 'left' ? c + e : Wf - c - e);
+    else ends.push(cz0 + e, cz1 - e);
+    const spots = [];
+    for (const z of ends) spots.push([z, yl], [z, yBot]);
+    for (let k = 0; k < nl; k++) {
+      if (k < spots.length) out.bars.push(spots[k]);
+      else out.bars.push([rbSpread(nl - spots.length, c + e, Wf - c - e)[k - spots.length], yl]);
+    }
+  }
+  return out;
+}
+
+// The text of a hoop row the way the plan prints it: "2*Ø8 L=195" for one that follows the beam's
+// spacing, "Ø10@20 L=300" (×n when more than one per place) for one at its own spacing.
+function rbHoopCaption(h) {
+  const len = rbLabel(beamHoopPieceCm(h)), n = Number(h.n) || 1;
+  return Number(h.s) > 0 ? `Ø${rbLabel(h.d)}@${rbLabel(h.s)}${n > 1 ? ' ×' + n : ''} L=${len}` : `${n}*Ø${rbLabel(h.d)} L=${len}`;
+}
+
+// One hoop row drawn in a cell (cx, cy its centre, bw × bh its room): a closed hoop as a rectangle
+// with the hook's corner mark, a U as ⊐, an L, a pin as a line with its two hooks; a over it, b beside it.
+function rbHoopSketch(h, cx, cy, bw, bh, u, stroke) {
+  const a = Number(h.a) || 1, b = h.shape === 'pin' ? 0 : Number(h.b) || 1;
+  const k = Math.min(bw / Math.max(a, 1), b > 0 ? bh / b : Infinity, bw / 20);
+  const wa = Math.max(a * k, 16 * u), hb = b > 0 ? Math.max(b * k, 10 * u) : 0;
+  const x0 = cx - wa / 2, y0 = cy - hb / 2, sw = (stroke * 0.7).toFixed(2);
+  let pts, out = '';
+  if (h.shape === 'u') pts = [[x0 + wa, y0], [x0, y0], [x0, y0 + hb], [x0 + wa, y0 + hb]];
+  else if (h.shape === 'l') pts = [[x0, y0], [x0, y0 + hb], [x0 + wa, y0 + hb]];
+  else if (h.shape === 'pin') pts = [[x0, cy - 5 * u], [x0, cy], [x0 + wa, cy], [x0 + wa, cy - 5 * u]];
+  else pts = [[x0, y0], [x0 + wa, y0], [x0 + wa, y0 + hb], [x0, y0 + hb], [x0, y0]];
+  out += `<polyline points="${pts.map(q => rbF(q[0]) + ',' + rbF(q[1])).join(' ')}" fill="none" stroke="${RB_INK}" stroke-width="${sw}" stroke-linejoin="round"/>`;
+  if (h.shape === 'closed') out += rbSeg([x0 + 2 * u, y0 + hb - 9 * u], [x0 + 9 * u, y0 + hb - 2 * u], 0.8 * u);   // the hook, as the plan marks it
+  out += rbText(cx, (h.shape === 'pin' ? cy - 5 * u : y0) - 7 * u, rbLabel(h.a), 'middle', 11 * u);
+  if (b > 0) out += rbText(x0 + wa + 4 * u, cy, rbLabel(h.b), 'start', 11 * u);
+  return out;
+}
+
+// The side view: the bars as two lines, a tick per drawn hoop of the beam's own spacing, the zones
+// with their lengths and spacing, L under them.
+function rbBeamSide(p, x0, x1, cy, u, stroke) {
+  const L = Number(p.L), ty = cy - 10 * u, by = cy + 10 * u, kx = (x1 - x0) / L;
+  let out = rbSeg([x0, ty], [x1, ty], (stroke * 0.8).toFixed(2)) + rbSeg([x0, by], [x1, by], (stroke * 0.8).toFixed(2));
+  for (const x of cageDrawnHoops(L, p.s, p.end, p.s_end)) out += rbSeg([x0 + x * kx, ty], [x0 + x * kx, by], Math.max(0.6, stroke * 0.3).toFixed(2));
+  const end = Number(p.end) || 0, dy = by + 14 * u;
+  const zones = end > 0 && 2 * end < L ? [[0, end, p.s_end], [end, L - end, p.s], [L - end, L, p.s_end]] : [[0, L, end > 0 ? p.s_end : p.s]];
+  for (const [a, b, step] of zones) {
+    const xa = x0 + a * kx, xb = x0 + b * kx;
+    out += rbSeg([xa, dy - 4 * u], [xa, dy + 4 * u], 0.8 * u, '', RB_DIM) + rbSeg([xb, dy - 4 * u], [xb, dy + 4 * u], 0.8 * u, '', RB_DIM) + rbSeg([xa, dy], [xb, dy], 0.8 * u, '', RB_DIM);
+    if (zones.length > 1) out += rbText((xa + xb) / 2, dy + 10 * u, rbLabel(b - a), 'middle', 11 * u);
+    out += rbText((xa + xb) / 2, ty - 9 * u, '@' + rbLabel(step), 'middle', 11 * u);
+  }
+  return out + rbText((x0 + x1) / 2, dy + 24 * u, 'L=' + rbLabel(L), 'middle', 12 * u);
+}
+
+// A shaped beam's bars as text lines ("ב.ע. 4Ø16"), for the drawings.
+function rbBeamBarTexts(p) {
+  const name = k => (typeof REBAR_BAR_POS !== 'undefined' && (REBAR_BAR_POS.find(x => x[0] === k) || [])[1]) || k;
+  return (p.bars || []).map(b => `${name(b.pos)} ${rbLabel(b.n)}Ø${rbLabel(b.d)}`);
+}
+
+// 2D: the section (right), the side view with the zones (left), and along the bottom the plan's
+// hoop list, one drawn hoop per row with its caption. A free beam has no section: the side view widens.
+function rbBeam2d(item, w, h, stroke) {
+  const p = item.params, u = rbUnit(w, h), pad = Math.max(12, Math.round(Math.min(w, h) * 0.05));
+  const g = rbBeamGeom(p), hs = p.hoops || [];
+  const topH = h * 0.56;
+  let out = rbHead(w, h);
+  let sideX1 = w - pad;
+  if (g) {
+    const sw = w * 0.38, sh = topH - 2 * pad - 8 * u, k = Math.min(sw / g.W, sh / g.H);
+    const sx = w - pad - g.W * k, sy = pad + (sh - g.H * k) / 2 + 4 * u;
+    const at = (z, y) => [sx + z * k, sy + (g.H - y) * k];
+    const poly = (pts, cls, fill, width, open) => `<${open ? 'polyline' : 'polygon'} class="${cls}" points="${pts.map(q => { const r = at(q[0], q[1]); return rbF(r[0]) + ',' + rbF(r[1]); }).join(' ')}" fill="${fill}" stroke="${RB_INK}" stroke-width="${width}" stroke-linejoin="round"/>`;
+    out += poly(g.outline, 'concrete', '#EEF2F0', (stroke * 0.4).toFixed(2));
+    for (const hp of g.hoops) out += poly(hp.poly, 'shoop', 'none', (stroke * 0.55).toFixed(2), hp.open);
+    const r = Math.max(1.8, Math.min(3.2 * u, 2.2 * k));
+    out += g.bars.map(([z, y]) => { const q = at(z, y); return `<circle class="sbar" cx="${rbF(q[0])}" cy="${rbF(q[1])}" r="${rbF(r)}" fill="${RB_INK}"/>`; }).join('');
+    for (const br of g.breaks) {
+      const q0 = at(br.z, br.y0 - 3), q1 = at(br.z, br.y1 + 3);
+      out += `<rect x="${rbF(q0[0] - 5 * u)}" y="${rbF(q1[1])}" width="${rbF(10 * u)}" height="${rbF(q0[1] - q1[1])}" fill="#fff"/>`;
+      out += rbText(q0[0], (q0[1] + q1[1]) / 2, '≈', 'middle', 14 * u);
+    }
+    sideX1 = sx - 26 * u;
+  }
+  // the side view and the bars
+  const barTexts = rbBeamBarTexts(p);   // the side view starts under them, and the hoop list under it
+  const sideCy = Math.max(pad + topH * 0.42, pad + barTexts.length * 13 * u + 26 * u);
+  out += rbBeamSide(p, pad, sideX1, sideCy, u, stroke);
+  barTexts.forEach((s, i) => { out += rbText(pad, pad + i * 13 * u, s, 'start', 11 * u); });
+  // the hoop list along the bottom, like the side of the plan
+  const listTop = Math.max(topH, sideCy + 54 * u);
+  const n = Math.max(1, hs.length), cw = (w - 2 * pad) / n, cy = listTop + (h - listTop) * 0.42, bh = (h - listTop) * 0.42;
+  out += rbSeg([pad, listTop + 4 * u], [w - pad, listTop + 4 * u], 0.6 * u, '', RB_DIM);
+  hs.forEach((hr, i) => {
+    // reading order is right to left: the first row on the right, as in the plan's list
+    const cx = w - pad - cw * (i + 0.5);
+    out += `<g class="sched">${rbHoopSketch(hr, cx - 6 * u, cy, cw * 0.62, bh, u, stroke)}</g>`;
+    out += rbText(cx, Math.min(h - 7 * u, cy + bh / 2 + 18 * u), rbHoopCaption(hr), 'middle', 11 * u);
+  });
+  return out + '</svg>';
+}
+
+// 3D: the section run along L — every bar a line, every hoop of the section at its places (its own
+// @s, or the beam's zones), thinned to 80 places a row as the other cages are.
+function rbBeam3d(item, w, h, stroke, bare) {
+  const p = item.params, L = Number(p.L), u = rbUnit(w, h);
+  const g = rbBeamGeom(p) || rbBeamGeom({ ...p, section: 'rect' });
+  if (!g) return null;
+  const pad = bare ? 2 : Math.max(18, Math.round(Math.min(w, h) * 0.16));
+  const P = rbIso(L, 0, g.H, 0, g.W, w, h, pad, bare);
+  let out = rbHead(w, h);
+  out += g.bars.map(([z, y]) => rbSeg(P(0, y, z), P(L, y, z), (stroke * 0.9).toFixed(2), 'bar')).join('');
+  const hw = Math.max(0.6, stroke * 0.35).toFixed(2), rows = p.hoops || [];
+  for (const hp of g.hoops) {
+    const row = rows[hp.i] || {};
+    // a thumbnail keeps at most 24 places a row, or its hoops run together into one dark bar
+    const max = bare ? 24 : 80;
+    const places = Number(row.s) > 0 ? cageDrawnHoops(L, row.s, 0, null, max) : cageDrawnHoops(L, p.s, p.end, p.s_end, max);
+    for (const x of places) {
+      const pts = hp.poly.map(([z, y]) => P(x, y, z)).map(q => rbF(q[0]) + ',' + rbF(q[1])).join(' ');
+      out += `<${hp.open ? 'polyline' : 'polygon'} class="hoop" points="${pts}" fill="none" stroke="${RB_INK}" stroke-width="${hw}"/>`;
+    }
+  }
+  rbBeamBarTexts(p).forEach((s, i) => { out += rbText(4 * u, (10 + i * 14) * u, s, 'start', 12 * u); });
+  out += rbText(w - 4 * u, 10 * u, p.section === 'rect' || p.section === 'free' ? `${rbLabel(g.W)}×${rbLabel(g.H)}` : p.section, 'end', 12 * u);
+  const a0 = P(0, 0, g.W), a1 = P(L, 0, g.W);
+  out += rbText((a0[0] + a1[0]) / 2, Math.min(h - 8 * u, (a0[1] + a1[1]) / 2 + 14 * u), 'L=' + rbLabel(L), 'middle', 12 * u);
+  return out + '</svg>';
+}
+
+// A shaped beam can be drawn once its length, spacing and every hoop's sizes are numbers.
+function rbBeamOk(p) {
+  return Number(p.L) > 0 && Number(p.s) > 0 && (p.hoops || []).length > 0
+    && p.hoops.every(h => Number(h.a) > 0 && (h.shape === 'pin' || Number(h.b) > 0) && Number(h.n) > 0);
 }
 
 // A corner mesh in 3D: ⌈L/s⌉ cross bars bent a then b (down for the upper mesh, up for the lower),
@@ -578,12 +803,16 @@ function pileDrawing(item, opts = {}) {
 // thumbnails, whose line already lists every size): no text, and a 3D view fills the box.
 function elementDrawing(item, opts = {}) {
   const p = (item && item.params) || {};
-  const view = elementView({ ...p, view: opts.view || p.view });
+  // a thumbnail of a shaped beam is its 3D (its 2D is a list of sizes, unreadable that small)
+  const thumb3d = opts.bare && !opts.view && p.type === 'beam' && p.section;
+  const view = thumb3d ? '3d' : elementView({ ...p, view: opts.view || p.view });
   if (!view) return null;
   const w = opts.w || 300, h = opts.h || 120, stroke = opts.stroke || 2, bare = !!opts.bare;
   let svg = null;
   if (p.type === 'kranz') svg = view === '2d' ? elementSvg(p, { w, h, stroke }) : rbKranz3d(p, w, h, stroke, bare);
-  else if (p.type === 'column' || p.type === 'beam') {
+  else if (p.type === 'beam' && p.section) {   // a shaped beam (2026-11-22); one saved before has no section
+    if (rbBeamOk(p)) svg = view === '2d' ? rbBeam2d(item, w, h, stroke) : rbBeam3d(item, w, h, stroke, bare);
+  } else if (p.type === 'column' || p.type === 'beam') {
     if (rbCageOk(p)) svg = view === '2d' ? rbCage2d(item, w, h, stroke) : rbCage3d(item, w, h, stroke, bare);
   } else if (p.type === 'spacer') svg = rbSpacer2d(p, w, h, stroke);
   return svg && bare ? svg.replace(/<text[\s\S]*?<\/text>/g, '') : svg;

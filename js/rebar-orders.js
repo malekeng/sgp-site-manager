@@ -810,7 +810,7 @@ function roLiftBodyHtml() {
 // ---- אלמנט: a corner mesh, a column or beam cage, a spacer, or another ready element ----
 // Each line is drawn in 2D or 3D (spec 2026-10-19 §2); only a kranz in 2D is edited on the drawing.
 // A pile (2026-10-19) is drawn the same way: 3D by default, 2D on the switch.
-function roElView() { return dlg.kind === 'pile' ? pileView(dlg.f) : elementView({ type: dlg.f.type, view: dlg.f.view }); }
+function roElView() { return dlg.kind === 'pile' ? pileView(dlg.f) : elementView({ type: dlg.f.type, view: dlg.f.view, section: dlg.f.section }); }
 function roElPicture() {
   return dlg.kind === 'pile' || (dlg.kind === 'element' && !!roElView() && !(dlg.f.type === 'kranz' && roElView() === '2d'));
 }
@@ -852,6 +852,65 @@ function roCageCardHtml() {
     ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}`;
 }
 
+// ---- כלוב קורה: a shape and the plan's hoop list (spec 2026-11-22 §7) ----
+// One field of a list row: its own error place (h1_a, b0_n) and a small label over it.
+function roBmCell(field, label, control) {
+  return `<div class="field bm-cell" data-field="${field}"><span class="bm-lbl">${label}</span>${control}<div class="field-error-msg"></div></div>`;
+}
+function roBmSelect(attr, value, opts) {
+  return `<select ${attr}>${opts.map(([v, t]) => `<option value="${esc(v)}" ${String(v) === String(value ?? '') ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+}
+// the length a hoop row comes to when the plan's L is left empty
+function roBmLen(h) { const cm = beamHoopPieceCm({ ...h, len: '' }); return cm > 0 ? fmtNum(cm, 1) : ''; }
+
+function roBeamCardHtml() {
+  const f = dlg.f;
+  const dOpts = REBAR_BAR_D.map(d => [d, 'Ø' + d]), sOpts = REBAR_STEPS.map(x => [x, '@' + x]);
+  const num = 'inputmode="decimal" autocomplete="off"', int = 'inputmode="numeric" autocomplete="off"';
+  const hoops = (f.hoops || []).map((h, i) => `<div class="bm-row" data-hrow="${i}">
+      ${roBmCell(`h${i}_shape`, 'צורה', roBmSelect(`data-h="${i}:shape" aria-label="צורת חישוק ${i + 1}"`, h.shape, REBAR_HOOP_SHAPES))}
+      ${roBmCell(`h${i}_a`, h.shape === 'pin' ? 'אורך' : 'a', `<input data-h="${i}:a" value="${esc(h.a ?? '')}" ${num} aria-label="a">`)}
+      ${h.shape === 'pin' ? '<div class="bm-cell"></div>' : roBmCell(`h${i}_b`, 'b', `<input data-h="${i}:b" value="${esc(h.b ?? '')}" ${num} aria-label="b">`)}
+      <button type="button" class="bm-del" data-bm-del="hoop:${i}" aria-label="הסרת חישוק ${i + 1}">✕</button>
+      ${roBmCell(`h${i}_d`, 'קוטר', roBmSelect(`data-h="${i}:d" aria-label="קוטר"`, h.d, dOpts))}
+      ${roBmCell(`h${i}_n`, 'כמות', `<input data-h="${i}:n" value="${esc(h.n ?? '')}" ${int} aria-label="כמות בכל מקום">`)}
+      ${roBmCell(`h${i}_s`, 'פסיעה', roBmSelect(`data-h="${i}:s" aria-label="פסיעה"`, h.s, [['', 'לפי פריסה'], ...sOpts]))}
+      ${roBmCell(`h${i}_len`, 'L מהתוכנית', `<input data-h="${i}:len" value="${esc(h.len ?? '')}" placeholder="${esc(roBmLen(h))}" ${num} aria-label="אורך החישוק כפי שבתוכנית">`)}
+    </div>`).join('');
+  const bars = (f.bars || []).map((b, i) => `<div class="bm-row bm-row-bars" data-brow="${i}">
+      ${roBmCell(`b${i}_pos`, 'מיקום', roBmSelect(`data-b="${i}:pos" aria-label="מיקום"`, b.pos, REBAR_BAR_POS))}
+      ${roBmCell(`b${i}_n`, 'כמות', `<input data-b="${i}:n" value="${esc(b.n ?? '')}" ${int} aria-label="מספר מוטות">`)}
+      ${roBmCell(`b${i}_d`, 'קוטר', roBmSelect(`data-b="${i}:d" aria-label="קוטר"`, b.d, dOpts))}
+      <button type="button" class="bm-del" data-bm-del="bar:${i}" aria-label="הסרת קבוצת מוטות ${i + 1}">✕</button>
+    </div>`).join('');
+  return `<div class="field bm-sections" data-field="section"><label>צורת הקורה</label>${roSeg('section', f.section, REBAR_BEAM_SECTIONS)}<div class="field-error-msg"></div></div>
+    ${f.section === 'L' ? `<div class="field iw-row" data-field="side"><label>צד הבליטה</label>${roSeg('side', f.side, [['right', 'ימין'], ['left', 'שמאל']])}<div class="field-error-msg"></div></div>` : ''}
+    ${roRow('L — אורך (ס״מ)', 'L', f.L, null, num)}
+    <div class="iw-sep"></div>
+    <div class="iw-sec"><span>פריסה</span><span>לחישוקים "לפי פריסה"</span></div>
+    ${roRow('פסיעה באמצע', 's', f.s, sOpts)}
+    ${roRow('ציפוף ליד סמכים — אורך (ס״מ)', 'end', f.end, null, num)}
+    ${roRow('ציפוף — פסיעה', 's_end', f.s_end, sOpts)}
+    <div class="iw-sep"></div>
+    <div class="iw-sec"><span>חישוקים</span><span>כמו ברשימה שבתוכנית</span></div>
+    <div class="field" data-field="hoops">${hoops}<div class="field-error-msg"></div></div>
+    <button type="button" class="btn btn-outline btn-sm bm-add" data-bm-add="hoop">+ חישוק</button>
+    <div class="iw-sep"></div>
+    <div class="iw-sec"><span>מוטות לאורך הקורה</span></div>
+    <div class="field" data-field="bars">${bars}<div class="field-error-msg"></div></div>
+    <button type="button" class="btn btn-outline btn-sm bm-add" data-bm-add="bar">+ מוטות</button>
+    <div class="iw-sep"></div>
+    ${roRow('כינוי', 'alias', f.alias, null, 'maxlength="60"')}`;
+}
+
+// a hoop row's computed length follows its sizes as they are typed (the plan's L stays the user's)
+function roBmPlaceholders() {
+  document.querySelectorAll('#itemModal [data-h$=":len"]').forEach(el => {
+    const h = (dlg.f.hoops || [])[Number(el.dataset.h.split(':')[0])];
+    if (h) el.placeholder = roBmLen(h);
+  });
+}
+
 // "אחר": its picture or sketch, uploaded once and kept with the line
 function roElementImageHtml() {
   const f = dlg.f;
@@ -865,6 +924,9 @@ function roElementImageHtml() {
 function roElementBodyHtml() {
   const f = dlg.f;
   const types = `<div class="iw-typebar">${roSeg('type', f.type, REBAR_ELEMENT_TYPES)}</div>`;
+  if (f.type === 'beam' && f.section) {
+    return `${types}<div class="iw-body iw-body-wide">${roElementStageHtml()}<div class="iw-card">${roBeamCardHtml()}${roFootHtml(true)}</div></div>`;
+  }
   if (f.type === 'column' || f.type === 'beam') {
     return `${types}<div class="iw-body">${roElementStageHtml()}<div class="iw-card">${roCageCardHtml()}${roFootHtml(true)}</div></div>`;
   }
@@ -1134,7 +1196,10 @@ function roStageDraw() {
 // An element drawn as a picture (3D, a cage's 2D, a spacer): the badge counts what the factory makes.
 function roElementDraw(draw, w, h) {
   const item = roElementItem(), p = item.params || {}, marks = {};
-  const svg = roLineDrawing(item, { view: roElView(), w, h, stroke: 2, marks, boxed: item.kind === 'pile' });
+  // a shaped beam's 2D (section, zones, the plan's hoop list) is laid out at its PDF size and scaled to the stage
+  const fit = p.type === 'beam' && p.section && roElView() === '2d';
+  let svg = roLineDrawing(item, { view: roElView(), w: fit ? 800 : w, h: fit ? 460 : h, stroke: fit ? 2.2 : 2, marks, boxed: item.kind === 'pile' });
+  if (svg && fit) svg = svg.replace(/^<svg([^>]*?) width="800" height="460"/, '<svg$1 class="iw-fit"');
   draw.innerHTML = svg || '<div class="iw-draw-hint">השלימו את המידות כדי לראות את השרטוט</div>';
   // a pile's boxes go where the drawing put their sizes (the drawing starts 48 px down); a size the
   // drawing has no place for (a zone of 0) keeps no box, and a drawing that failed keeps them where they were
@@ -1150,6 +1215,9 @@ function roElementDraw(draw, w, h) {
   if (svg && item.kind === 'pile') {
     const turns = (Number(p.L2) > 0 ? Number(p.L2) / Number(p.p1) : 0) + (Number(p.L3) > 0 ? Number(p.L3) / Number(p.p2) : 0);
     badge.textContent = `${fmtNum(p.n, 0)} מוטות · ${fmtNum(Math.ceil(turns), 0)} סיבובי ספירלה`;
+  } else if (svg && p.type === 'beam' && p.section) {
+    const pieces = (p.hoops || []).reduce((a, h) => a + beamHoopPieces(p, h), 0);
+    badge.textContent = `${fmtNum(pieces, 0)} חישוקים · ${fmtNum((p.hoops || []).length, 0)} סוגים`;
   } else if (svg && (p.type === 'column' || p.type === 'beam')) {
     const hoops = cageHoopPositions(p.L, p.s, p.end, p.s_end).length;
     badge.textContent = `${fmtNum(hoops, 0)} חישוקים${Number(p.legs) === 4 ? ' כפולים' : ''}`;
@@ -1208,6 +1276,14 @@ function roSetLen(k, value, from) {
 function roReadItemForm() {
   const f = dlg.f, m = document.getElementById('itemModal');
   m.querySelectorAll('[data-k]').forEach(el => { f[el.dataset.k] = el.value; });
+  // a shaped beam's lists: data-h="row:key" (hoops), data-b="row:key" (bars)
+  for (const [attr, list] of [['h', f.hoops], ['b', f.bars]]) {
+    if (!Array.isArray(list)) continue;
+    m.querySelectorAll(`[data-${attr}]`).forEach(el => {
+      const [i, k] = el.dataset[attr].split(':');
+      if (list[Number(i)]) list[Number(i)][k] = el.value;
+    });
+  }
   if (dlg.kind === 'pile') f.additions = [...m.querySelectorAll('[data-addition]')].filter(c => c.checked).map(c => c.dataset.addition);
 }
 
@@ -1363,10 +1439,31 @@ function roItemDialogEvents() {
       // a new element type starts from that type's own defaults, keeping the quantity and the name
       if (dlg.kind === 'element' && set.dataset.set === 'type' && set.dataset.val !== dlg.f.type) {
         dlg.f = { ...rebarElementForm(null, set.dataset.val), qty: dlg.f.qty, alias: dlg.f.alias };
+      } else if (dlg.kind === 'element' && set.dataset.set === 'section' && set.dataset.val !== dlg.f.section) {
+        Object.assign(dlg.f, { section: set.dataset.val, ...rebarBeamTemplate(set.dataset.val) });   // each shape starts from its plan's list
       } else dlg.f[set.dataset.set] = set.dataset.val;
       dlg.hl = null;
       // an asymmetric mesh starts from the X bars' diameter and spacing
       if (dlg.kind === 'mesh' && dlg.f.type === 'asym') { dlg.f.d_y = dlg.f.d_y || dlg.f.diameter_mm; dlg.f.s_x = dlg.f.s_x || dlg.f.s; }
+      roRenderItemDialog();
+      return;
+    }
+    const bmAdd = e.target.closest('[data-bm-add]');
+    if (bmAdd) {
+      roReadItemForm();
+      const f = dlg.f;
+      if (bmAdd.dataset.bmAdd === 'hoop') f.hoops.push({ role: 'extra', shape: 'closed', a: '', b: '', d: (f.hoops[0] && f.hoops[0].d) || 8, n: 1, s: '', len: '' });
+      else f.bars.push({ pos: 'side', n: 2, d: 12 });
+      roRenderItemDialog();
+      const list = document.querySelectorAll(bmAdd.dataset.bmAdd === 'hoop' ? '#itemModal [data-h$=":a"]' : '#itemModal [data-b$=":n"]');
+      if (list.length) list[list.length - 1].focus();
+      return;
+    }
+    const bmDel = e.target.closest('[data-bm-del]');
+    if (bmDel) {
+      roReadItemForm();
+      const [which, i] = bmDel.dataset.bmDel.split(':');
+      (which === 'hoop' ? dlg.f.hoops : dlg.f.bars).splice(Number(i), 1);
       roRenderItemDialog();
       return;
     }
@@ -1404,6 +1501,7 @@ function roItemDialogEvents() {
     roReadItemForm();
     if ((dlg.kind === 'mesh' || dlg.kind === 'pile') && e.target.dataset.k) document.querySelectorAll(`#itemModal [data-mk="${e.target.dataset.k}"]`).forEach(b => { b.value = e.target.value; });
     if (document.getElementById('iwStage')) roStageDraw();
+    if (e.target.dataset && (e.target.dataset.h || e.target.dataset.b)) roBmPlaceholders();
     roItemPreview();
   });
   modal.addEventListener('change', e => {
@@ -1415,6 +1513,7 @@ function roItemDialogEvents() {
       roRenderItemDialog();
       return;
     }
+    if (e.target.dataset && /:shape$/.test(e.target.dataset.h || '')) { roReadItemForm(); roRenderItemDialog(); return; }
     const k = e.target.dataset && e.target.dataset.k;
     if ((k === 'type' || k === 'diameter_mm') && dlg.kind !== 'mesh') { roReadItemForm(); roRenderItemDialog(); }
   });

@@ -105,6 +105,34 @@ function cageCalc(p, d) {
   return { length_cm: L, unit_kg: rebarRound(kg, 2), meters, approx: true, weighed: true };
 }
 
+// ---- כלוב קורה with a shape (L · T · U · חופשי) and the plan's hoop list (spec 2026-11-22) ----
+// One hoop piece in cm: the length the plan prints (len) when given, else closed 2(a+b) plus a
+// d-cm hook at each end (as cageCalc), a U a+2b, an L a+b, a pin a plus two hooks.
+function beamHoopPieceCm(h) {
+  if (Number(h.len) > 0) return Number(h.len);
+  const a = Number(h.a) || 0, b = Number(h.b) || 0, d = Number(h.d) || 0;
+  if (h.shape === 'u') return a + 2 * b;
+  if (h.shape === 'l') return a + b;
+  if (h.shape === 'pin') return a + 2 * d;
+  return 2 * (a + b) + 2 * d;
+}
+
+// How many pieces of one hoop row the beam takes: "לפי פריסה" (s empty) follows the beam's own
+// zones (s, end, s_end), @s runs the whole length; times the row's count per place ("2*Φ" = 2).
+function beamHoopPieces(z, h) {
+  const at = Number(h.s) > 0 ? cageHoopPositions(z.L, h.s, 0) : cageHoopPositions(z.L, z.s, z.end, z.s_end);
+  return at.length * (Number(h.n) || 0);
+}
+
+// The whole beam: every bar row along L, every hoop row's pieces. Not measured on a note: approximate.
+function beamCalc(p) {
+  const L = Number(p.L), meters = {};
+  for (const b of p.bars || []) rebarAddMeters(meters, Number(b.d), Number(b.n) * L / 100);
+  for (const h of p.hoops || []) rebarAddMeters(meters, Number(h.d), beamHoopPieces(p, h) * beamHoopPieceCm(h) / 100);
+  const kg = Object.entries(meters).reduce((a, [dd, m]) => a + m * rebarW(Number(dd)), 0);
+  return { length_cm: L, unit_kg: rebarRound(kg, 2), meters, approx: true, weighed: true };
+}
+
 // An element (spec 2026-10-14 §3). A corner mesh ("רשת קרנץ") is weighed from its bars the
 // way a mesh is: ceil(L/s) cross bars of a+b cm, plus n_long bars along L — not measured on a
 // supplier's note yet, so approximate. A spacer is counted, not weighed; "other" carries its
@@ -116,6 +144,7 @@ function elementCalc(p, d) {
     const meters = rebarAddMeters(rebarAddMeters({}, d, mT), p.d_long, mL);
     return { length_cm: p.L, unit_kg: rebarRound(mT * rebarW(d) + mL * rebarW(p.d_long), 2), meters, approx: true, weighed: true };
   }
+  if (p.type === 'beam' && p.section) return beamCalc(p);   // a beam saved before 2026-11-22 has no section
   if (p.type === 'column' || p.type === 'beam') return cageCalc(p, Number(d));
   if (p.type === 'spacer') return { length_cm: 200, unit_kg: 0, meters: {}, approx: false, weighed: false };
   return { length_cm: null, unit_kg: rebarRound(Number(p.unit_kg) || 0, 2), meters: {}, approx: false, weighed: true };

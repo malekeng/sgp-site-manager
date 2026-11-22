@@ -95,6 +95,8 @@ function validateItem(kind, f) {
       if (!REBAR_BAR_D.includes(num('d_long'))) e.d_long = 'בחרו קוטר מהרשימה';
     } else if (f.type === 'spacer') {
       if (!REBAR_SPACER_HEIGHTS.includes(num('height_mm'))) e.height_mm = 'בחרו גובה מהרשימה';
+    } else if (f.type === 'beam' && f.section) {
+      Object.assign(e, validateBeam(f));
     } else if (f.type === 'column' || f.type === 'beam') {
       const col = f.type === 'column';
       for (const [k, name] of [...(col ? [['a', 'רוחב'], ['b', 'עומק']] : [['b', 'רוחב'], ['h', 'גובה']]), ['L', 'אורך']]) {
@@ -132,6 +134,39 @@ function validateItem(kind, f) {
   return e;
 }
 
+// A beam with a shape (spec 2026-11-22 §5): its zones, and every row of its hoop and bar lists,
+// each error under the row's own field (h1_a = hoop row 2's a).
+function validateBeam(f) {
+  const e = {}, num = v => parseNum(v), int1 = v => { const x = num(v); return x !== null && Number.isInteger(x) && x >= 1; };
+  const empty = v => v === '' || v === null || v === undefined;
+  if (!REBAR_BEAM_SECTIONS.some(x => x[0] === f.section)) e.section = 'בחרו צורה';
+  if (f.section === 'L' && f.side !== 'right' && f.side !== 'left') e.side = 'בחרו צד';
+  if (!(num(f.L) > 0)) e.L = 'אורך — מספר גדול מ-0';
+  if (!REBAR_STEPS.includes(num(f.s))) e.s = 'בחרו פסיעה מהרשימה';
+  const end = num(f.end);
+  if (!(end !== null && end >= 0)) e.end = 'אורך הציפוף — מספר 0 ומעלה';
+  else if (end > 0 && !REBAR_STEPS.includes(num(f.s_end))) e.s_end = 'בחרו פסיעה מהרשימה';
+  const hoops = f.hoops || [], bars = f.bars || [];
+  if (!hoops.length) e.hoops = 'הוסיפו לפחות חישוק אחד';
+  hoops.forEach((h, i) => {
+    const k = key => `h${i}_${key}`;
+    if (!REBAR_HOOP_SHAPES.some(x => x[0] === h.shape)) e[k('shape')] = 'בחרו צורה';
+    if (!(num(h.a) > 0)) e[k('a')] = 'מידה — מספר גדול מ-0';
+    if (h.shape !== 'pin' && !(num(h.b) > 0)) e[k('b')] = 'מידה — מספר גדול מ-0';
+    if (!REBAR_BAR_D.includes(num(h.d))) e[k('d')] = 'בחרו קוטר מהרשימה';
+    if (!int1(h.n)) e[k('n')] = 'כמות — מספר שלם 1 ומעלה';
+    if (!empty(h.s) && !REBAR_STEPS.includes(num(h.s))) e[k('s')] = 'בחרו פסיעה מהרשימה';
+    if (!empty(h.len) && !(num(h.len) > 0)) e[k('len')] = 'אורך — מספר גדול מ-0 או ריק';
+  });
+  if (!bars.length) e.bars = 'הוסיפו לפחות קבוצת מוטות אחת';
+  bars.forEach((b, i) => {
+    if (!REBAR_BAR_POS.some(x => x[0] === b.pos)) e[`b${i}_pos`] = 'בחרו מיקום';
+    if (!int1(b.n)) e[`b${i}_n`] = 'כמות — מספר שלם 1 ומעלה';
+    if (!REBAR_BAR_D.includes(num(b.d))) e[`b${i}_d`] = 'בחרו קוטר מהרשימה';
+  });
+  return e;
+}
+
 // A validated form → the rebar_order_items row (spec §3), weights included.
 function buildItem(kind, f, lineNo) {
   const row = {
@@ -156,6 +191,15 @@ function buildItem(kind, f, lineNo) {
     if (f.type === 'kranz') {
       row.params = { type: 'kranz' };   // one kranz: upper and lower are the same element (2026-10-19)
       for (const k of ['L', 's', 'a', 'b', 'n_long', 'd_long']) row.params[k] = parseNum(f[k]);
+      if (view) row.params.view = view;
+    } else if (f.type === 'beam' && f.section) {
+      const opt = v => (v === '' || v === null || v === undefined ? null : parseNum(v));
+      const hoops = (f.hoops || []).map(h => ({ role: h.role || 'extra', shape: h.shape, a: parseNum(h.a),
+        b: h.shape === 'pin' ? null : parseNum(h.b), d: parseNum(h.d), n: parseNum(h.n), s: opt(h.s), len: opt(h.len) }));
+      row.params = { type: 'beam', section: f.section, L: parseNum(f.L), s: parseNum(f.s), end: parseNum(f.end), s_end: parseNum(f.s_end),
+        hoops, bars: (f.bars || []).map(b => ({ pos: b.pos, n: parseNum(b.n), d: parseNum(b.d) })) };
+      if (f.section === 'L') row.params.side = f.side === 'left' ? 'left' : 'right';
+      row.diameter_mm = hoops.length ? hoops[0].d : row.diameter_mm;   // the line's Ø: its first hoop
       if (view) row.params.view = view;
     } else if (f.type === 'column' || f.type === 'beam') {
       row.params = { type: f.type };
@@ -214,6 +258,41 @@ const REBAR_CAGE_DEFAULTS = {
 };
 const REBAR_SPACER_HEIGHTS = Array.from({ length: 22 }, (_, i) => 70 + i * 10);   // 70…280 mm
 
+// ---- כלוב קורה: a shape and the hoop list copied from the plan (spec 2026-11-22) ----
+const REBAR_BEAM_SECTIONS = [['rect', 'מלבן'], ['L', 'L'], ['T', 'T'], ['U', 'U'], ['free', 'חופשי']];
+const REBAR_HOOP_SHAPES = [['closed', 'חישוק סגור'], ['u', 'U'], ['l', 'L'], ['pin', 'סיכה']];
+const REBAR_BAR_POS = [['top', 'ב.ע.'], ['bot', 'ב.ת.'], ['top2', 'ב.ע. שורה 2'], ['bot2', 'ב.ת. שורה 2'], ['side', 'ברזל צד'],
+  ['ledge', 'ברזל בליטה'], ['wall', 'ברזל קיר'], ['slab', 'ברזל רצפה'], ['other', 'מוטות נוספים']];
+// one row of the plan's hoop list: s '' = "לפי פריסה" (the beam's zones), a number = @s along the
+// whole beam; len '' = computed, else the length the plan prints
+const rbHoop = (role, shape, a, b, d, n, s = '') => ({ role, shape, a, b, d, n, s, len: '' });
+const rbBars = (pos, n, d) => ({ pos, n, d });
+// Each shape opens the list its plan shows (57-57 L, 62-62 T, 52-52 U); the counts a plan does not
+// print are a start only.
+const REBAR_BEAM_TEMPLATES = {
+  rect: () => ({ hoops: [rbHoop('core', 'closed', 25, 45, 8, 1)], bars: [rbBars('top', 2, 12), rbBars('bot', 3, 16)] }),
+  L: () => ({ hoops: [rbHoop('core', 'closed', 95, 65, 8, 1), rbHoop('inner', 'closed', 25, 65, 8, 2), rbHoop('ledge', 'closed', 115, 28, 10, 1, 20)],
+    bars: [rbBars('top', 4, 16), rbBars('bot', 6, 16), rbBars('side', 2, 12), rbBars('ledge', 2, 12)] }),
+  T: () => ({ hoops: [rbHoop('core', 'closed', 75, 65, 8, 1), rbHoop('inner', 'closed', 20, 65, 8, 2),
+    rbHoop('ledge', 'closed', 115, 23, 12, 1, 20), rbHoop('ledge', 'closed', 95, 33, 12, 1, 20)],
+    bars: [rbBars('top', 4, 16), rbBars('bot', 6, 16), rbBars('ledge', 4, 12)] }),
+  U: () => ({ hoops: [rbHoop('wall_a', 'closed', 25, 135, 8, 1), rbHoop('wall_b', 'closed', 35, 235, 8, 1),
+    rbHoop('link', 'u', 23, 60, 10, 2, 20), rbHoop('pin', 'pin', 15, '', 8, 2, 20)],
+    bars: [rbBars('wall', 12, 12), rbBars('slab', 4, 12), rbBars('top', 4, 12), rbBars('bot', 4, 16)] }),
+  free: () => ({ hoops: [rbHoop('core', 'closed', 25, 45, 8, 1)], bars: [rbBars('top', 2, 12), rbBars('bot', 3, 16)] }),
+};
+function rebarBeamTemplate(section) { return (REBAR_BEAM_TEMPLATES[section] || REBAR_BEAM_TEMPLATES.rect)(); }
+
+// A beam line in the new model: one saved with a shape as it is; one saved before 2026-11-22
+// (b×h, ב.ע./ב.ת., 2 or 4 legs) as the rectangle it is — the same pieces, so the same weight.
+function rebarBeamModel(p, d) {
+  if (p.section) return p;
+  const hoops = [{ role: 'core', shape: 'closed', a: Number(p.b), b: Number(p.h), d: Number(d), n: 1, s: null, len: null }];
+  if (Number(p.legs) === 4) hoops.push({ role: 'inner', shape: 'closed', a: Number(p.inner), b: Number(p.h), d: Number(d), n: 1, s: null, len: null });
+  return { type: 'beam', section: 'rect', L: p.L, s: p.s, end: p.end, s_end: p.s_end, hoops,
+    bars: [{ pos: 'top', n: Number(p.n_top), d: Number(p.d_top) }, { pos: 'bot', n: Number(p.n_bot), d: Number(p.d_bot) }] };
+}
+
 // The window's form for an element: the defaults for a new one (of `type`, kranz if none), or a
 // saved row read back. A cage's own defaults replace the kranz ones it shares names with (a, b, L).
 function rebarElementForm(item, type) {
@@ -226,6 +305,18 @@ function rebarElementForm(item, type) {
     height_mm: p.height_mm ?? 120, name: p.name || '', unit_kg: p.type === 'other' && p.unit_kg ? p.unit_kg : '',
     view: p.view || '', image_path: p.image_path || '',
   };
+  if (t === 'beam') {
+    const m = p.type === 'beam' ? rebarBeamModel(p, item.diameter_mm) : null;
+    const tpl = m || { L: 500, s: 20, end: 70, s_end: 10, section: 'rect', ...rebarBeamTemplate('rect') };
+    const blank = v => (v === null || v === undefined ? '' : v);
+    Object.assign(f, {
+      section: tpl.section, L: tpl.L, s: tpl.s, end: tpl.end, s_end: tpl.s_end, side: (m && m.side) || 'right',
+      hoops: tpl.hoops.map(h => ({ role: h.role || 'extra', shape: h.shape, a: blank(h.a), b: blank(h.b), d: h.d, n: h.n, s: blank(h.s), len: blank(h.len) })),
+      bars: tpl.bars.map(b => ({ pos: b.pos, n: b.n, d: b.d })),
+    });
+    f.diameter_mm = f.hoops.length ? f.hoops[0].d : 8;
+    return f;
+  }
   if (REBAR_CAGE_DEFAULTS[t]) {
     Object.assign(f, REBAR_CAGE_DEFAULTS[t]);
     if (p.type === t) {
@@ -240,6 +331,7 @@ function rebarElementForm(item, type) {
 // The "סוג" text of an element, for the order table and the PDF.
 function elementLabel(item) {
   const p = item.params || {};
+  if (p.type === 'beam' && p.section && p.section !== 'rect') return p.section === 'free' ? 'כלוב קורה (חופשי)' : 'כלוב קורה ' + p.section;
   return (REBAR_ELEMENT_TYPES.find(t => t[0] === p.type) || REBAR_ELEMENT_TYPES.find(t => t[0] === 'other'))[1];
 }
 
@@ -248,6 +340,12 @@ function elementLabel(item) {
 function elementDescParts(item) {
   const p = item.params || {}, n = v => String(Number(v));
   if (p.type === 'kranz') return [`L=${n(p.L)}`, `Ø${n(item.diameter_mm)}@${n(p.s)}`, `${n(p.n_long)}Ø${n(p.d_long)}`];
+  if (p.type === 'beam' && p.section) {
+    const pos = k => (REBAR_BAR_POS.find(x => x[0] === k) || REBAR_BAR_POS[REBAR_BAR_POS.length - 1])[1];
+    const kinds = (p.hoops || []).length;
+    return [`L=${n(p.L)}`, ...(p.bars || []).map(b => `${pos(b.pos)} ${n(b.n)}Ø${n(b.d)}`),
+      kinds === 1 ? 'סוג חישוק אחד' : `חישוקים: ${kinds} סוגים`];
+  }
   if (p.type === 'column' || p.type === 'beam') {
     const st = [`${Number(p.legs) === 4 ? '4L ' : ''}Ø${n(item.diameter_mm)}@${n(p.s)}`].concat(Number(p.end) > 0 ? [`@${n(p.s_end)}×${n(p.end)}`] : []);
     // a column is pure technical text (kept left-to-right as one run); a beam names ב.ע./ב.ת.

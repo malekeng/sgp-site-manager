@@ -89,6 +89,7 @@
 .iw-all { flex: 0 0 auto; }
 .iw-body { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 14px; }
 .iw-body-form { grid-template-columns: minmax(0, 1fr); }
+.iw-body-wide { grid-template-columns: minmax(0, 1fr) 380px; }   /* a shaped beam: room for its hoop list */
 .iw-stage { position: relative; min-height: 340px; background: var(--bg); border-radius: var(--radius-sm); overflow: hidden; }
 .iw-svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 .iw-stage.is-free .iw-svg { cursor: crosshair; background: var(--sheet); }
@@ -172,6 +173,22 @@
 .iw-row .iw-seg { justify-self: end; }
 .iw-typebar { margin: 2px 0 12px; }
 .iw-card-narrow { max-width: 460px; }
+/* כלוב קורה: the plan's hoop list and the bars, one card per row (2026-11-22) */
+.bm-row { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 6px; align-items: end;
+  padding: 8px; padding-inline-end: 30px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); }
+.bm-row > .bm-cell:first-child { grid-column: span 2; }   /* the shape (or the place) gets two columns */
+.bm-cell { margin: 0; min-width: 0; }
+.bm-cell .bm-lbl { display: block; font-size: 11px; font-weight: 700; color: var(--steel); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bm-cell input, .bm-cell select { width: 100%; min-width: 0; padding: 6px 7px !important; font-size: 13.5px; }
+.bm-cell .field-error-msg { font-size: 11px; }
+.bm-del { position: absolute; top: 6px; inset-inline-end: 4px; border: 0; background: none; color: var(--steel); font-size: 15px; line-height: 1; padding: 4px; cursor: pointer; border-radius: 6px; }
+.bm-del:hover { color: var(--danger); background: rgba(255,71,87,0.1); }
+.bm-add { align-self: flex-start; margin: 2px 0 4px; }
+.bm-sections { margin-bottom: 10px; }
+.bm-sections label { display: block; margin-bottom: 4px; }
+.bm-sections .iw-seg { display: flex; width: 100%; }
+.bm-sections .iw-seg button { flex: 1; padding: 6px 4px; }
+@media (max-width: 560px) { .bm-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }   /* a phone: two fields a line, so Ø, @ and "לפי פריסה" read whole */
 .iw-svg .iw-ring { fill: none; stroke: var(--navy); stroke-width: 2.5; }
 .iw-svg .iw-mesh { stroke-linecap: round; }
 .iw-svg .iw-mesh-x { stroke: var(--navy); }
@@ -194,6 +211,8 @@ select.iw-box { width: 76px; padding: 4px 2px; cursor: pointer; }
 .iw-draw { position: absolute; inset: 48px 0 0 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
 .iw-draw:empty { display: none; }
 .iw-draw svg { display: block; }
+.iw-draw svg.iw-fit { width: 100%; height: auto; max-height: 100%; }
+@media (min-width: 761px) { .iw-body-wide .iw-stage { align-self: start; position: sticky; top: 0; } }   /* stays in view while the list is edited (not on a phone: it would cover half the screen) */
 .iw-draw-hint { font-size: 13px; font-weight: 600; color: var(--steel); }
 .iw-viewseg { position: absolute; top: 10px; left: 10px; z-index: 2; }
 .iw-upload { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 10px; }
