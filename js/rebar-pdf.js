@@ -139,7 +139,8 @@ function rebarPdfCells(it, drawings) {
   }
   if (it.kind === 'element') {
     // a spacer is counted, not weighed: its weights print as a dash
-    const img = drawings['e' + it.line_no] ? `<img src="${drawings['e' + it.line_no]}" style="width:150px;height:55px;display:block;object-fit:contain;">` : '—';
+    const small = drawings[rebarPdfDrawKey(it, false)];
+    const img = small ? `<img src="${small}" style="width:150px;height:55px;display:block;object-fit:contain;">` : '—';
     const weights = p.type === 'spacer' ? num(it.qty, 0) + cell('—', 'text-align:left;') + cell('—', 'text-align:left;') : tail;
     return cell(img, 'padding:4px 8px;') + alias + cell(rebarPdfEsc(elementLabel(it))) + cell(rebarPdfElementDesc(it), rebarPdfDescLtr(it) ? 'text-align:left;' : '') + weights;
   }
@@ -230,8 +231,15 @@ function rebarPdfPileDesc(it) {
 // large drawing, 6 to a page ----
 const REBAR_PDF_DRAWINGS_PER_PAGE = 6;
 
+// The key of a line's drawing in the PDF's map (small for its row, large for its box). Piles and
+// elements are each numbered from 1, so the kind is part of the key: pile 1 and element 1 must not
+// share a drawing (claudex BEAM-06, 2026-11-23).
+function rebarPdfDrawKey(it, large) {
+  return (it.kind === 'pile' ? (large ? 'P' : 'p') : (large ? 'E' : 'e')) + it.line_no;
+}
+
 function rebarPdfDrawnElements(items, drawings) {
-  return (items || []).filter(it => (it.kind === 'element' || it.kind === 'pile') && (drawings || {})['E' + it.line_no])
+  return (items || []).filter(it => (it.kind === 'element' || it.kind === 'pile') && (drawings || {})[rebarPdfDrawKey(it, true)])
     .sort((a, b) => a.line_no - b.line_no);
 }
 
@@ -244,7 +252,7 @@ function rebarPdfDrawingPages({ orgName, order, items, drawings, start, total })
       return `
       <div data-drawing="${it.line_no}" style="width:410px;box-sizing:border-box;border:1px solid #E3E9E6;border-radius:12px;padding:10px 12px;">
         <div style="font-size:12px;font-weight:800;color:#0E1A20;margin-bottom:6px;">שורה ${it.line_no} · ${rebarPdfEsc(label)}${it.alias ? ' · ' + rebarPdfEsc(it.alias) : ''} · כמות ${rebarPdfNum(it.qty, 0)}</div>
-        <img src="${drawings['E' + it.line_no]}" style="width:386px;height:222px;display:block;object-fit:contain;">
+        <img src="${drawings[rebarPdfDrawKey(it, true)]}" style="width:386px;height:222px;display:block;object-fit:contain;">
         <div style="font-size:11.5px;color:#0E1A20;margin-top:6px;${!pile && rebarPdfDescLtr(it) ? 'text-align:left;' : ''}">${pile ? rebarPdfPileDesc(it) : rebarPdfElementDesc(it)}</div>
       </div>`;
     }).join('');
@@ -321,7 +329,9 @@ function rebarPdfElementSvgs(it) {
   const small = draw(it, { w: 300, h: 110, stroke: 2.2, bare: true });
   // a shaped beam (2026-11-22) is drawn large in 2D: that view carries the plan's hoop list the factory reads
   const shaped = it.kind === 'element' && it.params && it.params.type === 'beam' && it.params.section;
-  return small ? { small, large: draw(it, { w: 800, h: 460, stroke: 2.2, ...(shaped ? { view: '2d' } : {}) }) } : null;
+  // the large one stands on its own: a row without a thumbnail keeps its box (claudex BEAM-03)
+  const large = draw(it, { w: 800, h: 460, stroke: 2.2, ...(shaped ? { view: '2d' } : {}) });
+  return small || large ? { small, large } : null;
 }
 
 async function rebarExportPdf({ order, items, site, company }) {
@@ -334,11 +344,11 @@ async function rebarExportPdf({ order, items, site, company }) {
       // an "אחר"; an image that cannot be fetched leaves no entry, so the row shows a dash and has no box
       const svgs = rebarPdfElementSvgs(it);
       if (svgs) {
-        drawings['e' + it.line_no] = await rebarSvgToPng(svgs.small, 300, 110);
-        drawings['E' + it.line_no] = await rebarSvgToPng(svgs.large, 800, 460);
+        if (svgs.small) drawings[rebarPdfDrawKey(it, false)] = await rebarSvgToPng(svgs.small, 300, 110);
+        if (svgs.large) drawings[rebarPdfDrawKey(it, true)] = await rebarSvgToPng(svgs.large, 800, 460);
       } else if (it.params && it.params.image_path) {
         const img = await rebarImageDataUrl(it.params.image_path).catch(() => null);
-        if (img) drawings['e' + it.line_no] = drawings['E' + it.line_no] = img;
+        if (img) drawings[rebarPdfDrawKey(it, false)] = drawings[rebarPdfDrawKey(it, true)] = img;
       }
     }
     // drawn smaller than a bar so its numbers stay readable at the cell's 150×55

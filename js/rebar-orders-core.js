@@ -331,7 +331,9 @@ function rebarElementForm(item, type) {
 // The "סוג" text of an element, for the order table and the PDF.
 function elementLabel(item) {
   const p = item.params || {};
-  if (p.type === 'beam' && p.section && p.section !== 'rect') return p.section === 'free' ? 'כלוב קורה (חופשי)' : 'כלוב קורה ' + p.section;
+  // only a known shape is named; anything else saved there reads as a plain beam
+  if (p.type === 'beam' && ['L', 'T', 'U'].includes(p.section)) return 'כלוב קורה ' + p.section;
+  if (p.type === 'beam' && p.section === 'free') return 'כלוב קורה (חופשי)';
   return (REBAR_ELEMENT_TYPES.find(t => t[0] === p.type) || REBAR_ELEMENT_TYPES.find(t => t[0] === 'other'))[1];
 }
 
