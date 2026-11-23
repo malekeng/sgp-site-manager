@@ -453,6 +453,9 @@
         document.getElementById('tempPassValue').textContent = result.password;
         document.getElementById('tempPassNote').textContent = 'מסרו למשתמש את האימייל ואת הסיסמה בעל־פה או בהודעה אישית. בכניסה הראשונה הוא יתבקש לקבוע סיסמה משלו. הסיסמה מוצגת פעם אחת בלבד.';
         document.getElementById('tempPassBackdrop').classList.add('open');
+      } else if (result.reactivated && result.email_sent === false) {
+        // a returning member: back in the company, but the email to set a password did not go out
+        toast('המשתמש חזר לחברה, אך האימייל לקביעת סיסמה לא נשלח. הוא יכול ללחוץ "שכחתי סיסמה" במסך הכניסה.', 'error');
       } else {
         toast('ההזמנה נשלחה בהצלחה', 'success');
       }

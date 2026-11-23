@@ -106,8 +106,10 @@ function currentOrgSlug() {
   const fromUrl = (new URLSearchParams(location.search).get('org') || '').trim().toLowerCase();
   if (fromUrl) { try { localStorage.setItem(ORG_SLUG_KEY, fromUrl); } catch (_) {} return fromUrl; }
   const field = document.getElementById('orgSlugInput');
+  // a typed code is remembered only after it signed in (2026-11-24, audit SERVER-008): a mistyped one
+  // must not hide the field on the next visit
   const typed = (field?.value || '').trim().toLowerCase();
-  if (typed) { try { localStorage.setItem(ORG_SLUG_KEY, typed); } catch (_) {} return typed; }
+  if (typed) return typed;
   try { return (localStorage.getItem(ORG_SLUG_KEY) || '').trim().toLowerCase(); } catch (_) { return ''; }
 }
 
@@ -146,10 +148,15 @@ document.getElementById('loginForm').addEventListener('submit', async e => {
 
   if (error) {
     showErr('מספר טלפון או סיסמה שגויים');
+    // the company code may be the wrong part: show it, filled with the one that was used, to correct
+    const wrap = document.getElementById('orgSlugField');
+    const field = document.getElementById('orgSlugInput');
+    if (wrap && field) { field.value = slug; wrap.hidden = false; }
     btn.disabled = false;
     btnText.textContent = 'כניסה';
     return;
   }
+  try { localStorage.setItem(ORG_SLUG_KEY, slug); } catch (_) {}
   window.location.href = 'contractor-tasks.html';
 });
 

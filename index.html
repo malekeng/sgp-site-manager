@@ -431,8 +431,11 @@ verifyCodeForm.addEventListener('submit', async e => {
   setBusy(btn, btnText, true, 'מאמת...', 'אישור וכניסה');
 
   // If the link from the email already established a session (linkVerified),
-  // skip re-verifying a code -- there may not even be one to type.
-  if (!linkVerified && !/^\d{4,10}$/.test(code)) {
+  // skip re-verifying a code -- there may not even be one to type. The same once a code or a
+  // temporary password for this email was accepted (verifiedEmail): a used code cannot be used
+  // again, so a refused new password must not send the user back to it (2026-11-24, audit SERVER-007).
+  const already = linkVerified || (verifiedEmail && verifiedEmail === email);
+  if (!already && !/^\d{4,10}$/.test(code)) {
     // not an emailed code: a temporary password from the company (users.html), typed here
     const { error } = await sb.auth.signInWithPassword({ email, password: code });
     if (error) {
@@ -440,7 +443,7 @@ verifyCodeForm.addEventListener('submit', async e => {
       setBusy(btn, btnText, false, '', 'אישור וכניסה');
       return;
     }
-  } else if (!linkVerified) {
+  } else if (!already) {
     let verifyError = null;
     for (const type of ['recovery', 'invite']) {
       const { error } = await sb.auth.verifyOtp({ email, token: code, type });
@@ -454,6 +457,8 @@ verifyCodeForm.addEventListener('submit', async e => {
       return;
     }
   }
+
+  verifiedEmail = email;
 
   // a temporary password's flag goes with it
   const { data: { session: current } } = await sb.auth.getSession();
@@ -512,6 +517,8 @@ signupForm.addEventListener('submit', async e => {
 //   #access_token=...&refresh_token=...&type=recovery   (older implicit-flow link)
 // Previously this app ignored both, so the link appeared to "do nothing."
 let linkVerified = false;
+// the email whose code or temporary password was accepted on screen 3 (see the submit above)
+let verifiedEmail = '';
 
 async function handleAuthLinkIfPresent() {
   const params = new URLSearchParams(window.location.search);
