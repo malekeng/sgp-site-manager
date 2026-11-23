@@ -387,6 +387,11 @@ function rbCage2d(item, w, h, stroke) {
 const RB_COVER = 2.5;
 const rbRect = (z0, y0, w, h) => [[z0, y0], [z0 + w, y0], [z0 + w, y0 + h], [z0, y0 + h]];
 const rbSpread = (n, from, to) => (n < 1 ? [] : n === 1 ? [(from + to) / 2] : Array.from({ length: n }, (_, i) => from + (to - from) * i / (n - 1)));
+// A section draws at most this many of one group (bars at one place, inner hoops of one row): a count
+// is typed freely and drawn while typing, so it must never size an array (claudex BEAM-R2-02).
+// The weight and the captions keep the count as entered.
+const RB_SECTION_MAX = 40;
+const rbDrawn = v => Math.min(RB_SECTION_MAX, Math.max(0, Math.floor(Number(v) || 0)));
 
 // A hoop of the section drawn as its row's shape (claudex BEAM-04): closed a×b; a U open at the
 // top (⊔, a across, b up — a + 2b); an L (a along the bottom, b up the left); a pin across at mid-height.
@@ -407,7 +412,7 @@ function rbBeamGeom(p) {
   // a body (a core, a wall) needs a height: a pin cannot be one
   const body = role => of(role).filter(h => h.shape !== 'pin');
   const bars = {};
-  for (const b of p.bars || []) bars[b.pos] = (bars[b.pos] || 0) + (Number(b.n) || 0);
+  for (const b of p.bars || []) bars[b.pos] = rbDrawn((bars[b.pos] || 0) + rbDrawn(b.n));
   const out = { W: 0, H: 0, outline: [], hoops: [], bars: [], breaks: [] };
   if (p.section === 'U') {
     const walls = [body('wall_a')[0], body('wall_b')[0]];
@@ -423,7 +428,9 @@ function rbBeamGeom(p) {
     out.outline = [[0, 0], [W, 0], [W, H2], [W1 + G, H2], [W1 + G, t], [W1, t], [W1, H1], [0, H1]];
     out.hoops.push(rbHoopPoly(A.shape, c, c, A.a, A.b, 'wall_a', A.i), rbHoopPoly(B.shape, W1 + G + c, c, B.a, B.b, 'wall_b', B.i));
     // the links as many as their rows count, one at each wall (⊏ in wall a, ⊐ in wall b): two places at most
-    const placed = links.flatMap(h => Array.from({ length: Math.max(1, Math.floor(h.n)) }, () => h)).slice(0, 2);
+    // (the two places are filled row by row — never an array as long as the count)
+    const placed = [];
+    for (const h of links) for (let k = 0; k < Math.max(1, Math.floor(h.n)) && placed.length < 2; k++) placed.push(h);
     placed.forEach((lh, j) => {
       const lk = Math.min(lh.b, G * 0.45), la = Math.min(lh.a, t - 2 * c), z = j ? W1 + G + c : W1 - c, tip = z + (j ? -lk : lk);
       const poly = lh.shape === 'closed' ? [[z, c], [tip, c], [tip, c + la], [z, c + la]]
@@ -463,7 +470,7 @@ function rbBeamGeom(p) {
   for (const h of of('inner')) {
     // a pin inside the core runs across it at mid-height
     const a = Math.min(h.a, core.a), b = h.shape === 'pin' ? core.b : Math.min(h.b, core.b);
-    const zs = h.n === 1 ? [cz0 + (core.a - a) / 2] : rbSpread(h.n, cz0, cz1 - a);
+    const zs = h.n === 1 ? [cz0 + (core.a - a) / 2] : rbSpread(rbDrawn(h.n), cz0, cz1 - a);
     for (const z of zs) out.hoops.push(rbHoopPoly(h.shape, z, c, a, b, 'inner', h.i));
   }
   for (const h of ledges) {
@@ -488,10 +495,8 @@ function rbBeamGeom(p) {
     else ends.push(cz0 + e, cz1 - e);
     const spots = [];
     for (const z of ends) spots.push([z, yl], [z, yBot]);
-    for (let k = 0; k < nl; k++) {
-      if (k < spots.length) out.bars.push(spots[k]);
-      else out.bars.push([rbSpread(nl - spots.length, c + e, Wf - c - e)[k - spots.length], yl]);
-    }
+    const rest = rbSpread(nl - spots.length, c + e, Wf - c - e);   // (spread once, not once a bar)
+    for (let k = 0; k < nl; k++) out.bars.push(k < spots.length ? spots[k] : [rest[k - spots.length], yl]);
   }
   return out;
 }
@@ -565,6 +570,12 @@ function rbBarBlock(texts, x, y, room, fs, lh) {
 // 2D: the section (right), the side view with the zones (left), and along the bottom the plan's
 // hoop list, one drawn hoop per row with its caption. A free beam has no section: the side view widens.
 function rbBeam2d(item, w, h, stroke) {
+  // the layout needs the room of the window's stage: a smaller box (a thumbnail of a beam with no
+  // 3D body) gets it laid out at 800×460 and scaled down whole, lines as thick as asked (claudex BEAM-R2-01)
+  if (w < 800 || h < 460) {
+    const k = Math.min(w / 800, h / 460);
+    return rbBeam2d(item, 800, 460, stroke / k).replace(/^<svg[^>]*>/, `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 800 460">`);
+  }
   const p = item.params, u = rbUnit(w, h), pad = Math.max(12, Math.round(Math.min(w, h) * 0.05));
   const g = rbBeamGeom(p), hs = p.hoops || [];
   const topH = h * 0.56;
