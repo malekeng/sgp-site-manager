@@ -151,7 +151,10 @@ function rebarPdfCells(it, drawings) {
       + cell(rebarPdfLtr(asym ? `${it.diameter_mm} / ${p.d_y}` : it.diameter_mm), 'text-align:left;')
       + cell(rebarPdfLtr(asym ? `@${p.s} / @${p.s_x}` : `@${p.s}`), 'text-align:left;') + cell(rebarPdfEsc(it.steel)) + tail;
   }
-  return alias + cell(rebarPdfEsc(p.pile_type || 'בסיס')) + cell(rebarPdfLtr(`${p.d}/${p.D}`), 'text-align:left;')
+  // a pile's note and both steel types under its name (2026-11-24, audit ORD-08: they were never printed)
+  const pileSub = [it.note, `ראשי: ${it.steel || 'מצולע'}`, `ספירלה: ${p.steel_spiral || 'מצולע'}`].filter(Boolean).map(rebarPdfEsc).join(' · ');
+  const pileName = cell((it.alias ? rebarPdfEsc(it.alias) : '—') + `<div style="font-size:10px;color:#637178;font-weight:600;margin-top:2px;">${pileSub}</div>`);
+  return pileName + cell(rebarPdfEsc(p.pile_type || 'בסיס')) + cell(rebarPdfLtr(`${p.d}/${p.D}`), 'text-align:left;')
     + cell(rebarPdfLtr(`${p.n}×Ø${it.diameter_mm}`), 'text-align:left;') + num(it.length_cm, 1)
     + cell(rebarPdfLtr(`Ø${p.d_spiral} @${p.p1}/@${p.p2}`), 'text-align:left;')
     + cell(rebarPdfEsc((p.additions || []).join(', ') || '—')) + tail;

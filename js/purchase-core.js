@@ -42,6 +42,16 @@ function poLineBlank(line) {
     && (l.unit_price === null || l.unit_price === undefined || l.unit_price === '');
 }
 
+// What a typed number cell holds (2026-11-24, audit ORD-07): the number; null when empty; and the text
+// itself when it is not a number, so poLineErrors refuses it instead of reading "10%" as no discount.
+// A discount may end in "%".
+function poCellValue(f, raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  const n = parseNum(f === 'discount_pct' ? s.replace(/\s*%$/, '') : s);
+  return n === null ? s : n;
+}
+
 function poLineErrors(line) {
   const l = line || {}, e = [];
   if (poBlankText(l.description)) e.push('חסר תיאור');

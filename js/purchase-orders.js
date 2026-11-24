@@ -62,12 +62,14 @@ async function poGo() {
 // ===== the list =====
 async function poShowList() {
   const site = state.ctx.site;
-  const [{ data: orders, error }, { data: items }, { data: arrived }] = await Promise.all([
+  const [{ data: orders, error }, { data: items, error: e2 }, { data: arrived, error: e3 }] = await Promise.all([
     sb.from('purchase_orders').select('*').eq('site_id', site.id).order('created_at', { ascending: false }),
     sb.from('purchase_order_items').select('id, order_id, qty, unit_price, discount_pct').eq('site_id', site.id),
     sb.from('purchase_receipt_items').select('item_id, qty_received').eq('site_id', site.id),
   ]);
-  if (error) { toast(poDbError(error), 'error'); return; }
+  // a failed read is shown, never counted as "no lines" (2026-11-24, audit ORD-09: totals showed 0)
+  const listErr = error || e2 || e3;
+  if (listErr) { toast(poDbError(listErr), 'error'); return; }
   state.order = null;
   const byOrder = {};
   for (const it of items || []) (byOrder[it.order_id] ||= []).push(it);
@@ -99,11 +101,14 @@ async function poShowList() {
 
 // ===== open / new / duplicate =====
 async function poOpenOrder(id) {
+  // only an order of the site this page works in (2026-11-24, audit ORD-06): a site switch reloads the
+  // page with the same address, and the order of the other site would be shown and issued under this one
   const [{ data: order, error }, { data: items, error: e2 }] = await Promise.all([
-    sb.from('purchase_orders').select('*').eq('id', id).single(),
-    sb.from('purchase_order_items').select('*').eq('order_id', id).order('line_no'),
+    sb.from('purchase_orders').select('*').eq('id', id).eq('site_id', state.ctx.site.id).maybeSingle(),
+    sb.from('purchase_order_items').select('*').eq('order_id', id).eq('site_id', state.ctx.site.id).order('line_no'),
   ]);
   if (error || e2) { toast(poDbError(error || e2), 'error'); return poShowList(); }
+  if (!order) { toast('ההזמנה לא נמצאה באתר הזה', 'error'); history.replaceState(null, '', location.pathname); return poShowList(); }
   Object.assign(state, { order, items: items || [], removedIds: [], dirty: false, loadedUpdatedAt: order.updated_at, noTouched: false,
     senderFrom: null, senderOpen: null, supplierFrom: null, supplierAuto: false });
   if (poIsDraft() && !state.items.length) state.items = [poNewLine()];
@@ -311,7 +316,7 @@ function poLineRow(it, i, draft, got) {
       <td class="po-c-unit" data-l="יחידה"><select data-f="unit" aria-label="יחידה שורה ${i + 1}">${units}</select></td>
       <td class="po-c-qty" data-l="כמות"><input data-f="qty" inputmode="decimal" value="${v(it.qty)}" aria-label="כמות שורה ${i + 1}"></td>
       <td class="po-c-price" data-l="מחיר ליחידה (₪)"><input data-f="unit_price" inputmode="decimal" value="${v(it.unit_price)}" aria-label="מחיר שורה ${i + 1}"></td>
-      <td class="po-c-disc" data-l="הנחה %"><input data-f="discount_pct" inputmode="decimal" value="${Number(it.discount_pct) ? v(it.discount_pct) : ''}" placeholder="0" aria-label="הנחה שורה ${i + 1}"></td>
+      <td class="po-c-disc" data-l="הנחה %"><input data-f="discount_pct" inputmode="decimal" value="${typeof it.discount_pct === 'string' || Number(it.discount_pct) ? v(it.discount_pct) : ''}" placeholder="0" aria-label="הנחה שורה ${i + 1}"></td>
       ${total}
       <td class="po-c-del"><button type="button" class="icon-btn danger" data-del-line="${i}" title="מחיקת השורה" aria-label="מחיקת שורה ${i + 1}">${uiIcon('trash')}</button></td>
     </tr>`;
@@ -366,7 +371,17 @@ function poDeleteLine(i) {
 // ===== save =====
 // The header is always written first: its updated_at check is the lock for the whole order, so a
 // second editor's save stops before touching any line.
+// one save at a time, and nothing on the order changes while it is being saved (2026-11-24, audit
+// ORD-03): an edit typed during the save was marked saved without being sent
 async function poSave() {
+  if (state.saving) return false;
+  state.saving = true;
+  const wrap = document.getElementById('editorWrap');
+  if (wrap) wrap.inert = true;
+  try { return await poSaveNow(); } finally { state.saving = false; if (wrap) wrap.inert = false; }
+}
+
+async function poSaveNow() {
   poReadHeader();
   const o = state.order, { user, site } = state.ctx;
   for (const it of state.items) if (poLineBlank(it) && it.id) state.removedIds.push(it.id);
@@ -682,8 +697,21 @@ async function poSaveReceipt() {
 // "התקבלה כל ההזמנה": one receipt, dated today, for everything still owed on the order
 async function poReceiveAll() {
   const o = state.order;
-  if (!o || !['sent', 'partial'].includes(o.status)) return;
-  const lines = poReceiveAllLines(state.items, state.receiptItems);
+  if (!o || !['sent', 'partial'].includes(o.status) || state.receivingAll) return;
+  state.receivingAll = true;
+  try { await poReceiveAllNow(o); } finally { state.receivingAll = false; }
+}
+
+async function poReceiveAllNow(o) {
+  // what has arrived by now, not what this page loaded (2026-11-24, audit ORD-04): another phone may have
+  // recorded it meanwhile, and "everything" a second time would count it twice
+  const [{ data: fresh, error: e1 }, { data: got, error: e2 }] = await Promise.all([
+    sb.from('purchase_orders').select('status').eq('id', o.id).single(),
+    sb.from('purchase_receipt_items').select('item_id, qty_received').in('item_id', state.items.map(it => it.id)),
+  ]);
+  if (e1 || e2) { toast(poDbError(e1 || e2), 'error'); return; }
+  if (!['sent', 'partial'].includes(fresh.status)) { toast('ההזמנה הזו כבר התקבלה במלואה או נסגרה'); await poOpenOrder(o.id); return; }
+  const lines = poReceiveAllLines(state.items, got || []);
   if (!lines.length) { toast('כל השורות כבר התקבלו'); return; }
   const rest = state.receipts.length ? 'כל מה שנשאר' : 'כל ההזמנה';
   if (!confirm(`לרשום ש${rest} בהזמנה ${o.order_no} התקבל היום (${lines.length} שורות)?
@@ -791,7 +819,7 @@ function poReceiptEvents() {
     const f = e.target.dataset.f, row = e.target.closest('tr[data-i]');
     if (!f || !row || !poIsDraft()) return;
     const i = Number(row.dataset.i), it = state.items[i];
-    it[f] = ['qty', 'unit_price', 'discount_pct'].includes(f) ? parseNum(e.target.value) : e.target.value;
+    it[f] = ['qty', 'unit_price', 'discount_pct'].includes(f) ? poCellValue(f, e.target.value) : e.target.value;
     it._dirty = true;
     state.dirty = true;
     host.querySelector(`[data-total="${i}"]`).textContent = poMoney(poLineTotal(it));

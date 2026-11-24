@@ -58,11 +58,14 @@ function roBackToRebar(query = '') {
 }
 
 async function roOpenOrder(id) {
+  // only an order of the site this page works in (2026-11-24, audit ORD-06): a site switch reloads the
+  // page with the same address, and the order of the other site would be shown and issued under this one
   const [{ data: order, error }, { data: items, error: e2 }] = await Promise.all([
-    sb.from('rebar_orders').select('*').eq('id', id).single(),
-    sb.from('rebar_order_items').select('*').eq('order_id', id).order('line_no'),
+    sb.from('rebar_orders').select('*').eq('id', id).eq('site_id', state.ctx.site.id).maybeSingle(),
+    sb.from('rebar_order_items').select('*').eq('order_id', id).eq('site_id', state.ctx.site.id).order('line_no'),
   ]);
   if (error || e2) { toast(rebarDbError(error || e2), 'error'); return; }
+  if (!order) { toast('ההזמנה לא נמצאה באתר הזה', 'error'); location.replace('rebar.html'); return; }
   Object.assign(state, {
     order, items: (items || []).sort((a, b) => RO_KIND_RANK[a.kind] - RO_KIND_RANK[b.kind] || a.line_no - b.line_no),
     removedIds: [], dirty: false, loadedUpdatedAt: order.updated_at, noTouched: false, senderFrom: null, senderOpen: null,
@@ -73,9 +76,14 @@ async function roOpenOrder(id) {
   roRenderEditor();
 }
 
+// one run with the purchase orders (2026-11-24, audit ORD-05): a delivery note quotes the number, so a
+// site must not have it twice — the same rule as poNextNo in purchase-core.js
 async function roSiteOrderNos() {
-  const { data } = await sb.from('rebar_orders').select('order_no').eq('site_id', state.ctx.site.id);
-  return (data || []).map(r => r.order_no);
+  const [{ data: a }, { data: b }] = await Promise.all([
+    sb.from('rebar_orders').select('order_no').eq('site_id', state.ctx.site.id),
+    sb.from('purchase_orders').select('order_no').eq('site_id', state.ctx.site.id),
+  ]);
+  return [...(a || []), ...(b || [])].map(r => r.order_no);
 }
 
 // A new order fills its sender and delivery itself: the orderer from the account, the delivery
@@ -250,7 +258,17 @@ function roHeaderErrors() {
 // Saves the header (with the edit lock) and then the lines. The header is always written
 // first: its updated_at check is the lock for the whole order, so a second editor's save
 // stops before touching any line.
+// one save at a time, and nothing on the order changes while it is being saved (2026-11-24, audit
+// ORD-03): an edit typed during the save was marked saved without being sent
 async function saveOrder() {
+  if (state.saving) return false;
+  state.saving = true;
+  const wrap = document.getElementById('editorWrap');
+  if (wrap) wrap.inert = true;
+  try { return await saveOrderNow(); } finally { state.saving = false; if (wrap) wrap.inert = false; }
+}
+
+async function saveOrderNow() {
   roReadHeader();
   const errs = roHeaderErrors();
   if (errs.length) { roMsg(errs.join(' · ')); return false; }
@@ -1577,7 +1595,7 @@ function roItemDialogEvents() {
 // A receipt is one delivery: the lines that came (all or part), the delivery note and the
 // check against it. The database sets the order's status from the receipts.
 const RO_LEVEL_ICON = { ok: 'check', warn: 'triangle-alert', bad: 'triangle-alert', info: 'file-text' };
-const rc = { file: null, note: null, reading: false };
+const rc = { file: null, note: null, reading: false, gen: 0 };
 
 async function roLoadReceipts(orderId) {
   state.receipts = []; state.receiptItems = []; state.receiptDocs = {};
@@ -1596,7 +1614,11 @@ async function roLoadReceipts(orderId) {
 
 function roChecksHtml(checks) {
   if (!checks || !checks.length) return '';
-  return `<ul class="di-checks">${checks.map(c => `<li class="di-${c.level}">${uiIcon(RO_LEVEL_ICON[c.level] || 'file-text', 15)}<span>${esc(c.text)}</span></li>`).join('')}</ul>`;
+  // the level comes from the saved receipt: only a known one becomes a class (2026-11-24, audit ORD-01)
+  return `<ul class="di-checks">${checks.map(c => {
+    const lv = ['ok', 'warn', 'bad', 'info'].includes(c.level) ? c.level : 'info';
+    return `<li class="di-${lv}">${uiIcon(RO_LEVEL_ICON[lv], 15)}<span>${esc(c.text)}</span></li>`;
+  }).join('')}</ul>`;
 }
 
 function roRenderReceipts() {
@@ -1736,12 +1758,16 @@ function roReceiptChecks() {
 }
 
 async function roReadReceiptFile(file) {
+  // each chosen file gets a number; a reading that finishes after another file was chosen is dropped
+  // (2026-11-24, audit ORD-10: it filled the receipt with the first file's note next to the second file)
+  const gen = ++rc.gen;
   rc.file = file; rc.note = null; rc.reading = true;
   const prog = document.getElementById('rcProgress'), txt = document.getElementById('rcProgressText');
   prog.classList.add('show');
   try {
-    const doc = await sgpReadDocument(file, { onProgress: t => { txt.textContent = t; } });
+    const doc = await sgpReadDocument(file, { onProgress: t => { if (gen === rc.gen) txt.textContent = t; } });
     const ex = sgpExtract(doc, file.name) || {};
+    if (gen !== rc.gen) return;
     rc.note = ex.kind === 'rebar_note' ? ex : null;
     const read = document.getElementById('rcRead');
     if (rc.note) {
@@ -1760,11 +1786,13 @@ async function roReadReceiptFile(file) {
     toast('התעודה נקראה — סמנו מה הגיע', 'success');
   } catch (err) {
     console.error(err);
-    toast('שגיאה בקריאת התעודה: ' + err.message, 'error');
+    if (gen === rc.gen) toast('שגיאה בקריאת התעודה: ' + err.message, 'error');
   } finally {
-    rc.reading = false;
-    prog.classList.remove('show');
-    roReceiptChecks();
+    if (gen === rc.gen) {
+      rc.reading = false;
+      prog.classList.remove('show');
+      roReceiptChecks();
+    }
   }
 }
 
@@ -1822,8 +1850,21 @@ async function roSaveReceipt() {
 // (an order often arrives in several deliveries; the last one is recorded in one step).
 async function roReceiveAll() {
   const o = state.order;
-  if (!o || !['sent', 'partial'].includes(o.status)) return;
-  const lines = receiveAllLines(state.items, state.receiptItems);
+  if (!o || !['sent', 'partial'].includes(o.status) || state.receivingAll) return;
+  state.receivingAll = true;
+  try { await roReceiveAllNow(o); } finally { state.receivingAll = false; }
+}
+
+async function roReceiveAllNow(o) {
+  // what has arrived by now, not what this page loaded (2026-11-24, audit ORD-04): another phone may have
+  // recorded it meanwhile, and "everything" a second time would count it twice
+  const [{ data: fresh, error: e1 }, { data: got, error: e2 }] = await Promise.all([
+    sb.from('rebar_orders').select('status').eq('id', o.id).single(),
+    sb.from('rebar_receipt_items').select('item_id, qty_received').in('item_id', state.items.map(it => it.id)),
+  ]);
+  if (e1 || e2) { toast(rebarDbError(e1 || e2), 'error'); return; }
+  if (!['sent', 'partial'].includes(fresh.status)) { toast('ההזמנה הזו כבר התקבלה במלואה או נסגרה'); await roOpenOrder(o.id); return; }
+  const lines = receiveAllLines(state.items, got || []);
   if (!lines.length) { toast('כל השורות כבר התקבלו'); return; }
   const rest = state.receipts.length ? 'כל מה שנשאר' : 'כל ההזמנה';
   if (!confirm(`לרשום ש${rest} בהזמנה ${o.order_no} התקבל היום (${lines.length} שורות)?

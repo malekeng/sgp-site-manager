@@ -305,7 +305,7 @@ function sgpInsightsHtml(ins, table) {
   const parts = [];
   if (ins.checks.length) {
     parts.push(`<ul class="di-checks">${ins.checks.map(c =>
-      `<li class="di-${c.level}">${uiIcon(SGP_LEVEL_ICON[c.level], 15)}<span>${esc(c.text)}</span></li>`).join('')}</ul>`);
+      `<li class="di-${['ok', 'warn', 'bad', 'info'].includes(c.level) ? c.level : 'info'}">${uiIcon(SGP_LEVEL_ICON[c.level] || 'file-text', 15)}<span>${esc(c.text)}</span></li>`).join('')}</ul>`);
   }
   if (table === 'concrete_pours' && f.trucks && f.trucks.length) {
     parts.push(`<details class="di-more"><summary>המשאיות לפי התעודות (${f.trucks.length})</summary><div class="table-wrap"><table class="di-table">
