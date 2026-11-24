@@ -99,17 +99,19 @@ function showErr(text) { msgEl.textContent = text; msgEl.className = 'msg show e
 
 // Contractor accounts are per company, so the synthetic login email carries the company
 // code: c{digits}.{slug}@... The code comes from ?org= in the link the company sends,
-// and is then remembered on this device.
+// and is remembered on this device once it signed in.
 const ORG_SLUG_KEY = 'sgp_contractor_org_slug';
 
+// 2026-11-24 (audit SERVER-008, and FIX-006 after a fresh inspection): reading the code stores nothing;
+// a code in the visible field wins (also over a wrong ?org= link, once a failed sign-in showed the
+// field), then the link, then the code remembered on this device.
 function currentOrgSlug() {
-  const fromUrl = (new URLSearchParams(location.search).get('org') || '').trim().toLowerCase();
-  if (fromUrl) { try { localStorage.setItem(ORG_SLUG_KEY, fromUrl); } catch (_) {} return fromUrl; }
+  const wrap = document.getElementById('orgSlugField');
   const field = document.getElementById('orgSlugInput');
-  // a typed code is remembered only after it signed in (2026-11-24, audit SERVER-008): a mistyped one
-  // must not hide the field on the next visit
-  const typed = (field?.value || '').trim().toLowerCase();
+  const typed = wrap && !wrap.hidden ? (field?.value || '').trim().toLowerCase() : '';
   if (typed) return typed;
+  const fromUrl = (new URLSearchParams(location.search).get('org') || '').trim().toLowerCase();
+  if (fromUrl) return fromUrl;
   try { return (localStorage.getItem(ORG_SLUG_KEY) || '').trim().toLowerCase(); } catch (_) { return ''; }
 }
 
