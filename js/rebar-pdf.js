@@ -386,8 +386,9 @@ function rebarPdfName(order) { return `הזמנת ברזל ${order.order_no}.pdf
 async function rebarDownloadPdf() {
   try {
     toast('מפיק PDF…');
-    const blob = await rebarExportPdf({ order: state.order, items: state.items, site: state.ctx.site, company: state.company });
-    await rebarShareOrDownload(blob, rebarPdfName(state.order));
+    const order = state.order;   // the file is named for the order it was made for, wherever the editor goes meanwhile
+    const blob = await rebarExportPdf({ order, items: state.items, site: state.ctx.site, company: state.company });
+    await rebarShareOrDownload(blob, rebarPdfName(order));
   } catch (err) {
     console.error(err);
     toast('שגיאה ביצירת ה-PDF: ' + err.message, 'error');
@@ -414,6 +415,12 @@ async function rebarIssue() {
       // the file is stored but no record points to it — remove it rather than leave it behind
       await sb.storage.from('documents').remove([path]);
       throw dbErr;
+    }
+    // the editor stays usable while the PDF is made: if it now shows another order, this one is not marked
+    // (2026-11-24, audit REV2-005) — the copy is kept with the order; the user opens it and issues again
+    if (!state.order || state.order.id !== order.id) {
+      toast('עברתם להזמנה אחרת לפני שהפקת ה-PDF הסתיימה — ההזמנה לא סומנה כנשלחה. פתחו אותה והפיקו שוב.', 'error');
+      return;
     }
     if (!(await roSetStatus({ status: 'sent' }, 'ההזמנה סומנה כנשלחה — העותק נשמר במסמכי ההזמנה'))) return;
     await rebarShareOrDownload(blob, name);

@@ -80,10 +80,12 @@ async function roOpenOrder(id) {
 // one run with the purchase orders (2026-11-24, audit ORD-05): a delivery note quotes the number, so a
 // site must not have it twice — the same rule as poNextNo in purchase-core.js
 async function roSiteOrderNos() {
-  const [{ data: a }, { data: b }] = await Promise.all([
+  const [{ data: a, error: e1 }, { data: b, error: e2 }] = await Promise.all([
     sb.from('rebar_orders').select('order_no').eq('site_id', state.ctx.site.id),
     sb.from('purchase_orders').select('order_no').eq('site_id', state.ctx.site.id),
   ]);
+  // a failed read is never "no orders yet" (2026-11-24, audit REV2-003): numbering would start over
+  if (e1 || e2) throw new Error(rebarDbError(e1 || e2));
   return [...(a || []), ...(b || [])].map(r => r.order_no);
 }
 
@@ -94,8 +96,10 @@ async function roNewOrder() {
   const { data: last } = await sb.from('rebar_orders').select('order_no, delivery_address, driver_notes, contacts')
     .eq('site_id', site.id).order('created_at', { ascending: false }).limit(1);
   const d = rebarOrderDefaults({ last: (last || [])[0] || null, site, profile });
+  let nos;
+  try { nos = await roSiteOrderNos(); } catch (err) { toast(err.message, 'error'); roBackToRebar(); return; }
   state.order = {
-    status: 'draft', order_no: nextOrderNo(await roSiteOrderNos(), new Date()), name: '', supplier: '', required_date: null,
+    status: 'draft', order_no: nextOrderNo(nos, new Date()), name: '', supplier: '', required_date: null,
     delivery_address: d.delivery_address, driver_notes: d.driver_notes, waste_pct: 3, orderer: d.orderer, contacts: d.contacts,
   };
   Object.assign(state, { items: [], removedIds: [], dirty: false, loadedUpdatedAt: null, noTouched: true, receipts: [], receiptItems: [], receiptDocs: {},
@@ -112,7 +116,9 @@ async function roDuplicate(id) {
     sb.from('rebar_order_items').select('*').eq('order_id', id).order('line_no'),
   ]);
   if (!order) { toast('ההזמנה לא נמצאה', 'error'); return; }
-  const copy = duplicateOrder(order, items || [], nextOrderNo(await roSiteOrderNos(), new Date()));
+  let nos;
+  try { nos = await roSiteOrderNos(); } catch (err) { toast(err.message, 'error'); return; }
+  const copy = duplicateOrder(order, items || [], nextOrderNo(nos, new Date()));
   copy.order.name = order.name;
   Object.assign(state, { order: copy.order, items: copy.items, removedIds: [], loadedUpdatedAt: null, noTouched: true, receipts: [], receiptItems: [], receiptDocs: {},
     senderFrom: null, senderOpen: null });
@@ -296,7 +302,7 @@ async function saveOrderNow() {
   });
   let { data, error } = await call();
   if (error && error.code === '23505' && !o.id && state.noTouched) {   // someone took this number a moment ago
-    head.order_no = nextOrderNo(await roSiteOrderNos(), new Date());
+    try { head.order_no = nextOrderNo(await roSiteOrderNos(), new Date()); } catch (err) { roMsg(err.message); return false; }
     ({ data, error } = await call());
   }
   if (error && String(error.message || '').startsWith('rebar_order_changed')) { roMsg(RO_LOCK_MSG); toast(RO_LOCK_MSG, 'error'); return false; }
@@ -1669,7 +1675,8 @@ async function roOpenReceiptDoc(path) {
 function roReceiptPrior() { return receivedByItem(state.receiptItems); }
 
 function roOpenReceiptDialog() {
-  Object.assign(rc, { file: null, note: null, reading: false });
+  // a reading still running from an earlier dialog is dropped (2026-11-24, audit REV2-004)
+  Object.assign(rc, { file: null, note: null, reading: false, gen: rc.gen + 1 });
   const prior = roReceiptPrior();
   const lines = state.items.map(it => {
     const left = Math.max(0, Number(it.qty) - (prior[it.id] || 0));
@@ -1846,28 +1853,16 @@ async function roReceiveAllNow(o) {
   if (e1 || e2) { toast(rebarDbError(e1 || e2), 'error'); return; }
   if (!['sent', 'partial'].includes(fresh.status)) { toast('ההזמנה הזו כבר התקבלה במלואה או נסגרה'); await roOpenOrder(o.id); return; }
   const lines = receiveAllLines(state.items, got || []);
-  if (!lines.length) { toast('כל השורות כבר התקבלו'); return; }
+  if (!lines.length) { toast('כל השורות כבר התקבלו'); await roOpenOrder(o.id); return; }
   const rest = state.receipts.length ? 'כל מה שנשאר' : 'כל ההזמנה';
   if (!confirm(`לרשום ש${rest} בהזמנה ${o.order_no} התקבל היום (${lines.length} שורות)?
 
 אפשר למחוק את הקבלה אחר כך אם נרשמה בטעות.`)) return;
-  const { user, site } = state.ctx;
-  let receiptId = null;
-  try {
-    const { data: receipt, error } = await sb.from('rebar_receipts').insert({
-      site_id: site.id, order_id: o.id, received_on: roToday(), notes: 'התקבלה כל ההזמנה', created_by: user.id,
-    }).select('id').single();
-    if (error) throw error;
-    receiptId = receipt.id;
-    const { error: e2 } = await sb.from('rebar_receipt_items').insert(lines.map(l => ({
-      site_id: site.id, receipt_id: receiptId, item_id: l.item_id, qty_received: l.qty, created_by: user.id,
-    })));
-    if (e2) throw e2;
-  } catch (err) {
-    if (receiptId) await sb.from('rebar_receipts').delete().eq('id', receiptId);   // no half receipt
-    toast(rebarDbError(err), 'error');
-    return;
-  }
+  // one database step under the order's lock (2026-11-24, audit REV2-002): what is still owed is worked out there,
+  // from the receipts that exist at that moment, so a second press from another phone creates nothing
+  const { data: receiptId, error } = await sb.rpc('rebar_receive_all', { p_order: o.id, p_on: roToday() });
+  if (error) { toast(rebarDbError(error), 'error'); return; }
+  if (!receiptId) { toast('כל השורות כבר התקבלו'); await roOpenOrder(o.id); return; }
   toast('נרשם שכל ההזמנה התקבלה', 'success');
   await roOpenOrder(o.id);
 }
@@ -1875,7 +1870,7 @@ async function roReceiveAllNow(o) {
 function roReceiptEvents() {
   const modal = document.getElementById('receiptModal');
   modal.addEventListener('click', e => {
-    if (e.target.closest('[data-rc-x]')) { document.getElementById('receiptBackdrop').classList.remove('open'); return; }
+    if (e.target.closest('[data-rc-x]')) { rc.gen++; document.getElementById('receiptBackdrop').classList.remove('open'); return; }
     if (e.target.closest('[data-rc-save]')) { roSaveReceipt(); return; }
     if (e.target.closest('#rcZone')) { document.getElementById('rcFile').click(); return; }
     if (e.target.closest('[data-rc-mark]')) {

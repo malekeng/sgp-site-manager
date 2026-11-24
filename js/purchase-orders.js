@@ -120,10 +120,12 @@ async function poOpenOrder(id) {
 
 async function poSiteNos() {
   const site = state.ctx.site;
-  const [{ data: a }, { data: b }] = await Promise.all([
+  const [{ data: a, error: e1 }, { data: b, error: e2 }] = await Promise.all([
     sb.from('rebar_orders').select('order_no').eq('site_id', site.id),
     sb.from('purchase_orders').select('order_no').eq('site_id', site.id),
   ]);
+  // a failed read is never "no orders yet" (2026-11-24, audit REV2-003): numbering would start over
+  if (e1 || e2) throw new Error(poDbError(e1 || e2));
   return { rebar: (a || []).map(r => r.order_no), purchase: (b || []).map(r => r.order_no) };
 }
 async function poFreshNo() {
@@ -154,8 +156,10 @@ async function poNewOrder() {
   const lastOf = table => sb.from(table).select('order_no, delivery_address, contacts').eq('site_id', site.id).order('created_at', { ascending: false }).limit(1);
   const [{ data: a }, { data: b }] = await Promise.all([lastOf('purchase_orders'), lastOf('rebar_orders')]);
   const d = rebarOrderDefaults({ last: (a || [])[0] || (b || [])[0] || null, site, profile });
+  let no;
+  try { no = await poFreshNo(); } catch (err) { toast(err.message, 'error'); return poShowList(); }
   state.order = {
-    status: 'draft', order_no: await poFreshNo(), order_date: poToday(), required_date: null, supplier: '', supplier_tax_id: '',
+    status: 'draft', order_no: no, order_date: poToday(), required_date: null, supplier: '', supplier_tax_id: '',
     supplier_contact: '', supplier_phone: '', supplier_email: '', payment_terms: PO_PAYMENT_TERMS, delivery_address: d.delivery_address,
     notes: '', vat_pct: PO_VAT_PCT, orderer: d.orderer, contacts: d.contacts,
   };
@@ -168,7 +172,9 @@ async function poNewOrder() {
 
 async function poCopyOrder() {
   const source = state.order;
-  const copy = poDuplicate(source, state.items.filter(it => !poLineBlank(it)), await poFreshNo());
+  let no;
+  try { no = await poFreshNo(); } catch (err) { toast(err.message, 'error'); return; }
+  const copy = poDuplicate(source, state.items.filter(it => !poLineBlank(it)), no);
   copy.order.order_date = poToday();
   copy.order.required_date = null;
   Object.assign(state, { order: copy.order, items: copy.items.map(it => ({ ...it, _dirty: true })), removedIds: [], loadedUpdatedAt: null, noTouched: true,
@@ -412,7 +418,7 @@ async function poSaveNow() {
   });
   let { data, error } = await call();
   if (error && error.code === '23505' && !o.id && state.noTouched) {   // someone took this number a moment ago
-    head.order_no = await poFreshNo();
+    try { head.order_no = await poFreshNo(); } catch (err) { poMsg(err.message); return false; }
     ({ data, error } = await call());
   }
   if (error && String(error.message || '').startsWith('purchase_order_changed')) { poMsg(PO_LOCK_MSG); toast(PO_LOCK_MSG, 'error'); return false; }
@@ -469,9 +475,10 @@ async function poDownloadPdf() {
   if (state.dirty && !(await poSave())) return;
   try {
     toast('מפיק PDF…');
+    const order = state.order;   // the file is named for the order it was made for, wherever the editor goes meanwhile
     const items = state.items.filter(it => !poLineBlank(it));
-    const blob = await poExportPdf({ order: state.order, items, site: state.ctx.site, company: state.company });
-    await rebarShareOrDownload(blob, poFileName(state.order));
+    const blob = await poExportPdf({ order, items, site: state.ctx.site, company: state.company });
+    await rebarShareOrDownload(blob, poFileName(order));
   } catch (err) {
     console.error(err);
     toast('שגיאה ביצירת ה-PDF: ' + err.message, 'error');
@@ -486,7 +493,14 @@ async function poIssue() {
   if (!(await poSave())) return;
   try {
     toast('מפיק PDF…');
-    const blob = await poExportPdf({ order: { ...state.order, status: 'sent' }, items: state.items, site: state.ctx.site, company: state.company });
+    const issued = state.order;
+    const blob = await poExportPdf({ order: { ...issued, status: 'sent' }, items: state.items, site: state.ctx.site, company: state.company });
+    // the editor stays usable while the PDF is made: if it now shows another order, this one is not marked
+    // (2026-11-24, audit REV2-005) — nothing was sent, so the user opens it and issues again
+    if (!state.order || state.order.id !== issued.id) {
+      toast('עברתם להזמנה אחרת לפני שהפקת ה-PDF הסתיימה — ההזמנה לא סומנה כנשלחה. פתחו אותה והפיקו שוב.', 'error');
+      return;
+    }
     if (!(await poSetStatus({ status: 'sent' }, 'ההזמנה סומנה כנשלחה'))) return;
     await rebarShareOrDownload(blob, poFileName(state.order));
   } catch (err) {
@@ -691,28 +705,16 @@ async function poReceiveAllNow(o) {
   if (e1 || e2) { toast(poDbError(e1 || e2), 'error'); return; }
   if (!['sent', 'partial'].includes(fresh.status)) { toast('ההזמנה הזו כבר התקבלה במלואה או נסגרה'); await poOpenOrder(o.id); return; }
   const lines = poReceiveAllLines(state.items, got || []);
-  if (!lines.length) { toast('כל השורות כבר התקבלו'); return; }
+  if (!lines.length) { toast('כל השורות כבר התקבלו'); await poOpenOrder(o.id); return; }
   const rest = state.receipts.length ? 'כל מה שנשאר' : 'כל ההזמנה';
   if (!confirm(`לרשום ש${rest} בהזמנה ${o.order_no} התקבל היום (${lines.length} שורות)?
 
 אפשר למחוק את הקבלה אחר כך אם נרשמה בטעות.`)) return;
-  const { user, site } = state.ctx;
-  let receiptId = null;
-  try {
-    const { data: receipt, error } = await sb.from('purchase_receipts').insert({
-      site_id: site.id, order_id: o.id, received_on: poToday(), notes: 'התקבלה כל ההזמנה', created_by: user.id,
-    }).select('id').single();
-    if (error) throw error;
-    receiptId = receipt.id;
-    const { error: e2 } = await sb.from('purchase_receipt_items').insert(lines.map(l => ({
-      site_id: site.id, receipt_id: receiptId, item_id: l.item_id, qty_received: l.qty, created_by: user.id,
-    })));
-    if (e2) throw e2;
-  } catch (err) {
-    if (receiptId) await sb.from('purchase_receipts').delete().eq('id', receiptId);   // no half receipt
-    toast(poDbError(err), 'error');
-    return;
-  }
+  // one database step under the order's lock (2026-11-24, audit REV2-002): what is still owed is worked out there,
+  // from the receipts that exist at that moment, so a second press from another phone creates nothing
+  const { data: receiptId, error } = await sb.rpc('purchase_receive_all', { p_order: o.id, p_on: poToday() });
+  if (error) { toast(poDbError(error), 'error'); return; }
+  if (!receiptId) { toast('כל השורות כבר התקבלו'); await poOpenOrder(o.id); return; }
   toast('נרשם שכל ההזמנה התקבלה', 'success');
   await poOpenOrder(o.id);
 }
