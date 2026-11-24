@@ -173,6 +173,11 @@
         <label for="signupEmail">אימייל</label>
         <input id="signupEmail" type="email" name="email" required autocomplete="email">
       </div>
+      <div class="field full">
+        <label for="signupOrg">קוד חברה</label>
+        <input id="signupOrg" type="text" name="org_slug" required autocomplete="off" autocapitalize="none" spellcheck="false" dir="ltr" placeholder="לדוגמה: sgp">
+        <div class="field-hint">את הקוד מקבלים מהחברה. הבקשה תגיע רק לחברה עם הקוד הזה.</div>
+      </div>
       <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;font-size:11.5px;color:var(--steel);line-height:1.6;text-align:right;">
         הפרטים שתמלאו (שם ואימייל) ישמשו אך ורק לצורך זיהוי וניהול הגישה שלכם למערכת, ולא יועברו לצד שלישי מלבד ספקי התשתית המפורטים ב<a href="privacy.html" target="_blank" rel="noopener">מדיניות הפרטיות</a>.
       </div>
@@ -500,7 +505,14 @@ signupForm.addEventListener('submit', async e => {
   // Goes through request_access instead of inserting directly: the RPC resolves the
   // company from its slug and stays silent for an unknown one, so this endpoint cannot
   // be used to discover which companies exist on the platform.
-  const orgSlug = new URLSearchParams(location.search).get('org') || 'sgp';
+  // 2026-11-24 (audit SERVER-005): only the company code on the form, never a default company.
+  const orgSlug = requestOrgCode(fd.get('org_slug'));
+  if (!orgSlug) {
+    setBusy(btn, btnText, false, '', 'שליחת בקשה');
+    showErr('חסר קוד חברה תקין — קבלו אותו מהחברה שלכם');
+    document.getElementById('signupOrg').focus();
+    return;
+  }
   const { error } = await sb.rpc('request_access', {
     p_org_slug: orgSlug,
     p_email: fd.get('email'),
@@ -516,7 +528,7 @@ signupForm.addEventListener('submit', async e => {
 
   signupForm.reset();
   showScreen(loginForm);
-  showOk('הבקשה נשלחה בהצלחה. תקבלו מייל הזמנה לאחר אישור.');
+  showOk(`הבקשה נשלחה לחברה עם הקוד ${orgSlug}. אם הקוד נכון, תקבלו מייל הזמנה לאחר אישור.`);
 });
 
 // ===== Handle a click-through link from the invite/recovery email =====
@@ -571,6 +583,25 @@ async function handleAuthLinkIfPresent() {
   return true;
 }
 
+// The company an access request goes to (2026-11-24, audit SERVER-005): the code on the form, from the
+// company's own link (?org=) or typed; '' when it cannot be a company code. There is no default company.
+function requestOrgCode(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  return /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(s) ? s : '';
+}
+
+// The company's own link for its workers (org-settings.html): ?org=<code>&signup=1 opens the access
+// request with the code filled in.
+function openSignupIfAsked() {
+  const params = new URLSearchParams(window.location.search);
+  const code = requestOrgCode(params.get('org'));
+  if (code) document.getElementById('signupOrg').value = code;
+  const asked = params.get('signup') === '1';
+  if (!asked) return false;
+  showScreen(signupForm);
+  return true;
+}
+
 // The invite and reset emails (Supabase templates, full-backup/auth-email-templates) link here
 // with ?step=code: straight to "enter the code", even for someone signed in already.
 function openCodeStepIfAsked() {
@@ -585,6 +616,7 @@ function openCodeStepIfAsked() {
   const handledLink = await handleAuthLinkIfPresent();
   if (handledLink) return;
   if (openCodeStepIfAsked()) return;
+  if (openSignupIfAsked()) return;
   await goToDashboardIfSignedIn();
 })();
 </script>

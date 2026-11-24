@@ -103,12 +103,13 @@ async function poShowList() {
 async function poOpenOrder(id) {
   // only an order of the site this page works in (2026-11-24, audit ORD-06): a site switch reloads the
   // page with the same address, and the order of the other site would be shown and issued under this one
-  const [{ data: order, error }, { data: items, error: e2 }] = await Promise.all([
-    sb.from('purchase_orders').select('*').eq('id', id).eq('site_id', state.ctx.site.id).maybeSingle(),
-    sb.from('purchase_order_items').select('*').eq('order_id', id).eq('site_id', state.ctx.site.id).order('line_no'),
-  ]);
-  if (error || e2) { toast(poDbError(error || e2), 'error'); return poShowList(); }
+  // the order before its lines, not at the same time (2026-11-24, audit ORD-02): a save writes both in one
+  // step, so lines read after the order are never older than it (and an older order is refused on save)
+  const { data: order, error } = await sb.from('purchase_orders').select('*').eq('id', id).eq('site_id', state.ctx.site.id).maybeSingle();
+  if (error) { toast(poDbError(error), 'error'); return poShowList(); }
   if (!order) { toast('ההזמנה לא נמצאה באתר הזה', 'error'); history.replaceState(null, '', location.pathname); return poShowList(); }
+  const { data: items, error: e2 } = await sb.from('purchase_order_items').select('*').eq('order_id', id).eq('site_id', state.ctx.site.id).order('line_no');
+  if (e2) { toast(poDbError(e2), 'error'); return poShowList(); }
   Object.assign(state, { order, items: items || [], removedIds: [], dirty: false, loadedUpdatedAt: order.updated_at, noTouched: false,
     senderFrom: null, senderOpen: null, supplierFrom: null, supplierAuto: false });
   if (poIsDraft() && !state.items.length) state.items = [poNewLine()];
@@ -393,57 +394,35 @@ async function poSaveNow() {
     order_no: o.order_no, order_date: o.order_date, required_date: o.required_date, supplier: o.supplier, supplier_tax_id: o.supplier_tax_id,
     supplier_contact: o.supplier_contact, supplier_phone: o.supplier_phone, supplier_email: o.supplier_email, payment_terms: o.payment_terms,
     delivery_address: o.delivery_address, notes: o.notes, vat_pct: o.vat_pct, orderer: o.orderer || {}, contacts: o.contacts || [],
-    updated_by: user.id, updated_at: poNowIso(),
   };
-  let saved;
-  if (!o.id) {
-    const insert = () => sb.from('purchase_orders').insert({ ...head, site_id: site.id, created_by: user.id, status: 'draft' }).select('*').single();
-    let res = await insert();
-    if (res.error && res.error.code === '23505' && state.noTouched) {   // someone took this number a moment ago
-      head.order_no = await poFreshNo();
-      res = await insert();
-    }
-    if (res.error) { poMsg(poDbError(res.error)); return false; }
-    saved = res.data;
-  } else {
-    const { data, error } = await sb.from('purchase_orders').update(head).eq('id', o.id).eq('updated_at', state.loadedUpdatedAt).select('*');
-    if (error) { poMsg(poDbError(error)); return false; }
-    if (!data || !data.length) { poMsg(PO_LOCK_MSG); toast(PO_LOCK_MSG, 'error'); return false; }
-    saved = data[0];
+  // the header and the changed lines in one step, under the version this editor loaded (2026-11-24, audit
+  // ORD-02: the lines were written one by one after the header, so two people saving the same order could
+  // each overwrite the other's lines). Only changed and new lines are sent. Lines are numbered 1..n.
+  const send = [];
+  let no = 0;
+  for (const it of lines) {
+    no++;
+    if (it.line_no !== no) { it.line_no = no; it._dirty = true; }
+    if (it.id && !it._dirty) continue;
+    send.push({ it, row: { id: it.id || null, line_no: no, ...Object.fromEntries(PO_ITEM_COLS.map(k => [k, it[k] ?? null])), discount_pct: Number(it.discount_pct) || 0 } });
   }
+  const call = () => sb.rpc('purchase_order_save', {
+    p_id: o.id || null, p_site: site.id, p_expected: o.id ? state.loadedUpdatedAt : null,
+    p_head: head, p_items: send.map(x => x.row), p_removed: state.removedIds,
+  });
+  let { data, error } = await call();
+  if (error && error.code === '23505' && !o.id && state.noTouched) {   // someone took this number a moment ago
+    head.order_no = await poFreshNo();
+    ({ data, error } = await call());
+  }
+  if (error && String(error.message || '').startsWith('purchase_order_changed')) { poMsg(PO_LOCK_MSG); toast(PO_LOCK_MSG, 'error'); return false; }
+  if (error) { poMsg(poDbError(error)); return false; }
+  const saved = data.order;
+  send.forEach((x, i) => { x.it.id = data.item_ids[i]; x.it._dirty = false; });
+  state.removedIds = [];
   state.order = { ...saved };
   state.loadedUpdatedAt = saved.updated_at;
   history.replaceState(null, '', '#o=' + saved.id);
-
-  // the lines: removed, changed, new — numbered 1..n
-  try {
-    if (state.removedIds.length) {
-      const { error } = await sb.from('purchase_order_items').delete().in('id', state.removedIds);
-      if (error) throw error;
-      state.removedIds = [];
-    }
-    let no = 0;
-    for (const it of lines) {
-      no++;
-      if (it.line_no !== no) { it.line_no = no; it._dirty = true; }
-      const row = { line_no: no, ...Object.fromEntries(PO_ITEM_COLS.map(k => [k, it[k] ?? null])), discount_pct: Number(it.discount_pct) || 0 };
-      if (it.id) {
-        if (!it._dirty) continue;
-        const { error } = await sb.from('purchase_order_items').update({ ...row, updated_by: user.id, updated_at: poNowIso() }).eq('id', it.id);
-        if (error) throw error;
-      } else {
-        const { data, error } = await sb.from('purchase_order_items').insert({ ...row, site_id: site.id, order_id: saved.id, created_by: user.id }).select('id').single();
-        if (error) throw error;
-        it.id = data.id;
-      }
-      it._dirty = false;
-    }
-  } catch (err) {
-    state.items = lines.length ? lines : [poNewLine()];
-    poRenderEditor();
-    poMsg(poDbError(err));
-    return false;
-  }
   state.items = lines.length ? lines : [poNewLine()];
   state.dirty = false;
   poRenderEditor();

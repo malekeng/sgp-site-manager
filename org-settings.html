@@ -93,6 +93,17 @@
   </div>
 
   <div class="card" style="max-width:720px;">
+    <div class="card-header"><h2>קישור לבקשת גישה לעובדים</h2></div>
+    <p style="font-size:13px;color:var(--steel);margin-bottom:10px;">
+      עובד חדש פותח את הקישור, ממלא שם ואימייל, והבקשה מגיעה רק לחברה הזו (לאישור בדף המשתמשים).
+    </p>
+    <div class="attach-item">
+      <span id="joinLink" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;word-break:break-all;"></span>
+      <button class="btn btn-sm btn-outline" id="copyJoinBtn">העתקה</button>
+    </div>
+  </div>
+
+  <div class="card" style="max-width:720px;">
     <div class="card-header"><h2>קליטת מסמכים במייל</h2></div>
     <div id="inboxSettingsHost"></div>
   </div>
@@ -166,6 +177,14 @@
   document.getElementById('copyLinkBtn').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(document.getElementById('contractorLink').textContent);
+      toast('הקישור הועתק', 'success');
+    } catch (_) { toast('לא ניתן להעתיק — סמנו והעתיקו ידנית', 'error'); }
+  });
+  // the access request goes to the company whose code is on it (2026-11-24, audit SERVER-005)
+  document.getElementById('joinLink').textContent = `${location.origin}/index.html?org=${org.slug}&signup=1`;
+  document.getElementById('copyJoinBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById('joinLink').textContent);
       toast('הקישור הועתק', 'success');
     } catch (_) { toast('לא ניתן להעתיק — סמנו והעתיקו ידנית', 'error'); }
   });

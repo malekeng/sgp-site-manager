@@ -60,12 +60,13 @@ function roBackToRebar(query = '') {
 async function roOpenOrder(id) {
   // only an order of the site this page works in (2026-11-24, audit ORD-06): a site switch reloads the
   // page with the same address, and the order of the other site would be shown and issued under this one
-  const [{ data: order, error }, { data: items, error: e2 }] = await Promise.all([
-    sb.from('rebar_orders').select('*').eq('id', id).eq('site_id', state.ctx.site.id).maybeSingle(),
-    sb.from('rebar_order_items').select('*').eq('order_id', id).eq('site_id', state.ctx.site.id).order('line_no'),
-  ]);
-  if (error || e2) { toast(rebarDbError(error || e2), 'error'); return; }
+  // the order before its lines, not at the same time (2026-11-24, audit ORD-02): a save writes both in one
+  // step, so lines read after the order are never older than it (and an older order is refused on save)
+  const { data: order, error } = await sb.from('rebar_orders').select('*').eq('id', id).eq('site_id', state.ctx.site.id).maybeSingle();
+  if (error) { toast(rebarDbError(error), 'error'); return; }
   if (!order) { toast('ההזמנה לא נמצאה באתר הזה', 'error'); location.replace('rebar.html'); return; }
+  const { data: items, error: e2 } = await sb.from('rebar_order_items').select('*').eq('order_id', id).eq('site_id', state.ctx.site.id).order('line_no');
+  if (e2) { toast(rebarDbError(e2), 'error'); return; }
   Object.assign(state, {
     order, items: (items || []).sort((a, b) => RO_KIND_RANK[a.kind] - RO_KIND_RANK[b.kind] || a.line_no - b.line_no),
     removedIds: [], dirty: false, loadedUpdatedAt: order.updated_at, noTouched: false, senderFrom: null, senderOpen: null,
@@ -276,56 +277,36 @@ async function saveOrderNow() {
   const head = {
     order_no: o.order_no, name: o.name, supplier: o.supplier, required_date: o.required_date,
     delivery_address: o.delivery_address, driver_notes: o.driver_notes, waste_pct: o.waste_pct,
-    orderer: o.orderer || {}, contacts: o.contacts || [], updated_by: user.id, updated_at: roNowIso(),
+    orderer: o.orderer || {}, contacts: o.contacts || [],
   };
-  let saved;
-  if (!o.id) {
-    const insert = () => sb.from('rebar_orders').insert({ ...head, site_id: site.id, created_by: user.id, status: 'draft', source: 'tadok' }).select('*').single();
-    let res = await insert();
-    if (res.error && res.error.code === '23505' && state.noTouched) {   // someone took this number a moment ago
-      head.order_no = nextOrderNo(await roSiteOrderNos(), new Date());
-      res = await insert();
-    }
-    if (res.error) { roMsg(rebarDbError(res.error)); return false; }
-    saved = res.data;
-  } else {
-    const { data, error } = await sb.from('rebar_orders').update(head).eq('id', o.id).eq('updated_at', state.loadedUpdatedAt).select('*');
-    if (error) { roMsg(rebarDbError(error)); return false; }
-    if (!data || !data.length) { roMsg(RO_LOCK_MSG); toast(RO_LOCK_MSG, 'error'); return false; }
-    saved = data[0];
+  // the header and the changed lines in one step, under the version this editor loaded (2026-11-24, audit
+  // ORD-02: the lines were written one by one after the header, so two people saving the same order could
+  // each overwrite the other's lines). Only changed and new lines are sent. Lines are numbered 1..n within each section.
+  const send = [];
+  const counters = { bar: 0, mesh: 0, pile: 0, element: 0 };
+  for (const it of state.items) {
+    const no = ++counters[it.kind];
+    if (it.line_no !== no) { it.line_no = no; it._dirty = true; }
+    if (it.id && !it._dirty) continue;
+    send.push({ it, row: { id: it.id || null, ...Object.fromEntries(RO_ITEM_COLS.map(k => [k, it[k] ?? null])) } });
   }
+  const call = () => sb.rpc('rebar_order_save', {
+    p_id: o.id || null, p_site: site.id, p_expected: o.id ? state.loadedUpdatedAt : null,
+    p_head: head, p_items: send.map(x => x.row), p_removed: state.removedIds,
+  });
+  let { data, error } = await call();
+  if (error && error.code === '23505' && !o.id && state.noTouched) {   // someone took this number a moment ago
+    head.order_no = nextOrderNo(await roSiteOrderNos(), new Date());
+    ({ data, error } = await call());
+  }
+  if (error && String(error.message || '').startsWith('rebar_order_changed')) { roMsg(RO_LOCK_MSG); toast(RO_LOCK_MSG, 'error'); return false; }
+  if (error) { roMsg(rebarDbError(error)); return false; }
+  const saved = data.order;
+  send.forEach((x, i) => { x.it.id = data.item_ids[i]; x.it._dirty = false; });
+  state.removedIds = [];
   state.order = { ...saved };
   state.loadedUpdatedAt = saved.updated_at;
   history.replaceState(null, '', '#o=' + saved.id);
-
-  // the lines: removed, changed, new — numbered 1..n within each section
-  try {
-    if (state.removedIds.length) {
-      const { error } = await sb.from('rebar_order_items').delete().in('id', state.removedIds);
-      if (error) throw error;
-      state.removedIds = [];
-    }
-    const counters = { bar: 0, mesh: 0, pile: 0, element: 0 };
-    for (const it of state.items) {
-      const no = ++counters[it.kind];
-      if (it.line_no !== no) { it.line_no = no; it._dirty = true; }
-      const row = Object.fromEntries(RO_ITEM_COLS.map(k => [k, it[k] ?? null]));
-      if (it.id) {
-        if (!it._dirty) continue;
-        const { error } = await sb.from('rebar_order_items').update({ ...row, updated_by: user.id, updated_at: roNowIso() }).eq('id', it.id);
-        if (error) throw error;
-      } else {
-        const { data, error } = await sb.from('rebar_order_items').insert({ ...row, site_id: site.id, order_id: saved.id, created_by: user.id }).select('id').single();
-        if (error) throw error;
-        it.id = data.id;
-      }
-      it._dirty = false;
-    }
-  } catch (err) {
-    roMsg(rebarDbError(err));
-    roRenderEditor();
-    return false;
-  }
   state.dirty = false;
   roRenderEditor();
   toast('ההזמנה נשמרה', 'success');
